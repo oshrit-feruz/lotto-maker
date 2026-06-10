@@ -9,7 +9,9 @@ export type OrderStatus =
   | 'scanned'
   | 'won'
   | 'lost'
-  | 'refunded';
+  | 'refunded'
+  | 'results_delayed'
+  | 'cancelled';
 
 export interface Order {
   id: string;
@@ -40,4 +42,6 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   won: 'זכית!',
   lost: 'לא זכית',
   refunded: 'הוחזר',
+  results_delayed: 'עיכוב בתוצאות',
+  cancelled: 'בוטל',
 };

@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
-import { writeAuditLog } from '../../lib/audit-log.js';
+import { writeAuditLogTx } from '../../lib/audit-log.js';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
@@ -38,6 +38,15 @@ export async function charge(
         data: { userId, type: 'charge', amount, orderId, description },
       });
 
+      await writeAuditLogTx(tx, {
+        entityType: 'wallet',
+        entityId: userId,
+        action: 'wallet:charge',
+        actorId: userId,
+        actorType: 'user',
+        metadata: { amount: String(amount), orderId, transactionId: walletTx.id },
+      });
+
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
     },
     { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
@@ -66,13 +75,22 @@ export async function refund(
 
       await tx.order.update({ where: { id: orderId }, data: { status: 'refunded' } });
 
-      await writeAuditLog({
+      await writeAuditLogTx(tx, {
         entityType: 'order',
         entityId: orderId,
         action: 'status_change:->refunded',
         actorId: 'system',
         actorType: 'system',
         metadata: { amount: String(amount), reason: description },
+      });
+
+      await writeAuditLogTx(tx, {
+        entityType: 'wallet',
+        entityId: userId,
+        action: 'wallet:refund',
+        actorId: 'system',
+        actorType: 'system',
+        metadata: { amount: String(amount), orderId, transactionId: walletTx.id },
       });
 
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
@@ -102,6 +120,15 @@ export async function deposit(
         data: { userId, type: 'deposit', amount, description },
       });
 
+      await writeAuditLogTx(tx, {
+        entityType: 'wallet',
+        entityId: userId,
+        action: 'wallet:deposit',
+        actorId: userId,
+        actorType: 'user',
+        metadata: { amount: String(amount), transactionId: walletTx.id },
+      });
+
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
     },
     { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
@@ -125,6 +152,15 @@ export async function creditWinning(
 
       const walletTx = await tx.walletTransaction.create({
         data: { userId, type: 'winning', amount, orderId, description: 'זכייה' },
+      });
+
+      await writeAuditLogTx(tx, {
+        entityType: 'wallet',
+        entityId: userId,
+        action: 'wallet:winning',
+        actorId: 'system',
+        actorType: 'system',
+        metadata: { amount: String(amount), orderId, transactionId: walletTx.id },
       });
 
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };

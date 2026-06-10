@@ -2,12 +2,41 @@ import { redis } from '../../redis.js';
 
 const OTP_TTL_SECONDS = 300;
 const MAX_ATTEMPTS = 5;
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60; // 10 minutes
 
 function otpKey(phone: string) {
   return `otp:${phone}`;
 }
 function attemptsKey(phone: string) {
   return `otp_attempts:${phone}`;
+}
+function rateLimitKey(phone: string) {
+  return `otp_rate:${phone}`;
+}
+
+export async function checkOtpRateLimit(
+  phone: string,
+): Promise<{ limited: boolean; retryAfter?: number }> {
+  const key = rateLimitKey(phone);
+  const now = Date.now();
+  const windowStart = now - RATE_LIMIT_WINDOW_SECONDS * 1000;
+
+  // Remove entries outside the sliding window, count what remains, add new entry
+  await redis.zremrangebyscore(key, '-inf', windowStart);
+  const count = await redis.zcard(key);
+
+  if (count >= RATE_LIMIT_MAX) {
+    // Oldest entry in window determines when rate limit resets
+    const oldest = await redis.zrange(key, 0, 0, 'WITHSCORES');
+    const oldestTs = oldest.length >= 2 ? parseInt(oldest[1]!, 10) : now;
+    const retryAfter = Math.ceil((oldestTs + RATE_LIMIT_WINDOW_SECONDS * 1000 - now) / 1000);
+    return { limited: true, retryAfter: Math.max(1, retryAfter) };
+  }
+
+  await redis.zadd(key, now, `${now}`);
+  await redis.expire(key, RATE_LIMIT_WINDOW_SECONDS);
+  return { limited: false };
 }
 
 export async function storeOtp(phone: string, code: string): Promise<void> {

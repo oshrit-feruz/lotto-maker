@@ -40,6 +40,8 @@ enum OrderStatus {
   won
   lost
   refunded
+  results_delayed
+  cancelled
 }
 
 enum QueueSlotStatus {
@@ -195,14 +197,16 @@ model AuditLog {
   id         String   @id @default(cuid())
   entityType String
   entityId   String
+  orderId    String?
   action     String
   actorId    String?
   actorType  String?
   metadata   Json?
   createdAt  DateTime @default(now())
 
-  order      Order?   @relation(fields: [entityId], references: [id], map: "audit_order_fk")
+  order      Order?   @relation(fields: [orderId], references: [id])
 
   @@index([entityType, entityId])
+  @@index([orderId])
   @@index([createdAt])
 }

@@ -71,7 +71,7 @@ export async function verifyOtpAndIssueTokens(
 export async function refreshAccessToken(
   refreshToken: string,
   app: FastifyInstance,
-): Promise<string> {
+): Promise<{ accessToken: string; refreshToken: string }> {
   let payload: { sub: string; tokenId: string; type: string };
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,15 +80,28 @@ export async function refreshAccessToken(
     throw new AppError(401, 'INVALID_REFRESH_TOKEN');
   }
 
-  const exists = await redis.exists(refreshKey(payload.sub, payload.tokenId));
-  if (!exists) throw new AppError(401, 'REFRESH_TOKEN_REVOKED');
+  const oldKey = refreshKey(payload.sub, payload.tokenId);
+  const deleted = await redis.del(oldKey);
+  // If key was already gone, this token was already rotated — possible reuse attack
+  if (deleted === 0) throw new AppError(401, 'REFRESH_TOKEN_REVOKED');
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
 
-  return app.jwt.sign(
+  const accessToken = app.jwt.sign(
     { sub: user.id, phone: user.phone, type: 'user' },
     { expiresIn: '15m' },
   );
+
+  const newTokenId = nanoid();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const newRefreshToken = (app.jwt.sign as any)(
+    { sub: user.id, tokenId: newTokenId, type: 'user' },
+    { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+  ) as string;
+
+  await redis.setex(refreshKey(user.id, newTokenId), REFRESH_TTL_SECONDS, '1');
+
+  return { accessToken, refreshToken: newRefreshToken };
 }
 
 export async function logout(userId: string, refreshToken: string, app: FastifyInstance): Promise<void> {
