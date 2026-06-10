@@ -1,0 +1,9 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@lotto-maker/shared": ["../shared/src/index.ts"]
+    }
+  }
+}

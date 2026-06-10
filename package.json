@@ -1,0 +1,20 @@
+{
+  "name": "lotto-maker",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:migrate": "turbo run db:migrate --filter=backend",
+    "db:studio": "turbo run db:studio --filter=backend"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "prettier": "^3.3.0"
+  }
+}
