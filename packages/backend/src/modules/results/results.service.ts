@@ -1,25 +1,23 @@
 import { prisma } from '../../prisma.js';
-import type { GameType } from '@lotto-maker/shared';
-import { creditWinning } from '../wallet/wallet.service.js';
+import type { GameType, DrawResult } from '@lotto-maker/shared';
+import { creditWinning, refund } from '../wallet/wallet.service.js';
 import { orderStatusChange } from '../../lib/audit-log.js';
-import { refund } from '../wallet/wallet.service.js';
+import {
+  fetchLatestForDate,
+  ScraperNetworkError,
+  ScraperValidationError,
+} from '../../services/results-scraper.js';
 
-export interface DrawResult {
-  numbers: number[];
-  strongNumber?: number;
-}
+export type { DrawResult };
 
-export async function fetchDrawResults(
-  _gameType: GameType,
-  _drawDate: Date,
-): Promise<DrawResult | null> {
-  // Placeholder — integrate official Pais results feed here
-  return null;
-}
-
-function checkWin(orderNumbers: number[], orderStrong: number | null, result: DrawResult): boolean {
-  const matchCount = orderNumbers.filter((n) => result.numbers.includes(n)).length;
-  const strongMatch = orderStrong !== null && orderStrong === (result.strongNumber ?? null);
+function checkWin(
+  orderNumbers: number[],
+  orderStrong: number | null,
+  result: DrawResult,
+): boolean {
+  const matchCount = orderNumbers.filter((n) => result.winningNumbers.includes(n)).length;
+  const strongMatch =
+    orderStrong !== null && orderStrong === (result.strongNumber ?? null);
   return matchCount >= 2 || (matchCount >= 1 && strongMatch);
 }
 
@@ -27,6 +25,13 @@ function drawDayBounds(drawDate: Date): { startOfDay: Date; endOfDay: Date } {
   const startOfDay = new Date(drawDate);
   startOfDay.setHours(0, 0, 0, 0);
   return { startOfDay, endOfDay: new Date(startOfDay.getTime() + 86400000) };
+}
+
+export async function fetchDrawResults(
+  gameType: GameType,
+  drawDate: Date,
+): Promise<DrawResult | null> {
+  return fetchLatestForDate(gameType, drawDate);
 }
 
 export async function processResults(gameType: GameType, drawDate: Date): Promise<void> {
@@ -97,16 +102,47 @@ export async function processResultsWithRetry(
   drawDate: Date,
   attemptsLeft = 3,
 ): Promise<void> {
-  const result = await fetchDrawResults(gameType, drawDate);
+  let result: DrawResult | null;
 
-  if (!result) {
+  try {
+    result = await fetchDrawResults(gameType, drawDate);
+  } catch (err) {
+    if (err instanceof ScraperValidationError) {
+      // Malformed / unsupported game data — do not retry, do not mark delayed
+      console.error(
+        `[results] Scraper validation error for ${gameType}:`,
+        (err as Error).message,
+      );
+      return;
+    }
+    // Network error or other transient failure — retry
+    if (err instanceof ScraperNetworkError) {
+      console.warn(
+        `[results] Network error for ${gameType} (${attemptsLeft} attempt(s) left):`,
+        (err as Error).message,
+      );
+    }
     if (attemptsLeft <= 1) {
       await markResultsDelayed(gameType, drawDate);
       return;
     }
-    setTimeout(() => {
-      void processResultsWithRetry(gameType, drawDate, attemptsLeft - 1);
-    }, 5 * 60 * 1000);
+    setTimeout(
+      () => void processResultsWithRetry(gameType, drawDate, attemptsLeft - 1),
+      5 * 60 * 1000,
+    );
+    return;
+  }
+
+  if (!result) {
+    // Scraper succeeded but results not yet published for this draw date
+    if (attemptsLeft <= 1) {
+      await markResultsDelayed(gameType, drawDate);
+      return;
+    }
+    setTimeout(
+      () => void processResultsWithRetry(gameType, drawDate, attemptsLeft - 1),
+      5 * 60 * 1000,
+    );
     return;
   }
 
@@ -118,7 +154,14 @@ export async function processResultsWithRetry(
       drawDate: { gte: startOfDay, lt: endOfDay },
       status: { in: ['scanned', 'results_delayed'] },
     },
-    select: { id: true, userId: true, numbers: true, strongNumber: true, totalCharged: true, status: true },
+    select: {
+      id: true,
+      userId: true,
+      numbers: true,
+      strongNumber: true,
+      totalCharged: true,
+      status: true,
+    },
   });
 
   for (const order of orders) {
