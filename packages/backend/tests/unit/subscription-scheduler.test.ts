@@ -22,9 +22,21 @@ vi.mock('../../src/modules/orders/orders.service.js', () => ({
   createOrder: mockCreateOrder,
 }));
 
-const mockNotifyUser = vi.hoisted(() => vi.fn());
-vi.mock('../../src/notifications/fcm.service.js', () => ({
-  notifyUser: mockNotifyUser,
+const mockSendToUser = vi.hoisted(() => vi.fn());
+vi.mock('../../src/services/notifications.js', () => ({
+  notificationService: { sendToUser: mockSendToUser },
+  PAYLOADS: {
+    subscriptionInsufficientFunds: (gameType: string) => ({
+      title: 'מנוי לוטו — יתרה נמוכה',
+      body: `יתרה נמוכה ל-${gameType}`,
+      data: { type: 'SUBSCRIPTION_INSUFFICIENT_FUNDS' },
+    }),
+    subscriptionCapacityExceeded: (gameType: string) => ({
+      title: 'מנוי לוטו — התור מלא',
+      body: `תור מלא ל-${gameType}`,
+      data: { type: 'SUBSCRIPTION_CAPACITY_EXCEEDED' },
+    }),
+  },
 }));
 
 // ─── Imports (after mock declarations) ────────────────────────────────────────
@@ -78,8 +90,8 @@ describe('processSubscriptionsForGame', () => {
     mockCreateOrder.mockResolvedValue({ orderId: 'order-1', status: 'in_queue', totalCharged: '8.40' });
     // Default: event creation succeeds
     mockCreateEvent.mockResolvedValue({ id: 'evt-1' });
-    // Default: notify is silent
-    mockNotifyUser.mockResolvedValue(undefined);
+    // Default: sendToUser is silent
+    mockSendToUser.mockResolvedValue(undefined);
   });
 
   // ─── Happy path ─────────────────────────────────────────────────────────────
@@ -123,7 +135,7 @@ describe('processSubscriptionsForGame', () => {
     it('does NOT notify the user on success', async () => {
       mockFindManySubscriptions.mockResolvedValue([makeSub()]);
       await processSubscriptionsForGame('lotto', DRAW_DATE, DRAW_DAY);
-      expect(mockNotifyUser).not.toHaveBeenCalled();
+      expect(mockSendToUser).not.toHaveBeenCalled();
     });
   });
 
@@ -155,11 +167,9 @@ describe('processSubscriptionsForGame', () => {
 
     it('notifies the user about the balance problem', async () => {
       await processSubscriptionsForGame('lotto', DRAW_DATE, DRAW_DAY);
-      expect(mockNotifyUser).toHaveBeenCalledWith(
+      expect(mockSendToUser).toHaveBeenCalledWith(
         'user-1',
-        expect.stringContaining('יתרה'),
-        expect.any(String),
-        expect.objectContaining({ skipReason: 'insufficient_funds' }),
+        expect.objectContaining({ title: expect.stringContaining('יתרה') }),
       );
     });
   });
@@ -196,11 +206,9 @@ describe('processSubscriptionsForGame', () => {
 
       await processSubscriptionsForGame('lotto', DRAW_DATE, DRAW_DAY);
 
-      expect(mockNotifyUser).toHaveBeenCalledWith(
+      expect(mockSendToUser).toHaveBeenCalledWith(
         'user-1',
-        expect.stringContaining('תור'),
-        expect.any(String),
-        expect.any(Object),
+        expect.objectContaining({ title: expect.stringContaining('תור') }),
       );
     });
   });
@@ -270,7 +278,7 @@ describe('processSubscriptionsForGame', () => {
 
       await processSubscriptionsForGame('lotto', DRAW_DATE, DRAW_DAY);
 
-      expect(mockNotifyUser).not.toHaveBeenCalled();
+      expect(mockSendToUser).not.toHaveBeenCalled();
     });
   });
 

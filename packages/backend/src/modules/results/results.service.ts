@@ -7,6 +7,7 @@ import {
   ScraperNetworkError,
   ScraperValidationError,
 } from '../../services/results-scraper.js';
+import { notificationService, PAYLOADS } from '../../services/notifications.js';
 
 export type { DrawResult };
 
@@ -55,6 +56,13 @@ export async function processResults(gameType: GameType, drawDate: Date): Promis
 
     if (won) {
       await creditWinning(order.userId, parseFloat(order.totalCharged.toString()), order.id);
+      notificationService
+        .sendToUser(order.userId, PAYLOADS.orderWon(order.totalCharged.toString()))
+        .catch(console.error);
+    } else {
+      notificationService
+        .sendToUser(order.userId, PAYLOADS.orderLost())
+        .catch(console.error);
     }
   }
 }
@@ -64,12 +72,13 @@ export async function markResultsDelayed(gameType: GameType, drawDate: Date): Pr
 
   const orders = await prisma.order.findMany({
     where: { gameType, drawDate: { gte: startOfDay, lt: endOfDay }, status: 'scanned' },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
 
   for (const order of orders) {
     await prisma.order.update({ where: { id: order.id }, data: { status: 'results_delayed' } });
     await orderStatusChange(order.id, 'scanned', 'results_delayed', 'system', 'system');
+    notificationService.sendToUser(order.userId, PAYLOADS.resultsDelayed()).catch(console.error);
   }
 }
 
@@ -175,6 +184,13 @@ export async function processResultsWithRetry(
 
     if (won) {
       await creditWinning(order.userId, parseFloat(order.totalCharged.toString()), order.id);
+      notificationService
+        .sendToUser(order.userId, PAYLOADS.orderWon(order.totalCharged.toString()))
+        .catch(console.error);
+    } else {
+      notificationService
+        .sendToUser(order.userId, PAYLOADS.orderLost())
+        .catch(console.error);
     }
   }
 }

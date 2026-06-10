@@ -5,7 +5,7 @@ import { DRAW_DAY_TO_JS, TIMEZONE } from '@lotto-maker/shared';
 import { prisma } from '../prisma.js';
 import { createOrder } from '../modules/orders/orders.service.js';
 import { getNextDrawInfo } from '../lib/draw-schedule.js';
-import { notifyUser } from '../notifications/fcm.service.js';
+import { notificationService, PAYLOADS } from './notifications.js';
 import { AppError } from '../plugins/error-handler.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -131,29 +131,11 @@ async function processOneSubscription(sub: SubRow, drawDate: Date): Promise<void
     }
 
     if (shouldNotify) {
-      const messages: Record<string, { title: string; body: string }> = {
-        insufficient_funds: {
-          title: 'מנוי לוטו — יתרה נמוכה',
-          body: `לא ניתן להגיש טופס ל-${sub.gameType} עקב יתרה נמוכה בארנק. אנא הפקד כסף ועדכן מנוי.`,
-        },
-        capacity_exceeded: {
-          title: 'מנוי לוטו — התור מלא',
-          body: `לא ניתן להגיש טופס ל-${sub.gameType} — התור הגיע לתפוסה. נסה שוב מוקדם יותר.`,
-        },
-      };
-      const msg = messages[skipReason] ?? {
-        title: 'מנוי לוטו — שגיאה',
-        body: `אירעה שגיאה בהגשת הטופס ל-${sub.gameType}.`,
-      };
-      await notifyUser(sub.userId, msg.title, msg.body, {
-        subscriptionId: sub.id,
-        skipReason,
-      }).catch((notifyErr: unknown) => {
-        console.error(
-          `[subscription-cron] Failed to notify user ${sub.userId}:`,
-          notifyErr,
-        );
-      });
+      const payload =
+        skipReason === 'insufficient_funds'
+          ? PAYLOADS.subscriptionInsufficientFunds(sub.gameType)
+          : PAYLOADS.subscriptionCapacityExceeded(sub.gameType);
+      await notificationService.sendToUser(sub.userId, payload);
     }
 
     if (skipReason === 'error') {

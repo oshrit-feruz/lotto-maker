@@ -2,6 +2,7 @@ import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { orderStatusChange } from '../../lib/audit-log.js';
 import { redis } from '../../redis.js';
+import { notificationService, PAYLOADS } from '../../services/notifications.js';
 
 const SSE_CHANNEL_PREFIX = 'queue:';
 
@@ -89,7 +90,10 @@ export async function attachScan(
   operatorId: string,
   scanUrl: string,
 ) {
-  const slot = await prisma.queueSlot.findUniqueOrThrow({ where: { id: slotId } });
+  const slot = await prisma.queueSlot.findUniqueOrThrow({
+    where: { id: slotId },
+    include: { order: { select: { userId: true } } },
+  });
 
   const now = new Date();
   await prisma.order.update({
@@ -99,6 +103,10 @@ export async function attachScan(
 
   await orderStatusChange(slot.orderId, 'keyed', 'scanned', operatorId, 'operator');
   await publishQueueUpdate(slot.locationId, { type: 'slot_scanned', slotId, scanUrl });
+
+  notificationService
+    .sendToUser(slot.order.userId, PAYLOADS.orderKeyed())
+    .catch(console.error);
 
   return { scanUrl };
 }
