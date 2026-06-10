@@ -58,6 +58,11 @@ enum WalletTransactionType {
   winning
 }
 
+enum SubscriptionEventStatus {
+  success
+  skipped
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -93,8 +98,9 @@ model Subscription {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  user         User      @relation(fields: [userId], references: [id])
+  user         User               @relation(fields: [userId], references: [id])
   orders       Order[]
+  events       SubscriptionEvent[]
 
   @@index([userId, active])
 }
@@ -191,6 +197,23 @@ model WalletTransaction {
   order       Order?                @relation(fields: [orderId], references: [id])
 
   @@index([userId, createdAt])
+}
+
+model SubscriptionEvent {
+  id             String                  @id @default(cuid())
+  subscriptionId String
+  orderId        String?
+  drawDate       DateTime
+  status         SubscriptionEventStatus
+  skipReason     String?
+  createdAt      DateTime                @default(now())
+
+  subscription   Subscription            @relation(fields: [subscriptionId], references: [id])
+
+  // Prevents duplicate processing if the cron fires more than once per draw
+  @@unique([subscriptionId, drawDate])
+  @@index([subscriptionId])
+  @@index([drawDate])
 }
 
 model AuditLog {
