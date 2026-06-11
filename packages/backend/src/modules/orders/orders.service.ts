@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import type { GameType } from '@lotto-maker/shared';
 import { GAME_BASE_PRICE, SERVICE_FEE } from '@lotto-maker/shared';
@@ -121,7 +120,7 @@ export async function createOrder(params: CreateOrderParams) {
 
       return newOrder;
     },
-    { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
+    { isolationLevel: 'Serializable' },
   );
 
   await orderStatusChange(order.id, 'pending', 'in_queue', userId, 'user');

@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
@@ -50,7 +49,7 @@ export async function charge(
 
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
     },
-    { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
+    { isolationLevel: 'Serializable' },
   );
 }
 
@@ -97,7 +96,7 @@ export async function refund(
 
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
     },
-    { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
+    { isolationLevel: 'Serializable' },
   );
 }
 
@@ -133,7 +132,7 @@ export async function deposit(
 
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
     },
-    { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
+    { isolationLevel: 'Serializable' },
   );
 }
 
@@ -168,7 +167,7 @@ export async function creditWinning(
 
       return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
     },
-    { isolationLevel: 'Serializable' as Prisma.TransactionIsolationLevel },
+    { isolationLevel: 'Serializable' },
   );
 }
 
