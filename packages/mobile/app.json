@@ -1,39 +1,18 @@
 {
   "expo": {
-    "name": "Lotto Maker",
+    "name": "לוטו מייקר",
     "slug": "lotto-maker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1a56db"
-    },
     "ios": {
       "bundleIdentifier": "com.lottomaker.app",
       "supportsTablet": false
     },
     "android": {
-      "package": "com.lottomaker.app",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1a56db"
-      }
+      "package": "com.lottomaker.app"
     },
     "plugins": [
-      "expo-router",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#1a56db"
-        }
-      ],
       "expo-secure-store"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+    ]
   }
 }

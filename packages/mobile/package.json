@@ -2,7 +2,7 @@
   "name": "@lotto-maker/mobile",
   "version": "0.0.1",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "App.tsx",
   "scripts": {
     "dev": "expo start",
     "android": "expo run:android",

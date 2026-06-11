@@ -30,7 +30,7 @@ export function OrderDetailScreen({ orderId }: Props) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
 
   useEffect(() => {
-    ordersApi.get(orderId).then((o) => setOrder(o as OrderDetail)).catch(console.error);
+    ordersApi.get(orderId).then((o) => setOrder(o as unknown as OrderDetail)).catch(console.error);
   }, [orderId]);
 
   if (!order) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#1a56db" />;

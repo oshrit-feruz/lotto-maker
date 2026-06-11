@@ -1,17 +1,13 @@
 import { useState } from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
 import { PhoneScreen } from '../screens/onboarding/PhoneScreen.js';
 import { OTPScreen } from '../screens/onboarding/OTPScreen.js';
 import { KYCScreen } from '../screens/onboarding/KYCScreen.js';
 import { WalletLoadScreen } from '../screens/onboarding/WalletLoadScreen.js';
 import { useAuthStore } from '../store/auth.store.js';
 
-const Stack = createStackNavigator();
-
 export function AuthStack() {
   const [phone, setPhone] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
-  const user = useAuthStore((s) => s.user);
 
   // Inline navigator using state machine pattern
   const [step, setStep] = useState<'phone' | 'otp' | 'kyc' | 'wallet'>('phone');
