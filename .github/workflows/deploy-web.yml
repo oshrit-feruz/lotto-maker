@@ -28,15 +28,20 @@ jobs:
         env:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || '' }}
 
-      - name: Fix asset paths and set demo as main page
+      - name: Fix asset paths and set entry page
         run: |
-          # Fix _expo/ paths for subdirectory hosting
           sed -i 's|src="/_expo/|src="./_expo/|g' packages/mobile/dist/index.html
           touch packages/mobile/dist/.nojekyll
-          # Move Expo app to app.html; demo becomes the main entry point
-          # (Expo app needs a live backend; demo works standalone on any device)
-          mv packages/mobile/dist/index.html packages/mobile/dist/app.html
-          cp demo/mobile-mockup.html packages/mobile/dist/index.html
+          cp demo/mobile-mockup.html packages/mobile/dist/demo.html
+          # If a live backend URL is configured, Expo app is the main page;
+          # otherwise fall back to the standalone HTML demo.
+          if [ -n "${{ vars.EXPO_PUBLIC_API_URL }}" ]; then
+            echo "Backend configured — Expo app at /"
+          else
+            mv packages/mobile/dist/index.html packages/mobile/dist/app.html
+            cp demo/mobile-mockup.html packages/mobile/dist/index.html
+            echo "No backend — demo at /"
+          fi
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
