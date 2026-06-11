@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum GameType {
+  lotto
+  chance
+  seven77
+  one23
+}
+
+enum DrawDay {
+  tue
+  thu
+  sat
+}
+
+enum OrderType {
+  one_time
+  subscription
+}
+
+enum OrderStatus {
+  pending
+  in_queue
+  keyed
+  scanned
+  won
+  lost
+  refunded
+  results_delayed
+  cancelled
+}
+
+enum QueueSlotStatus {
+  waiting
+  in_progress
+  done
+  failed
+}
+
+enum WalletTransactionType {
+  deposit
+  charge
+  refund
+  winning
+}
+
+enum SubscriptionEventStatus {
+  success
+  skipped
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id            String     @id @default(cuid())
+  phone         String     @unique
+  fullName      String?
+  idNumber      String?    @unique
+  dateOfBirth   DateTime?
+  verifiedAdult Boolean    @default(false)
+  walletBalance Decimal    @default(0) @db.Decimal(12, 2)
+  status        UserStatus @default(active)
+  fcmToken      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  orders        Order[]
+  subscriptions Subscription[]
+  walletTxs     WalletTransaction[]
+  deviceTokens  DeviceToken[]
+
+  @@index([phone])
+}
+
+model Subscription {
+  id           String    @id @default(cuid())
+  userId       String
+  gameType     GameType
+  numbers      Json
+  strongNumber Int?
+  drawDays     DrawDay[]
+  active       Boolean   @default(true)
+  nextDrawDate DateTime?
+  pricePerDraw Decimal   @db.Decimal(8, 2)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User               @relation(fields: [userId], references: [id])
+  orders       Order[]
+  events       SubscriptionEvent[]
+
+  @@index([userId, active])
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  gameType       GameType
+  numbers        Json
+  strongNumber   Int?
+  drawDate       DateTime
+  drawTime       DateTime
+  type           OrderType
+  status         OrderStatus @default(pending)
+  ticketScanUrl  String?
+  price          Decimal     @db.Decimal(8, 2)
+  fee            Decimal     @db.Decimal(8, 2)
+  totalCharged   Decimal     @db.Decimal(8, 2)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  keyedAt        DateTime?
+  scannedAt      DateTime?
+
+  user           User          @relation(fields: [userId], references: [id])
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  queueSlot      QueueSlot?
+  walletTxs      WalletTransaction[]
+  auditLogs      AuditLog[]
+
+  @@index([userId, status])
+  @@index([drawDate, status])
+}
+
+model Location {
+  id                     String     @id @default(cuid())
+  name                   String
+  address                String
+  maxConcurrentOperators Int        @default(1)
+  activeHours            Json
+  active                 Boolean    @default(true)
+  createdAt              DateTime   @default(now())
+
+  operators              Operator[]
+  queueSlots             QueueSlot[]
+}
+
+model Operator {
+  id                String     @id @default(cuid())
+  name              String
+  locationId        String
+  active            Boolean    @default(true)
+  throughputPerHour Int        @default(50)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  location          Location   @relation(fields: [locationId], references: [id])
+  queueSlots        QueueSlot[]
+
+  @@index([locationId, active])
+}
+
+model QueueSlot {
+  id          String          @id @default(cuid())
+  orderId     String          @unique
+  operatorId  String?
+  locationId  String
+  priority    Int             @default(100)
+  deadline    DateTime
+  status      QueueSlotStatus @default(waiting)
+  retryCount  Int             @default(0)
+  assignedAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+
+  order       Order           @relation(fields: [orderId], references: [id])
+  operator    Operator?       @relation(fields: [operatorId], references: [id])
+  location    Location        @relation(fields: [locationId], references: [id])
+
+  @@index([status, priority, deadline])
+  @@index([locationId, status])
+}
+
+model WalletTransaction {
+  id          String                @id @default(cuid())
+  userId      String
+  type        WalletTransactionType
+  amount      Decimal               @db.Decimal(12, 2)
+  orderId     String?
+  description String
+  createdAt   DateTime              @default(now())
+
+  user        User                  @relation(fields: [userId], references: [id])
+  order       Order?                @relation(fields: [orderId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+model SubscriptionEvent {
+  id             String                  @id @default(cuid())
+  subscriptionId String
+  orderId        String?
+  drawDate       DateTime
+  status         SubscriptionEventStatus
+  skipReason     String?
+  createdAt      DateTime                @default(now())
+
+  subscription   Subscription            @relation(fields: [subscriptionId], references: [id])
+
+  // Prevents duplicate processing if the cron fires more than once per draw
+  @@unique([subscriptionId, drawDate])
+  @@index([subscriptionId])
+  @@index([drawDate])
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String
+  platform  String   @default("android")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([token])
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  orderId    String?
+  action     String
+  actorId    String?
+  actorType  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  order      Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([orderId])
+  @@index([createdAt])
+}

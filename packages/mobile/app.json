@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "לוטו מייקר",
+    "slug": "lotto-maker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "com.lottomaker.app",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.lottomaker.app"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}
