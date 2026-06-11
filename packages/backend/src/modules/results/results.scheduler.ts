@@ -9,10 +9,10 @@ export function startResultsScheduler() {
     void processResultsWithRetry('lotto', new Date());
   }, { timezone: JERUSALEM_TZ });
 
-  // Chance: same draw days, check at 22:30
-  cron.schedule('30 22 * * 2,4,6', () => {
-    void processResultsWithRetry('chance', new Date());
-  }, { timezone: JERUSALEM_TZ });
+  // Chance settlement not yet supported end-to-end — disabled until verified
+  // cron.schedule('30 22 * * 2,4,6', () => {
+  //   void processResultsWithRetry('chance', new Date());
+  // }, { timezone: JERUSALEM_TZ });
 
   // 777: check at 21:00
   cron.schedule('0 21 * * 2,4,6', () => {

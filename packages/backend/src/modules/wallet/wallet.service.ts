@@ -17,6 +17,7 @@ export async function charge(
   orderId: string,
   description: string,
 ): Promise<ChargeResult> {
+  if (amount <= 0) throw new AppError(400, 'INVALID_AMOUNT', 'Charge amount must be positive');
   return prisma.$transaction(
     async (tx: Tx) => {
       const users = await tx.$queryRaw<Array<{ walletBalance: string }>>`
@@ -59,6 +60,7 @@ export async function refund(
   orderId: string,
   description: string,
 ): Promise<ChargeResult> {
+  if (amount <= 0) throw new AppError(400, 'INVALID_AMOUNT', 'Refund amount must be positive');
   return prisma.$transaction(
     async (tx: Tx) => {
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
@@ -140,6 +142,7 @@ export async function creditWinning(
   amount: number,
   orderId: string,
 ): Promise<ChargeResult> {
+  if (amount <= 0) throw new AppError(400, 'INVALID_AMOUNT', 'Winning amount must be positive');
   return prisma.$transaction(
     async (tx: Tx) => {
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;

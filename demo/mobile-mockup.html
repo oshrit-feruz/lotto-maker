@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pais Lotto — Demo</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -749,7 +749,7 @@ body {
           <div><div class="sub-name">לוטו</div><div class="sub-detail">פעיל מ-01/01/2025</div></div>
           <div class="toggle-wrap">
             <span class="badge-sub badge-on">פעיל</span>
-            <div class="toggle" onclick="this.classList.toggle('off')"></div>
+            <div class="toggle" onclick="toggleSub(this)"></div>
           </div>
         </div>
         <div class="sub-chips">
@@ -768,7 +768,7 @@ body {
           <div><div class="sub-name">צ׳אנס</div><div class="sub-detail">מושהה</div></div>
           <div class="toggle-wrap">
             <span class="badge-sub badge-off">מושהה</span>
-            <div class="toggle off" onclick="this.classList.toggle('off')"></div>
+            <div class="toggle off" onclick="toggleSub(this)"></div>
           </div>
         </div>
         <div class="sub-chips">
@@ -844,15 +844,23 @@ function clearNums() {
   document.getElementById('selNums').textContent = '—';
 }
 
+/* ── Subscription toggle ── */
+function toggleSub(el) {
+  const isOff = el.classList.toggle('off');
+  const badge = el.previousElementSibling;
+  badge.textContent = isOff ? 'מושהה' : 'פעיל';
+  badge.className = 'badge-sub ' + (isOff ? 'badge-off' : 'badge-on');
+}
+
 /* ── Swipe support ── */
 let tx = 0;
 document.getElementById('app').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
 document.getElementById('app').addEventListener('touchend', e => {
   const dx = e.changedTouches[0].clientX - tx;
   if (Math.abs(dx) > 60) {
-    // RTL: swipe right = go forward, swipe left = go back
-    if (dx < 0 && cur < TOTAL) goTo(cur + 1);
-    if (dx > 0 && cur > 1)     goTo(cur - 1);
+    // RTL: swipe right = go forward (next), swipe left = go back (prev)
+    if (dx > 0 && cur < TOTAL) goTo(cur + 1);
+    if (dx < 0 && cur > 1)     goTo(cur - 1);
   }
 }, { passive: true });
 

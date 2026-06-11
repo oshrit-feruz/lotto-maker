@@ -107,9 +107,7 @@ class NotificationService {
     const a = this.getAdmin();
 
     if (!a) {
-      tokens.forEach((t) =>
-        console.log(`[DEV] FCM → ${t.slice(0, 8)}…: ${payload.title} — ${payload.body}`),
-      );
+      console.log(`[DEV] FCM → ${tokens.length} token(s): ${payload.title}`);
       return;
     }
 

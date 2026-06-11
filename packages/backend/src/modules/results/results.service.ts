@@ -51,7 +51,13 @@ export async function processResults(gameType: GameType, drawDate: Date): Promis
     const won = checkWin(numbers, order.strongNumber, result);
     const newStatus = won ? 'won' : 'lost';
 
-    await prisma.order.update({ where: { id: order.id }, data: { status: newStatus } });
+    // Idempotency guard: only proceed if we own this transition (concurrent runs skip)
+    const { count } = await prisma.order.updateMany({
+      where: { id: order.id, status: 'scanned' },
+      data: { status: newStatus },
+    });
+    if (count === 0) continue;
+
     await orderStatusChange(order.id, 'scanned', newStatus, 'system', 'system');
 
     if (won) {
@@ -179,7 +185,13 @@ export async function processResultsWithRetry(
     const newStatus = won ? 'won' : 'lost';
     const fromStatus = order.status as string;
 
-    await prisma.order.update({ where: { id: order.id }, data: { status: newStatus } });
+    // Idempotency guard: only proceed if we own this transition (concurrent runs skip)
+    const { count } = await prisma.order.updateMany({
+      where: { id: order.id, status: { in: ['scanned', 'results_delayed'] } },
+      data: { status: newStatus },
+    });
+    if (count === 0) continue;
+
     await orderStatusChange(order.id, fromStatus, newStatus, 'system', 'system');
 
     if (won) {

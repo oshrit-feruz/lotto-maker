@@ -36,6 +36,9 @@ export default async function operatorsRoutes(app: FastifyInstance) {
 
   app.post('/operator/queue/:slotId/scan', { preHandler: [app.authenticateOperator] }, async (request, reply) => {
     const { slotId } = request.params as { slotId: string };
+    if (!/^[a-zA-Z0-9_-]+$/.test(slotId)) {
+      return reply.status(400).send({ error: 'INVALID_SLOT_ID' });
+    }
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'NO_FILE' });
 

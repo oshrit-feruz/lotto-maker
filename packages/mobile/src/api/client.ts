@@ -10,6 +10,10 @@ export async function setToken(token: string): Promise<void> {
   await SecureStore.setItemAsync('access_token', token);
 }
 
+export async function setRefreshToken(token: string): Promise<void> {
+  await SecureStore.setItemAsync('refresh_token', token);
+}
+
 export async function clearTokens(): Promise<void> {
   await SecureStore.deleteItemAsync('access_token');
   await SecureStore.deleteItemAsync('refresh_token');

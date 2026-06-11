@@ -15,7 +15,7 @@ export function WalletLoadScreen({ onContinue }: Props) {
   const updateUser = useAuthStore((s) => s.updateUser);
 
   async function handleDeposit() {
-    if (!selected) return;
+    if (!selected || loading) return;
     setLoading(true);
     try {
       const result = await walletApi.deposit(selected) as { newBalance: string };
@@ -55,8 +55,8 @@ export function WalletLoadScreen({ onContinue }: Props) {
         <Text style={styles.btnText}>{loading ? 'טוען...' : `טען ₪${selected ?? '...'}`}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={onContinue} style={styles.skipBtn}>
-        <Text style={styles.skipText}>דלג לעכשיו</Text>
+      <TouchableOpacity onPress={onContinue} style={styles.skipBtn} disabled={loading}>
+        <Text style={[styles.skipText, loading && { opacity: 0.4 }]}>דלג לעכשיו</Text>
       </TouchableOpacity>
     </View>
   );

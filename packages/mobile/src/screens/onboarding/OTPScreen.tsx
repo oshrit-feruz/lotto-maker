@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
-import { authApi, setToken } from '../../api/client.js';
+import { authApi, setToken, setRefreshToken } from '../../api/client.js';
 import { usersApi } from '../../api/client.js';
 import { useAuthStore } from '../../store/auth.store.js';
 
@@ -28,8 +28,8 @@ export function OTPScreen({ phone, onVerified }: Props) {
     if (enteredCode.length !== 6) return;
     setLoading(true);
     try {
-      const { accessToken, isNewUser } = await authApi.verifyOtp(phone, enteredCode);
-      await setToken(accessToken);
+      const { accessToken, refreshToken, isNewUser } = await authApi.verifyOtp(phone, enteredCode);
+      await Promise.all([setToken(accessToken), setRefreshToken(refreshToken)]);
       const user = await usersApi.getMe();
       setUser(user);
       onVerified(isNewUser);

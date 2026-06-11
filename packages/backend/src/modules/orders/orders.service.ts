@@ -41,9 +41,6 @@ export async function createOrder(params: CreateOrderParams) {
   const location = await prisma.location.findFirst({ where: { active: true } });
   if (!location) throw new AppError(503, 'NO_ACTIVE_LOCATIONS');
 
-  // Advisory lock prevents concurrent accept race on circuit breaker
-  await prisma.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${location.id}::text))`;
-
   const [operatorStats, queueCount] = await Promise.all([
     prisma.operator.aggregate({
       where: { locationId: location.id, active: true },
@@ -74,6 +71,9 @@ export async function createOrder(params: CreateOrderParams) {
 
   const order = await prisma.$transaction(
     async (tx: Tx) => {
+      // Advisory lock scoped to transaction — prevents concurrent circuit-breaker accepts
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${location.id}::text))`;
+
       const rows = await tx.$queryRaw<Array<{ walletBalance: string }>>`
         SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
       `;

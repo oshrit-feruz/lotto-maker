@@ -44,6 +44,6 @@ export default async function usersRoutes(app: FastifyInstance) {
       update: { userId: request.user.sub, platform },
       create: { userId: request.user.sub, token, platform },
     });
-    return reply.status(204).send();
+    return reply.status(200).send({ ok: true });
   });
 }

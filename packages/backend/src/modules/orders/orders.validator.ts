@@ -36,7 +36,7 @@ export function validateGameNumbers(
     if (strongNumber === undefined) {
       throw new AppError(400, 'INVALID_NUMBERS', `${gameType} requires a strong number`);
     }
-    if (!Number.isInteger(strongNumber) || strongNumber < 1 || strongNumber > (rules.strongPoolSize ?? 0)) {
+    if (!Number.isInteger(strongNumber) || strongNumber < 1 || strongNumber > (rules.strongPoolSize ?? Infinity)) {
       throw new AppError(
         400,
         'INVALID_NUMBERS',
