@@ -33,14 +33,14 @@ jobs:
           sed -i 's|src="/_expo/|src="./_expo/|g' packages/mobile/dist/index.html
           touch packages/mobile/dist/.nojekyll
           cp demo/mobile-mockup.html packages/mobile/dist/demo.html
-          # If a live backend URL is configured, Expo app becomes the main page;
+          # If a live backend URL is configured, Expo app is the main page;
           # otherwise fall back to the standalone HTML demo.
           if [ -n "${{ vars.EXPO_PUBLIC_API_URL }}" ]; then
-            echo "Backend configured → Expo app at /"
+            echo "Backend configured — Expo app at /"
           else
             mv packages/mobile/dist/index.html packages/mobile/dist/app.html
             cp demo/mobile-mockup.html packages/mobile/dist/index.html
-            echo "No backend → demo at /"
+            echo "No backend — demo at /"
           fi
 
       - name: Deploy to gh-pages
