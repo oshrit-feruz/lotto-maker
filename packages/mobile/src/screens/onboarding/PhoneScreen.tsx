@@ -11,15 +11,12 @@ export function PhoneScreen({ onOtpSent }: Props) {
   const [loading, setLoading] = useState(false);
 
   async function handleSend() {
-    console.log('[PhoneScreen] handleSend called, phone:', phone);
     const normalized = phone.startsWith('+') ? phone : `+972${phone.replace(/^0/, '')}`;
     setLoading(true);
     try {
-      console.log('[PhoneScreen] calling sendOtp with:', normalized);
       await authApi.sendOtp(normalized);
       onOtpSent(normalized);
-    } catch (err) {
-      console.error('[PhoneScreen] sendOtp error:', err);
+    } catch {
       Alert.alert('שגיאה', 'לא ניתן לשלוח קוד. בדוק את המספר ונסה שנית.');
     } finally {
       setLoading(false);
@@ -35,10 +32,9 @@ export function PhoneScreen({ onOtpSent }: Props) {
         placeholder="050-000-0000"
         keyboardType="phone-pad"
         value={phone}
-        onChangeText={(t) => { console.log('[PhoneScreen] onChangeText:', t); setPhone(t); }}
+        onChangeText={setPhone}
         textAlign="right"
       />
-      <Text style={{ color: '#999', fontSize: 12, marginBottom: 8 }}>phone: "{phone}" | disabled: {String(!phone || loading)}</Text>
       <TouchableOpacity
         style={[styles.btn, (!phone || loading) && styles.btnDisabled]}
         onPress={handleSend}
