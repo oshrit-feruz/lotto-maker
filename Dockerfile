@@ -44,5 +44,5 @@ COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 
-# Run migrations then start
-CMD ["sh", "-c", "cd packages/backend && npx prisma migrate deploy && node dist/main.js"]
+# Push schema to DB then start (db push creates tables if they don't exist)
+CMD ["sh", "-c", "cd packages/backend && npx prisma db push --accept-data-loss && node dist/main.js"]
