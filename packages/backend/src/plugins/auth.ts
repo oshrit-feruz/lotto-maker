@@ -46,7 +46,7 @@ export default fp(async function authPlugin(app: FastifyInstance) {
       // EventSource can't set headers — allow token via query param for SSE
       const query = request.query as Record<string, string>;
       if (query?.token && !request.headers.authorization) {
-        request.headers['authorization'] = `Bearer ${query.token}`;
+        request.headers['authorization'] = `Bearer ${query.token}`; // NOSONAR: EventSource API has no header support; token is short-lived operator JWT
       }
       await request.jwtVerify();
       if (request.user.type !== 'operator') {

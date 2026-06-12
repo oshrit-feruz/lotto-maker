@@ -49,4 +49,4 @@ USER nodejs
 EXPOSE 3000
 
 # Sync schema to DB (safe: no --accept-data-loss) then start
-CMD ["sh", "-c", "cd packages/backend && npx prisma db push && node dist/main.js"]
+CMD ["sh", "-c", "cd packages/backend && npx prisma migrate deploy && node dist/main.js"]

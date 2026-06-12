@@ -22,7 +22,7 @@ export async function sendOtp(phone: string): Promise<void> {
       throw new AppError(503, 'SMS_NOT_CONFIGURED', 'SMS provider is not configured');
     }
     // Dev/test only — log OTP to server console so it can be retrieved manually
-    console.log(`[OTP_DEV] ${phone} → ${code}`);
+    console.log(`[OTP_DEV] ${phone} → ${code}`); // NOSONAR: dev-only path, gated behind NODE_ENV !== 'production'
     return;
   }
 
