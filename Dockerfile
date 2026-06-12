@@ -1,5 +1,7 @@
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy root workspace manifests
@@ -29,17 +31,18 @@ RUN npm run build -w packages/backend
 # ── Runtime image ──────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=builder /app/packages/backend/prisma ./packages/backend/prisma
-COPY --from=builder /app/packages/backend/node_modules ./packages/backend/node_modules
 COPY --from=builder /app/packages/backend/package.json ./packages/backend/package.json
 COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 
-# Run migrations then start
-CMD ["sh", "-c", "cd packages/backend && npx prisma migrate deploy && node dist/main.js"]
+# Push schema changes and start server
+CMD ["sh", "-c", "cd packages/backend && npx prisma db push --accept-data-loss && node dist/main.js"]

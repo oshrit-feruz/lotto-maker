@@ -24,6 +24,7 @@ const envSchema = z.object({
       { message: 'FIREBASE_SERVICE_ACCOUNT_JSON must be a valid base64-encoded JSON object' },
     ),
   CORS_ORIGINS: z.string().optional(),
+  DEFAULT_OPERATOR_PHONE: z.string().optional(),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),

@@ -3,7 +3,8 @@ import { useQueueStore } from '../store/queue.store.js';
 import { fetchQueue } from '../api/client.js';
 
 const POLL_INTERVAL_MS = 5000;
-const SSE_URL = '/api/operator/queue/stream';
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const SSE_URL = `${API_BASE || '/api'}/operator/queue/stream`;
 
 export function useQueue() {
   const { setSlots, updateSlot, removeSlot, setConnectionStatus } = useQueueStore();

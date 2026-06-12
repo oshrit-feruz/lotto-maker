@@ -43,6 +43,11 @@ export default fp(async function authPlugin(app: FastifyInstance) {
 
   app.decorate('authenticateOperator', async (request: FastifyRequest) => {
     try {
+      // EventSource can't set headers — allow token via query param for SSE
+      const query = request.query as Record<string, string>;
+      if (query?.token && !request.headers.authorization) {
+        request.headers['authorization'] = `Bearer ${query.token}`;
+      }
       await request.jwtVerify();
       if (request.user.type !== 'operator') {
         throw new AppError(403, 'FORBIDDEN');

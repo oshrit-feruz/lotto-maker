@@ -45,8 +45,24 @@ export async function verifyOtpAndIssueTokens(
 
   const existing = await prisma.user.findUnique({ where: { phone } });
   const isNewUser = !existing;
-
   const user = existing ?? await prisma.user.create({ data: { phone } });
+
+  // If this phone belongs to an operator, issue an operator-scoped token
+  const operator = await prisma.operator.findUnique({ where: { phone } });
+  if (operator) {
+    const accessToken = app.jwt.sign(
+      { sub: operator.id, phone, type: 'operator' },
+      { expiresIn: '15m' },
+    );
+    const tokenId = nanoid();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const refreshToken = (app.jwt.sign as any)(
+      { sub: operator.id, tokenId, type: 'operator' },
+      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+    ) as string;
+    await redis.setex(refreshKey(operator.id, tokenId), REFRESH_TTL_SECONDS, '1');
+    return { accessToken, refreshToken, isNewUser };
+  }
 
   const accessToken = app.jwt.sign(
     { sub: user.id, phone: user.phone, type: 'user' },

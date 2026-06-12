@@ -1,5 +1,9 @@
 import ky from 'ky';
 
+// In production, VITE_API_URL is the full Railway URL.
+// In development, we use the Vite proxy at /api → localhost:3000.
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+
 let authToken = localStorage.getItem('operator_token') ?? '';
 
 export function setToken(token: string) {
@@ -13,7 +17,7 @@ export function clearToken() {
 }
 
 export const api = ky.create({
-  prefixUrl: '/api',
+  prefixUrl: API_BASE || '/api',
   hooks: {
     beforeRequest: [
       (request) => {
@@ -26,7 +30,7 @@ export const api = ky.create({
       async (_request, _options, response) => {
         if (response.status === 401) {
           clearToken();
-          window.location.href = '/login';
+          window.location.reload();
         }
       },
     ],
