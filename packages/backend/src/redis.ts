@@ -1,8 +1,6 @@
 import { Redis } from 'ioredis';
 import { config } from './config.js';
 
-console.log('[Redis] connecting to', config.REDIS_URL.replace(/:([^:@]+)@/, ':***@'));
-
 export const redis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
