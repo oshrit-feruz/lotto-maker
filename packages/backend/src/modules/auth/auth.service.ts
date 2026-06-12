@@ -88,7 +88,7 @@ export async function refreshAccessToken(
   refreshToken: string,
   app: FastifyInstance,
 ): Promise<{ accessToken: string; refreshToken: string }> {
-  let payload: { sub: string; tokenId: string; type: string };
+  let payload: { sub: string; tokenId: string; type: 'user' | 'operator' };
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     payload = (app.jwt.verify as any)(refreshToken, { secret: config.JWT_REFRESH_SECRET }) as typeof payload;
@@ -101,6 +101,23 @@ export async function refreshAccessToken(
   // If key was already gone, this token was already rotated — possible reuse attack
   if (deleted === 0) throw new AppError(401, 'REFRESH_TOKEN_REVOKED');
 
+  const newTokenId = nanoid();
+
+  if (payload.type === 'operator') {
+    const operator = await prisma.operator.findUniqueOrThrow({ where: { id: payload.sub } });
+    const accessToken = app.jwt.sign(
+      { sub: operator.id, phone: operator.phone, type: 'operator' },
+      { expiresIn: '15m' },
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newRefreshToken = (app.jwt.sign as any)(
+      { sub: operator.id, tokenId: newTokenId, type: 'operator' },
+      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+    ) as string;
+    await redis.setex(refreshKey(operator.id, newTokenId), REFRESH_TTL_SECONDS, '1');
+    return { accessToken, refreshToken: newRefreshToken };
+  }
+
   const user = await prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
 
   const accessToken = app.jwt.sign(
@@ -108,7 +125,6 @@ export async function refreshAccessToken(
     { expiresIn: '15m' },
   );
 
-  const newTokenId = nanoid();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const newRefreshToken = (app.jwt.sign as any)(
     { sub: user.id, tokenId: newTokenId, type: 'user' },

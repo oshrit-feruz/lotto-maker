@@ -1,6 +1,7 @@
 FROM node:20-alpine AS builder
 
 RUN apk add --no-cache openssl
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 WORKDIR /app
 
@@ -32,17 +33,20 @@ RUN npm run build -w packages/backend
 FROM node:20-alpine
 
 RUN apk add --no-cache openssl
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/shared ./packages/shared
-COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
-COPY --from=builder /app/packages/backend/prisma ./packages/backend/prisma
-COPY --from=builder /app/packages/backend/package.json ./packages/backend/package.json
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/packages/shared ./packages/shared
+COPY --from=builder --chown=nodejs:nodejs /app/packages/backend/dist ./packages/backend/dist
+COPY --from=builder --chown=nodejs:nodejs /app/packages/backend/prisma ./packages/backend/prisma
+COPY --from=builder --chown=nodejs:nodejs /app/packages/backend/package.json ./packages/backend/package.json
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+
+USER nodejs
 
 EXPOSE 3000
 
-# Push schema to DB then start (db push creates tables if they don't exist)
-CMD ["sh", "-c", "cd packages/backend && npx prisma db push --accept-data-loss && node dist/main.js"]
+# Sync schema to DB (safe: no --accept-data-loss) then start
+CMD ["sh", "-c", "cd packages/backend && npx prisma db push && node dist/main.js"]
