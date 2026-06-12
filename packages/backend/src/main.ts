@@ -5,6 +5,6 @@ import { ensureDefaultSeedData } from './lib/startup-seed.js';
 
 const app = await buildApp();
 
-await app.listen({ port: config.PORT, host: '0.0.0.0' });
 await ensureDefaultSeedData();
+await app.listen({ port: config.PORT, host: '0.0.0.0' });
 startAllSchedulers();

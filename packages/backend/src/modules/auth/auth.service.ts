@@ -18,8 +18,11 @@ export async function sendOtp(phone: string): Promise<void> {
   await storeOtp(phone, code);
 
   if (!config.TWILIO_ACCOUNT_SID || !config.TWILIO_AUTH_TOKEN || !config.TWILIO_FROM_NUMBER) {
-    // No SMS provider configured — print code to server logs so it can be retrieved manually
-    console.log(`[OTP] ${phone} → ${code}`);
+    if (config.NODE_ENV === 'production') {
+      throw new AppError(503, 'SMS_NOT_CONFIGURED', 'SMS provider is not configured');
+    }
+    // Dev/test only — log OTP to server console so it can be retrieved manually
+    console.log(`[OTP_DEV] ${phone} → ${code}`);
     return;
   }
 
