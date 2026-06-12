@@ -1,5 +1,7 @@
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy root workspace manifests
@@ -26,8 +28,10 @@ RUN cd packages/backend && npx prisma generate
 RUN npm run build -w packages/shared
 RUN npm run build -w packages/backend
 
-# ── Runtime image ──────────────────────────────────────────────────────────────
+# ── Runtime image ──────────────────────────────────────────────────────────────────
 FROM node:20-alpine
+
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
