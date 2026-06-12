@@ -19,12 +19,12 @@ COPY packages/backend ./packages/backend
 # Install deps (uses modified workspace list)
 RUN npm install --legacy-peer-deps
 
+# Generate Prisma client (must run before tsc so types are available)
+RUN cd packages/backend && npx prisma generate
+
 # Build shared → backend
 RUN npm run build -w packages/shared
 RUN npm run build -w packages/backend
-
-# Generate Prisma client
-RUN cd packages/backend && npx prisma generate
 
 # ── Runtime image ──────────────────────────────────────────────────────────────
 FROM node:20-alpine
