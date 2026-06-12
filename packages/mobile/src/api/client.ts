@@ -2,21 +2,37 @@ import * as SecureStore from 'expo-secure-store';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
+// expo-secure-store has no web implementation — fall back to localStorage
+const isWeb = typeof localStorage !== 'undefined';
+
+async function storageGet(key: string): Promise<string | null> {
+  if (isWeb) return localStorage.getItem(key);
+  return SecureStore.getItemAsync(key);
+}
+async function storageSet(key: string, value: string): Promise<void> {
+  if (isWeb) { localStorage.setItem(key, value); return; }
+  await SecureStore.setItemAsync(key, value);
+}
+async function storageRemove(key: string): Promise<void> {
+  if (isWeb) { localStorage.removeItem(key); return; }
+  await SecureStore.deleteItemAsync(key);
+}
+
 async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync('access_token');
+  return storageGet('access_token');
 }
 
 export async function setToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync('access_token', token);
+  await storageSet('access_token', token);
 }
 
 export async function setRefreshToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync('refresh_token', token);
+  await storageSet('refresh_token', token);
 }
 
 export async function clearTokens(): Promise<void> {
-  await SecureStore.deleteItemAsync('access_token');
-  await SecureStore.deleteItemAsync('refresh_token');
+  await storageRemove('access_token');
+  await storageRemove('refresh_token');
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -37,7 +53,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
+// ─── Auth ───────────────────────────────────────────────────────────────────
 
 export const authApi = {
   sendOtp: (phone: string) =>
@@ -50,7 +66,7 @@ export const authApi = {
     ),
 };
 
-// ─── Users ───────────────────────────────────────────────────────────────────
+// ─── Users ──────────────────────────────────────────────────────────────────
 
 export const usersApi = {
   getMe: () => request<{ id: string; phone: string; fullName: string | null; verifiedAdult: boolean; walletBalance: string }>('me'),
@@ -95,7 +111,7 @@ export const walletApi = {
   },
 };
 
-// ─── Subscriptions ───────────────────────────────────────────────────────────
+// ─── Subscriptions ─────────────────────────────────────────────────────────────────
 
 export const subscriptionsApi = {
   create: (params: { gameType: string; numbers: number[]; strongNumber?: number; drawDays: string[] }) =>
