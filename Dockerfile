@@ -21,14 +21,14 @@ COPY packages/backend ./packages/backend
 # Install deps (uses modified workspace list)
 RUN npm install --legacy-peer-deps
 
-# Generate Prisma client BEFORE TypeScript compilation (tsc needs the generated types)
+# Generate Prisma client (must run before tsc so types are available)
 RUN cd packages/backend && npx prisma generate
 
 # Build shared → backend
 RUN npm run build -w packages/shared
 RUN npm run build -w packages/backend
 
-# ── Runtime image ──────────────────────────────────────────────────────────────
+# ── Runtime image ──────────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
 RUN apk add --no-cache openssl
@@ -44,5 +44,5 @@ COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 
-# Push schema changes and start server
+# Push schema to DB then start (db push creates tables if they don't exist)
 CMD ["sh", "-c", "cd packages/backend && npx prisma db push --accept-data-loss && node dist/main.js"]

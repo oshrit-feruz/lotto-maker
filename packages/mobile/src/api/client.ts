@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
+// expo-secure-store has no web implementation — fall back to localStorage
 const isWeb = typeof localStorage !== 'undefined';
 
 async function storageGet(key: string): Promise<string | null> {
@@ -54,7 +55,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
+// ─── Auth ───────────────────────────────────────────────────────────────────
 
 export const authApi = {
   sendOtp: (phone: string) =>
@@ -67,7 +68,7 @@ export const authApi = {
     ),
 };
 
-// ─── Users ───────────────────────────────────────────────────────────────────
+// ─── Users ──────────────────────────────────────────────────────────────────
 
 export const usersApi = {
   getMe: () => request<{ id: string; phone: string; fullName: string | null; verifiedAdult: boolean; walletBalance: string }>('me'),
@@ -112,7 +113,7 @@ export const walletApi = {
   },
 };
 
-// ─── Subscriptions ───────────────────────────────────────────────────────────
+// ─── Subscriptions ─────────────────────────────────────────────────────────────────
 
 export const subscriptionsApi = {
   create: (params: { gameType: string; numbers: number[]; strongNumber?: number; drawDays: string[] }) =>

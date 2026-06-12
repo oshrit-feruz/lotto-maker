@@ -3,13 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile",
-    "watchPatterns": [
-      "packages/backend/**",
-      "packages/shared/**",
-      "Dockerfile",
-      "package.json",
-      "package-lock.json"
-    ]
+    "watchPatterns": ["packages/backend/**", "packages/shared/**", "Dockerfile", "package.json", "package-lock.json"]
   },
   "deploy": {
     "healthcheckPath": "/health",
