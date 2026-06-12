@@ -123,3 +123,28 @@ export const subscriptionsApi = {
 
   cancel: (id: string) => request(`subscriptions/${id}`, { method: 'DELETE' }),
 };
+
+// ─── Results & Draws ──────────────────────────────────────────────────────────────
+
+export interface DrawResultResponse {
+  drawNumber: number;
+  gameType: string;
+  winningNumbers: number[];
+  strongNumber: number | null;
+  drawDate: string;
+}
+
+export interface UpcomingDraw {
+  gameType: string;
+  drawTime: string;
+  hardCutoff: string;
+}
+
+export const resultsApi = {
+  getLatest: (gameType: string) =>
+    request<DrawResultResponse>(`results/${gameType}/latest`),
+};
+
+export const drawsApi = {
+  getUpcoming: () => request<UpcomingDraw[]>('draws/upcoming'),
+};
