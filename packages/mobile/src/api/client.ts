@@ -143,6 +143,8 @@ export interface UpcomingDraw {
 export const resultsApi = {
   getLatest: (gameType: string) =>
     request<DrawResultResponse>(`results/${gameType}/latest`),
+  getByDate: (gameType: string, drawDate: string) =>
+    request<DrawResultResponse>(`results/${gameType}/${drawDate}`),
 };
 
 export const drawsApi = {
