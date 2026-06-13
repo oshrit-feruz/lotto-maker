@@ -8,6 +8,7 @@
     "outDir": "./dist",
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
     "paths": {
       "@lotto-maker/shared": ["../shared/src/index.ts"]
     }
