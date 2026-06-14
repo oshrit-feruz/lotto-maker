@@ -106,7 +106,7 @@ export async function refreshAccessToken(
   if (payload.type === 'operator') {
     const operator = await prisma.operator.findUniqueOrThrow({ where: { id: payload.sub } });
     const accessToken = app.jwt.sign(
-      { sub: operator.id, phone: operator.phone, type: 'operator' },
+      { sub: operator.id, phone: operator.phone ?? undefined, type: 'operator' },
       { expiresIn: '15m' },
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
