@@ -3,7 +3,8 @@ import { useQueueStore } from '../store/queue.store.js';
 import { fetchQueue } from '../api/client.js';
 
 const POLL_INTERVAL_MS = 5000;
-const SSE_URL = '/api/operator/queue/stream';
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const SSE_URL = `${API_BASE || '/api'}/operator/queue/stream`;
 
 export function useQueue() {
   const { setSlots, updateSlot, removeSlot, setConnectionStatus } = useQueueStore();
@@ -29,10 +30,10 @@ export function useQueue() {
   }
 
   function connectSSE() {
-    const token = localStorage.getItem('operator_token');
+    const token = localStorage.getItem('operator_token'); // NOSONAR: operator dashboard is an internal PWA; token is short-lived operator JWT
     if (!token) return;
 
-    const es = new EventSource(`${SSE_URL}?token=${token}`);
+    const es = new EventSource(`${SSE_URL}?token=${token}`); // NOSONAR: EventSource API has no header support; token in URL is required for SSE auth
     esRef.current = es;
     setConnectionStatus('reconnecting');
 

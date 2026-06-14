@@ -11,7 +11,13 @@ import { notificationService, PAYLOADS } from '../../services/notifications.js';
 
 export type { DrawResult };
 
+// Minimum matches required for any prize, per game
+const MIN_MATCHES_FOR_WIN: Partial<Record<GameType, number>> = {
+  seven77: 3, // 777 (Keno): player picks 7, Pais draws 17; need ≥3 hits for smallest prize
+};
+
 function checkWin(
+  gameType: GameType,
   orderNumbers: number[],
   orderStrong: number | null,
   result: DrawResult,
@@ -19,7 +25,8 @@ function checkWin(
   const matchCount = orderNumbers.filter((n) => result.winningNumbers.includes(n)).length;
   const strongMatch =
     orderStrong !== null && orderStrong === (result.strongNumber ?? null);
-  return matchCount >= 2 || (matchCount >= 1 && strongMatch);
+  const minMatches = MIN_MATCHES_FOR_WIN[gameType] ?? 2;
+  return matchCount >= minMatches || (matchCount >= 1 && strongMatch);
 }
 
 function drawDayBounds(drawDate: Date): { startOfDay: Date; endOfDay: Date } {
@@ -48,7 +55,7 @@ export async function processResults(gameType: GameType, drawDate: Date): Promis
 
   for (const order of orders) {
     const numbers = order.numbers as number[];
-    const won = checkWin(numbers, order.strongNumber, result);
+    const won = checkWin(gameType, numbers, order.strongNumber, result);
     const newStatus = won ? 'won' : 'lost';
 
     // Idempotency guard: only proceed if we own this transition (concurrent runs skip)
@@ -181,7 +188,7 @@ export async function processResultsWithRetry(
 
   for (const order of orders) {
     const numbers = order.numbers as number[];
-    const won = checkWin(numbers, order.strongNumber, result);
+    const won = checkWin(gameType, numbers, order.strongNumber, result);
     const newStatus = won ? 'won' : 'lost';
     const fromStatus = order.status as string;
 

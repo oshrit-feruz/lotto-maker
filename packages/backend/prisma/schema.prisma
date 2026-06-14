@@ -154,6 +154,7 @@ model Location {
 model Operator {
   id                String     @id @default(cuid())
   name              String
+  phone             String?    @unique
   locationId        String
   active            Boolean    @default(true)
   throughputPerHour Int        @default(50)

@@ -6,15 +6,17 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 const isWeb = typeof localStorage !== 'undefined';
 
 async function storageGet(key: string): Promise<string | null> {
-  if (isWeb) return localStorage.getItem(key);
+  if (isWeb) return localStorage.getItem(key); // NOSONAR: expo-secure-store has no web impl; localStorage is the only persistent option
   return SecureStore.getItemAsync(key);
 }
+
 async function storageSet(key: string, value: string): Promise<void> {
-  if (isWeb) { localStorage.setItem(key, value); return; }
+  if (isWeb) { localStorage.setItem(key, value); return; } // NOSONAR: expo-secure-store has no web impl
   await SecureStore.setItemAsync(key, value);
 }
+
 async function storageRemove(key: string): Promise<void> {
-  if (isWeb) { localStorage.removeItem(key); return; }
+  if (isWeb) { localStorage.removeItem(key); return; } // NOSONAR: expo-secure-store has no web impl
   await SecureStore.deleteItemAsync(key);
 }
 
@@ -120,4 +122,31 @@ export const subscriptionsApi = {
   list: () => request<unknown[]>('subscriptions'),
 
   cancel: (id: string) => request(`subscriptions/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Results & Draws ──────────────────────────────────────────────────────────────
+
+export interface DrawResultResponse {
+  drawNumber: number;
+  gameType: string;
+  winningNumbers: number[];
+  strongNumber: number | null;
+  drawDate: string;
+}
+
+export interface UpcomingDraw {
+  gameType: string;
+  drawTime: string;
+  hardCutoff: string;
+}
+
+export const resultsApi = {
+  getLatest: (gameType: string) =>
+    request<DrawResultResponse>(`results/${gameType}/latest`),
+  getByDate: (gameType: string, drawDate: string) =>
+    request<DrawResultResponse>(`results/${gameType}/${drawDate}`),
+};
+
+export const drawsApi = {
+  getUpcoming: () => request<UpcomingDraw[]>('draws/upcoming'),
 };

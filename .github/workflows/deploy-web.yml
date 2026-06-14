@@ -2,7 +2,7 @@ name: Deploy Web App to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/pais-remote-forms-planning-rpr9di]
   workflow_dispatch:
 
 permissions:
@@ -22,26 +22,41 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build web app
+      - name: Build mobile web app
         run: npx expo export --platform web
         working-directory: packages/mobile
         env:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || '' }}
 
       - name: Fix asset paths and set entry page
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || '' }}
         run: |
           sed -i 's|src="/_expo/|src="./_expo/|g' packages/mobile/dist/index.html
           touch packages/mobile/dist/.nojekyll
           cp demo/mobile-mockup.html packages/mobile/dist/demo.html
           # If a live backend URL is configured, Expo app is the main page;
           # otherwise fall back to the standalone HTML demo.
-          if [ -n "${{ vars.EXPO_PUBLIC_API_URL }}" ]; then
+          if [ -n "$EXPO_PUBLIC_API_URL" ]; then
             echo "Backend configured — Expo app at /"
           else
             mv packages/mobile/dist/index.html packages/mobile/dist/app.html
             cp demo/mobile-mockup.html packages/mobile/dist/index.html
             echo "No backend — demo at /"
           fi
+
+      - name: Build operator dashboard
+        if: ${{ vars.EXPO_PUBLIC_API_URL != '' }}
+        run: npm run build -w packages/operator-dashboard
+        env:
+          VITE_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          BASE_PATH: ./
+
+      - name: Copy operator dashboard into deploy folder
+        if: ${{ vars.EXPO_PUBLIC_API_URL != '' }}
+        run: |
+          mkdir -p packages/mobile/dist/operator
+          cp -r packages/operator-dashboard/dist/. packages/mobile/dist/operator/
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4

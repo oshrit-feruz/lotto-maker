@@ -90,6 +90,15 @@ const URL_PATH: Record<GameType, string> = {
   one23: '123',
 };
 
+/**
+ * Number of winning balls in the DRAW RESULT, which differs from the player's
+ * pickCount in GAME_RULES.  777 (Keno-style): Pais draws 17 balls from 1-70;
+ * a player picks 7 and wins based on how many of their picks appear in those 17.
+ */
+const DRAW_RESULT_COUNTS: Partial<Record<GameType, number>> = {
+  seven77: 17,
+};
+
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
@@ -230,10 +239,12 @@ export class ResultsScraper {
     strongNumber?: number,
   ): void {
     const rules = GAME_RULES[gameType];
+    // Use draw-result count when it differs from the player's pick count (e.g. 777 draws 17 balls)
+    const expectedCount = DRAW_RESULT_COUNTS[gameType] ?? rules.pickCount;
 
-    if (numbers.length !== rules.pickCount) {
+    if (numbers.length !== expectedCount) {
       throw new ScraperValidationError(
-        `${gameType}: expected ${rules.pickCount} numbers, got ${numbers.length}`,
+        `${gameType}: expected ${expectedCount} numbers in draw result, got ${numbers.length}`,
       );
     }
 

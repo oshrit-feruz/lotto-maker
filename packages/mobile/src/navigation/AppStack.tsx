@@ -7,10 +7,11 @@ import { OrdersListScreen } from '../screens/orders/OrdersListScreen.js';
 import { OrderDetailScreen } from '../screens/orders/OrderDetailScreen.js';
 import { SubscriptionsScreen } from '../screens/subscriptions/SubscriptionsScreen.js';
 import { WalletScreen } from '../screens/wallet/WalletScreen.js';
+import { ResultsScreen } from '../screens/results/ResultsScreen.js';
 import { useCartStore } from '../store/cart.store.js';
 import type { GameType } from '@lotto-maker/shared';
 
-type Tab = 'home' | 'orders' | 'subscriptions' | 'wallet';
+type Tab = 'home' | 'results' | 'orders' | 'subscriptions' | 'wallet';
 type HomeStep = 'select' | 'lotto' | 'cart';
 
 export function AppStack() {
@@ -21,6 +22,7 @@ export function AppStack() {
   const cartCount = useCartStore((s) => s.items.length);
 
   function renderContent() {
+    if (tab === 'results') return <ResultsScreen />;
     if (tab === 'orders') {
       if (selectedOrderId) return <OrderDetailScreen orderId={selectedOrderId} />;
       return <OrdersListScreen onSelectOrder={(id) => setSelectedOrderId(id)} />;
@@ -56,6 +58,7 @@ export function AppStack() {
       <View style={styles.tabBar}>
         {([
           { id: 'home', label: 'בית', icon: '🏠' },
+          { id: 'results', label: 'תוצאות', icon: '🎱' },
           { id: 'orders', label: 'הזמנות', icon: '📋' },
           { id: 'subscriptions', label: 'מנויים', icon: '🔄' },
           { id: 'wallet', label: 'ארנק', icon: '💳' },
@@ -66,7 +69,7 @@ export function AppStack() {
             onPress={() => {
               setTab(id);
               if (id !== 'orders') setSelectedOrderId(null);
-              if (id !== 'home') setHomeStep('select');
+              if (id !== 'home') { setHomeStep('select'); }
             }}
           >
             <Text style={styles.tabIcon}>{icon}</Text>
