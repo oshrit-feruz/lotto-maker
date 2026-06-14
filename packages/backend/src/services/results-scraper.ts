@@ -211,9 +211,17 @@ export class ResultsScraper {
 
     try {
       const response = await axios.get<string>(url, {
-        timeout: 10_000,
-        headers: { 'User-Agent': USER_AGENT },
+        timeout: 30_000,
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Referer': `${this.baseUrl}/`,
+        },
         responseType: 'text',
+        maxRedirects: 5,
       });
       return response.data;
     } catch (err) {
