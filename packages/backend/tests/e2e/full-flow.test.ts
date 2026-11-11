@@ -234,7 +234,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(201);
     const body = res.json<{ orderId: string; status: string }>();
     expect(body.status).toBe('in_queue');
     orderId = body.orderId;

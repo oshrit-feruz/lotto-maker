@@ -71,7 +71,8 @@ export async function createOrder(params: CreateOrderParams) {
   const order = await prisma.$transaction(
     async (tx: Tx) => {
       // Advisory lock scoped to transaction — prevents concurrent circuit-breaker accepts
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${location.id}::text))`;
+      // $executeRaw, not $queryRaw: the function returns void, which Prisma cannot deserialize
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.id}::text))`;
 
       const rows = await tx.$queryRaw<Array<{ walletBalance: string }>>`
         SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
