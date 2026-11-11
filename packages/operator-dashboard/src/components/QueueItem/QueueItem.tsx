@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function QueueItem({ slot }: Props) {
-  const { updateSlot } = useQueueStore();
+  const { updateSlot, removeSlot } = useQueueStore();
   const [showScan, setShowScan] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -39,7 +39,7 @@ export function QueueItem({ slot }: Props) {
     }
   }
 
-  const borderColor = slot.status === 'in_progress' ? '#1a56db' : '#e5e7eb';
+  const borderColor = slot.status === 'in_progress' ? '#1a56db' : slot.status === 'done' ? '#057a55' : '#e5e7eb';
 
   return (
     <div style={{ border: `2px solid ${borderColor}`, borderRadius: 8, padding: 16, marginBottom: 12, background: '#fff' }}>
@@ -52,6 +52,12 @@ export function QueueItem({ slot }: Props) {
         {numbersDisplay}{strongDisplay}
       </div>
 
+      {slot.order.idLast4 && (
+        <div style={{ color: '#6b7280', marginBottom: 8 }}>
+          ת.ז. (4 ספרות אחרונות): <span style={{ direction: 'ltr', fontWeight: 600 }}>{slot.order.idLast4}</span>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {slot.status === 'waiting' && (
           <button onClick={handleStart} disabled={loading} style={btnStyle('#1a56db')}>
@@ -59,14 +65,15 @@ export function QueueItem({ slot }: Props) {
           </button>
         )}
         {slot.status === 'in_progress' && (
-          <>
-            <button onClick={handleDone} disabled={loading} style={btnStyle('#057a55')}>
-              סיימתי
-            </button>
-            <button onClick={() => setShowScan(true)} style={btnStyle('#6b7280')}>
-              סרוק טופס
-            </button>
-          </>
+          <button onClick={handleDone} disabled={loading} style={btnStyle('#057a55')}>
+            סיימתי
+          </button>
+        )}
+        {/* The scan can only be attached once the form has been keyed */}
+        {slot.status === 'done' && (
+          <button onClick={() => setShowScan(true)} style={btnStyle('#6b7280')}>
+            סרוק טופס
+          </button>
         )}
       </div>
 
@@ -75,8 +82,8 @@ export function QueueItem({ slot }: Props) {
           slotId={slot.id}
           onClose={() => setShowScan(false)}
           onSuccess={() => {
-            updateSlot(slot.id, { status: 'done' });
             setShowScan(false);
+            removeSlot(slot.id);
           }}
         />
       )}

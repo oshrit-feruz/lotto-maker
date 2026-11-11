@@ -6,6 +6,8 @@ type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction'
 interface AuditEntry {
   entityType: string;
   entityId: string;
+  /** Links a non-order entity (e.g. a queue slot) to its order. */
+  orderId?: string;
   action: string;
   actorId?: string;
   actorType?: 'user' | 'operator' | 'system';
@@ -17,7 +19,7 @@ function buildAuditData(entry: AuditEntry) {
   return {
     entityType: entry.entityType,
     entityId: entry.entityId,
-    orderId: entry.entityType === 'order' ? entry.entityId : null,
+    orderId: entry.entityType === 'order' ? entry.entityId : (entry.orderId ?? null),
     action: entry.action,
     actorId: entry.actorId,
     actorType: entry.actorType,

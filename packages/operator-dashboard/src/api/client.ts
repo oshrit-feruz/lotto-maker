@@ -54,6 +54,8 @@ export interface QueueSlotWithOrder {
     numbers: number[];
     strongNumber: number | null;
     type: string;
+    /** Last 4 digits of the customer's ID number, for the prize form. Nothing else about the customer is sent. */
+    idLast4: string | null;
   };
 }
 

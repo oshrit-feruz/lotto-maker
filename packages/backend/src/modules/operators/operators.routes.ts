@@ -6,6 +6,7 @@ import {
   startSlot,
   completeSlot,
   attachScan,
+  assertCanAttachScan,
   getShiftLog,
   queueChannel,
   getOperatorByUserId,
@@ -39,6 +40,9 @@ export default async function operatorsRoutes(app: FastifyInstance) {
     if (!/^[a-zA-Z0-9_-]+$/.test(slotId)) {
       return reply.status(400).send({ error: 'INVALID_SLOT_ID' });
     }
+    // Authorise before touching the upload: nothing is stored for a rejected request
+    await assertCanAttachScan(slotId, request.user.sub);
+
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'NO_FILE' });
 

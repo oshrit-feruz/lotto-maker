@@ -50,7 +50,10 @@ export function useQueue() {
           setSlots(msg.slots as Parameters<typeof setSlots>[0]);
         } else if (msg.type === 'slot_updated') {
           updateSlot(msg.slot.id, msg.slot);
-        } else if (msg.type === 'slot_completed' || msg.type === 'slot_scanned') {
+        } else if (msg.type === 'slot_completed') {
+          // Keyed, but it stays on the list until its ticket scan is uploaded
+          updateSlot(msg.slotId, { status: 'done' });
+        } else if (msg.type === 'slot_scanned') {
           removeSlot(msg.slotId);
         }
       } catch {}

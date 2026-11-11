@@ -381,6 +381,63 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
   });
 
+  // ─── Operators are confined to their own location ────────────────────────────
+
+  it('rejects an operator from another location and hides customer identity in the queue', async () => {
+    const otherLocation = await prisma.location.create({
+      data: { name: 'Other Branch', address: '2 Test St', activeHours: {}, active: false },
+    });
+    const outsider = await prisma.operator.create({
+      data: { name: 'Outsider', locationId: otherLocation.id, active: true },
+    });
+    const outsiderToken = app.jwt.sign({ sub: outsider.id, type: 'operator' });
+
+    for (const action of ['start', 'done']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/operator/queue/${slotId}/${action}`,
+        headers: { authorization: `Bearer ${outsiderToken}` },
+      });
+      expect(res.statusCode, action).toBe(403);
+      expect(res.json().error).toBe('FORBIDDEN_LOCATION');
+    }
+    expect((await prisma.queueSlot.findUnique({ where: { id: slotId } }))?.status).toBe('waiting');
+
+    const theirs = await app.inject({
+      method: 'GET',
+      url: '/operator/queue',
+      headers: { authorization: `Bearer ${outsiderToken}` },
+    });
+    expect(theirs.json().slots).toHaveLength(0);
+
+    const ours = await app.inject({
+      method: 'GET',
+      url: '/operator/queue',
+      headers: { authorization: `Bearer ${operatorToken}` },
+    });
+    const userId = app.jwt.decode<{ sub: string }>(userAccessToken)!.sub;
+    expect(ours.body).not.toContain(userId);
+    expect(ours.body).not.toContain('userId');
+    expect(ours.json().slots[0].order).toEqual({
+      gameType: 'lotto',
+      numbers: [1, 2, 3, 4, 5, 6],
+      strongNumber: 3,
+      type: 'one_time',
+      idLast4: '6782',
+    });
+  });
+
+  it('refuses a scan before the form has been keyed', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/operator/queue/${slotId}/scan`,
+      headers: { authorization: `Bearer ${operatorToken}`, 'content-type': 'multipart/form-data; boundary=x' },
+      payload: '--x--\r\n',
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('SLOT_NOT_KEYED');
+  });
+
   // ─── Step 8: Operator picks up slot ──────────────────────────────────────────
 
   it('operator starts the queue slot', async () => {
@@ -392,6 +449,13 @@ describe.skipIf(skip)('Full e2e flow', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('in_progress');
+
+    // Starting does not key the order, and the audit log says so
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(order?.status).toBe('in_queue');
+    const audit = await prisma.auditLog.findMany({ where: { orderId } });
+    expect(audit.map((a) => a.action)).toContain('slot_status_change:waiting->in_progress');
+    expect(audit.some((a) => a.action.endsWith('->keyed'))).toBe(false);
   });
 
   // ─── Step 9: Operator marks slot done (keyed) ─────────────────────────────────
