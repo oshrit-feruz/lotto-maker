@@ -4,7 +4,7 @@ import { uploadScan } from '../../api/client.js';
 interface Props {
   slotId: string;
   onClose: () => void;
-  onSuccess: (url: string) => void;
+  onSuccess: () => void;
 }
 
 export function ScanUpload({ slotId, onClose, onSuccess }: Props) {
@@ -25,8 +25,8 @@ export function ScanUpload({ slotId, onClose, onSuccess }: Props) {
     setUploading(true);
     setError(null);
     try {
-      const { scanUrl } = await uploadScan(slotId, file);
-      onSuccess(scanUrl);
+      await uploadScan(slotId, file);
+      onSuccess();
     } catch {
       setError('שגיאה בהעלאה. נסה שוב.');
     } finally {

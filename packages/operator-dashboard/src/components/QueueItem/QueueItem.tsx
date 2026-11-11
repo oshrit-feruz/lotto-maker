@@ -74,7 +74,7 @@ export function QueueItem({ slot }: Props) {
         <ScanUpload
           slotId={slot.id}
           onClose={() => setShowScan(false)}
-          onSuccess={(url) => {
+          onSuccess={() => {
             updateSlot(slot.id, { status: 'done' });
             setShowScan(false);
           }}

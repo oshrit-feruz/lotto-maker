@@ -100,6 +100,9 @@ export const ordersApi = {
   },
 
   get: (id: string) => request<Record<string, unknown>>(`orders/${id}`),
+
+  // Signed URL for the ticket scan; valid for `expiresIn` seconds, so fetch it when needed.
+  getScanUrl: (id: string) => request<{ url: string; expiresIn: number }>(`orders/${id}/scan`),
 };
 
 // ─── Wallet ──────────────────────────────────────────────────────────────────

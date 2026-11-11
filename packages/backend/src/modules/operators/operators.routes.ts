@@ -44,9 +44,9 @@ export default async function operatorsRoutes(app: FastifyInstance) {
 
     const buffer = await data.toBuffer();
     const key = `scans/${slotId}-${Date.now()}.jpg`;
-    const scanUrl = await r2Service.upload(key, buffer, data.mimetype);
+    const scanKey = await r2Service.upload(key, buffer, data.mimetype);
 
-    const result = await attachScan(slotId, request.user.sub, scanUrl);
+    const result = await attachScan(slotId, request.user.sub, scanKey);
     return reply.send(result);
   });
 

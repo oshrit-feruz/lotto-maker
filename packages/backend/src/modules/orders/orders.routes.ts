@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createOrder, getOrders, getOrderById } from './orders.service.js';
+import { createOrder, getOrders, getOrderById, getOrderScanUrl } from './orders.service.js';
 
 const createOrderSchema = z.object({
   gameType: z.enum(['lotto', 'chance', 'seven77', 'one23']),
@@ -40,5 +40,12 @@ export default async function ordersRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const order = await getOrderById(id, request.user.sub);
     return reply.send(order);
+  });
+
+  // Short-lived signed URL for the ticket scan. Never cache it.
+  app.get('/orders/:id/scan', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await getOrderScanUrl(id, request.user.sub);
+    return reply.header('Cache-Control', 'no-store').send(result);
   });
 }

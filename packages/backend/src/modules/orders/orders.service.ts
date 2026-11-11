@@ -7,6 +7,7 @@ import { validateGameNumbers } from './orders.validator.js';
 import { evaluateCircuitBreaker } from '../../lib/circuit-breaker.js';
 import { getNextDrawInfo } from '../../lib/draw-schedule.js';
 import { orderStatusChange } from '../../lib/audit-log.js';
+import { r2Service, DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../storage/r2.service.js';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
@@ -154,14 +155,39 @@ export async function getOrders(
     prisma.order.count({ where }),
   ]);
 
-  return { data, total, page: params.page, limit: params.limit };
+  return { data: data.map(toPublicOrder), total, page: params.page, limit: params.limit };
 }
 
 export async function getOrderById(orderId: string, userId: string) {
-  const order = await prisma.order.findUniqueOrThrow({
+  const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { queueSlot: true },
   });
+  if (!order) throw new AppError(404, 'ORDER_NOT_FOUND');
   if (order.userId !== userId) throw new AppError(403, 'FORBIDDEN');
-  return order;
+  return toPublicOrder(order);
+}
+
+/** The storage key stays server-side; clients only learn whether a scan exists. */
+function toPublicOrder<T extends { ticketScanKey: string | null }>(order: T) {
+  const { ticketScanKey, ...rest } = order;
+  return { ...rest, hasScan: ticketScanKey !== null };
+}
+
+/**
+ * Returns a short-lived signed URL for the order's ticket scan. Owner only.
+ * TODO: serve customers a partially blurred copy (barcode / serial hidden) and
+ * keep the full scan for prize claims only.
+ */
+export async function getOrderScanUrl(orderId: string, userId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { userId: true, ticketScanKey: true },
+  });
+  if (!order) throw new AppError(404, 'ORDER_NOT_FOUND');
+  if (order.userId !== userId) throw new AppError(403, 'FORBIDDEN');
+  if (!order.ticketScanKey) throw new AppError(404, 'SCAN_NOT_AVAILABLE');
+
+  const url = await r2Service.getSignedUrl(order.ticketScanKey, DEFAULT_SIGNED_URL_TTL_SECONDS);
+  return { url, expiresIn: DEFAULT_SIGNED_URL_TTL_SECONDS };
 }

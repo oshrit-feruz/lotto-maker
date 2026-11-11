@@ -127,7 +127,8 @@ model Order {
   drawTime       DateTime
   type           OrderType
   status         OrderStatus @default(pending)
-  ticketScanUrl  String?
+  // Object key in the private scan bucket. Never a URL; read via a signed URL.
+  ticketScanKey  String?
   price          Decimal     @db.Decimal(8, 2)
   fee            Decimal     @db.Decimal(8, 2)
   totalCharged   Decimal     @db.Decimal(8, 2)

@@ -4,9 +4,10 @@ import type { FastifyInstance } from 'fastify';
 // Mock external services before any module imports them
 vi.mock('../../src/storage/r2.service.js', () => ({
   r2Service: {
-    upload: vi.fn().mockResolvedValue('https://cdn.example.com/scans/test.jpg'),
-    getSignedUrl: vi.fn().mockResolvedValue('https://cdn.example.com/scans/test.jpg?sig=mock'),
+    upload: vi.fn(async (key: string) => key),
+    getSignedUrl: vi.fn(async (key: string) => `https://r2.example.com/${key}?X-Amz-Expires=300&X-Amz-Signature=mock`),
   },
+  DEFAULT_SIGNED_URL_TTL_SECONDS: 300,
 }));
 
 vi.mock('twilio', () => ({
@@ -395,10 +396,42 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().scanUrl).toBeTruthy();
+    expect(JSON.stringify(res.json())).not.toContain('http');
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     expect(order?.status).toBe('scanned');
+    // Only the object key is stored, never a URL
+    expect(order?.ticketScanKey).toMatch(/^scans\//);
+  });
+
+  it('serves the scan to its owner only, through a signed URL', async () => {
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/orders/${orderId}`,
+      headers: { authorization: `Bearer ${userAccessToken}` },
+    });
+    expect(detail.json().hasScan).toBe(true);
+    expect(detail.body).not.toContain('scans/');
+
+    const owner = await app.inject({
+      method: 'GET',
+      url: `/orders/${orderId}/scan`,
+      headers: { authorization: `Bearer ${userAccessToken}` },
+    });
+    expect(owner.statusCode).toBe(200);
+    expect(owner.json().url).toContain('X-Amz-Expires=300');
+
+    const stranger = await prisma.user.create({ data: { phone: '+972508888888' } });
+    const strangerToken = app.jwt.sign({ sub: stranger.id, type: 'user' });
+    const other = await app.inject({
+      method: 'GET',
+      url: `/orders/${orderId}/scan`,
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
+    expect(other.statusCode).toBe(403);
+
+    const anon = await app.inject({ method: 'GET', url: `/orders/${orderId}/scan` });
+    expect(anon.statusCode).toBe(401);
   });
 
   // ─── Step 11: Results processing → won ───────────────────────────────────────

@@ -26,7 +26,7 @@ interface OrderDetail {
   status: OrderStatus;
   drawDate: string;
   totalCharged: string;
-  ticketScanUrl: string | null;
+  hasScan: boolean;
   createdAt: string;
 }
 
@@ -70,11 +70,19 @@ export function OrderDetailScreen({ orderId }: Props) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [drawResult, setDrawResult] = useState<DrawResultResponse | null>(null);
   const [loadingResult, setLoadingResult] = useState(false);
+  // Short-lived signed URL, fetched each time the screen opens (never stored)
+  const [scanUrl, setScanUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    setScanUrl(null);
     ordersApi.get(orderId).then((o) => {
       const detail = o as unknown as OrderDetail;
       setOrder(detail);
+      if (detail.hasScan) {
+        ordersApi.getScanUrl(orderId)
+          .then(({ url }) => setScanUrl(url))
+          .catch(() => {/* scan is optional on this screen */});
+      }
       // Fetch draw result for won/lost/scanned orders
       if (['won', 'lost', 'scanned'].includes(detail.status)) {
         const dateStr = new Date(detail.drawDate).toISOString().slice(0, 10);
@@ -176,11 +184,12 @@ export function OrderDetailScreen({ orderId }: Props) {
       </View>
 
       {/* Ticket scan */}
-      {order.ticketScanUrl && (
+      {scanUrl && (
         <View style={styles.scanSection}>
           <Text style={styles.scanLabel}>הטופס המקורי</Text>
           <Image
-            source={order.ticketScanUrl}
+            source={scanUrl}
+            cachePolicy="none"
             style={styles.scanImage}
             contentFit="contain"
             transition={300}

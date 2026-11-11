@@ -24,7 +24,8 @@ export interface Order {
   drawTime: string;
   type: OrderType;
   status: OrderStatus;
-  ticketScanUrl: string | null;
+  /** The scan itself is fetched through GET /orders/:id/scan (short-lived signed URL). */
+  hasScan: boolean;
   price: string;
   fee: string;
   totalCharged: string;

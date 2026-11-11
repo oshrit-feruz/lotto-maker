@@ -88,7 +88,7 @@ export async function completeSlot(slotId: string, operatorId: string) {
 export async function attachScan(
   slotId: string,
   operatorId: string,
-  scanUrl: string,
+  scanKey: string,
 ) {
   const slot = await prisma.queueSlot.findUniqueOrThrow({
     where: { id: slotId },
@@ -98,17 +98,17 @@ export async function attachScan(
   const now = new Date();
   await prisma.order.update({
     where: { id: slot.orderId },
-    data: { ticketScanUrl: scanUrl, status: 'scanned', scannedAt: now },
+    data: { ticketScanKey: scanKey, status: 'scanned', scannedAt: now },
   });
 
   await orderStatusChange(slot.orderId, 'keyed', 'scanned', operatorId, 'operator');
-  await publishQueueUpdate(slot.locationId, { type: 'slot_scanned', slotId, scanUrl });
+  await publishQueueUpdate(slot.locationId, { type: 'slot_scanned', slotId });
 
   notificationService
     .sendToUser(slot.order.userId, PAYLOADS.orderKeyed())
     .catch(console.error);
 
-  return { scanUrl };
+  return { scanned: true };
 }
 
 export async function getShiftLog(operatorId: string, date?: string) {
