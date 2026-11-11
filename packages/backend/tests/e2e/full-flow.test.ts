@@ -20,11 +20,13 @@ vi.mock('firebase-admin', () => ({
   default: { initializeApp: vi.fn(), messaging: vi.fn(() => ({ send: vi.fn() })) },
 }));
 
-// Control fetchDrawResults per test
-const mockFetchDrawResults = vi.fn();
-vi.mock('../../src/modules/results/results.service.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/modules/results/results.service.js')>();
-  return { ...original, fetchDrawResults: mockFetchDrawResults };
+// Control the draw results per test. The mock sits at the scraper boundary:
+// results.service calls its own fetchDrawResults internally, so mocking that
+// export would not be seen and the tests would hit the real Pais site.
+const mockFetchLatestForDate = vi.fn();
+vi.mock('../../src/services/results-scraper.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/services/results-scraper.js')>();
+  return { ...original, fetchLatestForDate: mockFetchLatestForDate };
 });
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -352,12 +354,12 @@ describe.skipIf(skip)('Full e2e flow', () => {
   // ─── Step 7: Circuit breaker rejects 2nd order ───────────────────────────────
 
   it('rejects a second order when circuit breaker capacity is exhausted', async () => {
-    // throughput=2/hr, minutesLeft≈(hard cutoff to draw), 1 slot already in queue
-    // gross=2*(minutesLeft/60) ≈ 2 for ~60min window → available=2-1=1, buffer=ceil(2*0.1)=1 → rejected
-    // Ensure this by setting throughput very low
+    // Capacity = throughput × time left until the cutoff, so any positive
+    // throughput makes this depend on when the test runs. With zero throughput
+    // the capacity is 0 whatever the clock says, and one slot is already queued.
     await prisma.operator.update({
       where: { id: operatorId },
-      data: { throughputPerHour: 1 },
+      data: { throughputPerHour: 0 },
     });
 
     const res = await app.inject({
@@ -373,6 +375,8 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
 
     expect(res.statusCode).toBe(503);
+    expect(res.json().error).toBe('QUEUE_FULL');
+    expect(await prisma.order.count()).toBe(1);
 
     // Restore operator throughput
     await prisma.operator.update({
@@ -546,13 +550,15 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
 
     // Mock results: numbers 1-6 with strong 3 — exact match → win
-    const { fetchDrawResults } = await import('../../src/modules/results/results.service.js');
-    (fetchDrawResults as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      numbers: [1, 2, 3, 4, 5, 6],
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    mockFetchLatestForDate.mockResolvedValueOnce({
+      drawNumber: 1234,
+      gameType: 'lotto',
+      winningNumbers: [1, 2, 3, 4, 5, 6],
       strongNumber: 3,
+      drawDate: order!.drawDate,
     });
 
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
     const { processResultsWithRetry } = await import('../../src/modules/results/results.service.js');
     await processResultsWithRetry('lotto', order!.drawDate);
 
@@ -613,7 +619,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
     const order2 = await prisma.order.findUnique({ where: { id: orderId2 } });
 
     // fetchDrawResults always returns null → exhausts retries immediately (attemptsLeft=1)
-    mockFetchDrawResults.mockResolvedValue(null);
+    mockFetchLatestForDate.mockResolvedValue(null);
 
     const { markResultsDelayed } = await import('../../src/modules/results/results.service.js');
     await markResultsDelayed('lotto', order2!.drawDate);

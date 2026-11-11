@@ -6,7 +6,7 @@ import { AppError } from '../../plugins/error-handler.js';
 import { validateGameNumbers } from './orders.validator.js';
 import { evaluateCircuitBreaker } from '../../lib/circuit-breaker.js';
 import { getNextDrawInfo } from '../../lib/draw-schedule.js';
-import { orderStatusChange } from '../../lib/audit-log.js';
+import { orderStatusChange, writeAuditLogTx } from '../../lib/audit-log.js';
 import { r2Service, DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../storage/r2.service.js';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
@@ -89,8 +89,18 @@ export async function createOrder(params: CreateOrderParams) {
         data: { walletBalance: { decrement: totalCharged } },
       });
 
-      await tx.walletTransaction.create({
+      const walletTx = await tx.walletTransaction.create({
         data: { userId, type: 'charge', amount: totalCharged, description: `הזמנת טופס ${gameType}` },
+      });
+
+      // Same audit entry walletService.charge writes, inside the charging transaction
+      await writeAuditLogTx(tx, {
+        entityType: 'wallet',
+        entityId: userId,
+        action: 'wallet:charge',
+        actorId: userId,
+        actorType: 'user',
+        metadata: { amount: String(totalCharged), transactionId: walletTx.id },
       });
 
       const newOrder = await tx.order.create({
