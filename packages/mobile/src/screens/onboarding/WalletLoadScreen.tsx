@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { walletApi } from '../../api/client.js';
+import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
 
 const PRESET_AMOUNTS = [20, 50, 100, 200];
@@ -12,21 +13,44 @@ interface Props {
 export function WalletLoadScreen({ onContinue }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const pendingPayment = useRef<string | null>(null);
   const updateUser = useAuthStore((s) => s.updateUser);
 
+  // No money is added here: we open the provider's checkout page and the
+  // server credits the wallet once the provider confirms the payment.
   async function handleDeposit() {
     if (!selected || loading) return;
     setLoading(true);
     try {
-      const result = await walletApi.deposit(selected) as { newBalance: string };
-      updateUser({ walletBalance: result.newBalance });
-      onContinue();
+      pendingPayment.current = await openCheckout(selected);
+    } catch (err: unknown) {
+      setLoading(false);
+      Alert.alert('שגיאה', depositErrorMessage(err));
+    }
+  }
+
+  // Back from the checkout page: see how the payment ended.
+  useOnForeground(async () => {
+    const paymentId = pendingPayment.current;
+    if (!paymentId) return;
+    pendingPayment.current = null;
+    try {
+      const status = await waitForPayment(paymentId);
+      if (status === 'approved') {
+        const { balance } = await walletApi.getBalance();
+        updateUser({ walletBalance: balance });
+        onContinue();
+      } else if (status === 'pending') {
+        Alert.alert('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.', [{ text: 'המשך', onPress: onContinue }]);
+      } else {
+        Alert.alert('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
+      }
     } catch {
-      Alert.alert('שגיאה', 'הטעינה נכשלה. נסה שנית.');
+      Alert.alert('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
     } finally {
       setLoading(false);
     }
-  }
+  });
 
   return (
     <View style={styles.container}>
@@ -52,7 +76,7 @@ export function WalletLoadScreen({ onContinue }: Props) {
         onPress={handleDeposit}
         disabled={!selected || loading}
       >
-        <Text style={styles.btnText}>{loading ? 'טוען...' : `טען ₪${selected ?? '...'}`}</Text>
+        <Text style={styles.btnText}>{loading ? 'ממתין לתשלום...' : `המשך לתשלום ₪${selected ?? '...'}`}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onContinue} style={styles.skipBtn} disabled={loading}>

@@ -104,9 +104,18 @@ export const ordersApi = {
 
 // ─── Wallet ──────────────────────────────────────────────────────────────────
 
+export type PaymentStatus = 'pending' | 'approved' | 'failed' | 'refunded';
+
 export const walletApi = {
   getBalance: () => request<{ balance: string }>('wallet/balance'),
-  deposit: (amount: number) => request('wallet/deposit', { method: 'POST', body: JSON.stringify({ amount }) }),
+  // Deposits go through the payment provider: the server returns a hosted
+  // checkout URL and credits the wallet only after the provider confirms.
+  createCheckout: (amount: number) =>
+    request<{ paymentId: string; checkoutUrl: string }>(
+      'payments/checkout', { method: 'POST', body: JSON.stringify({ amount }) },
+    ),
+  getPayment: (paymentId: string) =>
+    request<{ paymentId: string; status: PaymentStatus; amount: string }>(`payments/${paymentId}`),
   getTransactions: (page?: number) => {
     const qs = page ? `?page=${page}` : '';
     return request<{ data: unknown[]; total: number }>(`wallet/transactions${qs}`);

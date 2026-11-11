@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
   TouchableOpacity, Alert, RefreshControl,
 } from 'react-native';
 import { walletApi } from '../../api/client.js';
+import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
 
 const PRESET_AMOUNTS = [20, 50, 100, 200];
@@ -28,6 +29,8 @@ export function WalletScreen() {
   const [txs, setTxs] = useState<TxRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const pendingPayment = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -45,15 +48,40 @@ export function WalletScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // No money is added here: we open the provider's checkout page and the
+  // server credits the wallet once the provider confirms the payment.
   async function handleDeposit(amount: number) {
+    if (paying) return;
+    setPaying(true);
     try {
-      const res = await walletApi.deposit(amount) as { newBalance: string };
-      updateUser({ walletBalance: res.newBalance });
-      Alert.alert('הופקד בהצלחה', `₪${amount} נוספו לארנק שלך`);
-    } catch {
-      Alert.alert('שגיאה', 'הטעינה נכשלה. נסה שנית.');
+      pendingPayment.current = await openCheckout(amount);
+    } catch (err: unknown) {
+      setPaying(false);
+      Alert.alert('שגיאה', depositErrorMessage(err));
     }
   }
+
+  // Back from the checkout page: see how the payment ended, then reload.
+  useOnForeground(async () => {
+    const paymentId = pendingPayment.current;
+    if (!paymentId) return;
+    pendingPayment.current = null;
+    try {
+      const status = await waitForPayment(paymentId);
+      await load();
+      if (status === 'approved') {
+        Alert.alert('הופקד בהצלחה', 'הסכום נוסף לארנק שלך');
+      } else if (status === 'pending') {
+        Alert.alert('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.');
+      } else {
+        Alert.alert('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
+      }
+    } catch {
+      Alert.alert('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
+    } finally {
+      setPaying(false);
+    }
+  });
 
   if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#1a56db" />;
 
@@ -71,7 +99,7 @@ export function WalletScreen() {
           <Text style={styles.sectionTitle}>טען ארנק</Text>
           <View style={styles.presetRow}>
             {PRESET_AMOUNTS.map((amt) => (
-              <TouchableOpacity key={amt} style={styles.presetBtn} onPress={() => handleDeposit(amt)}>
+              <TouchableOpacity key={amt} style={[styles.presetBtn, paying && { opacity: 0.5 }]} disabled={paying} onPress={() => handleDeposit(amt)}>
                 <Text style={styles.presetText}>₪{amt}</Text>
               </TouchableOpacity>
             ))}

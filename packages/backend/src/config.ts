@@ -31,6 +31,13 @@ const envSchema = z.object({
   R2_BUCKET_NAME: z.string().default('lotto-maker-scans'),
   R2_PUBLIC_URL: z.string().optional(),
   PAIS_BASE_URL: z.string().url().default('https://www.pais.co.il'),
+  // Maximum wallet balance (ILS). A deposit that would exceed it is rejected.
+  WALLET_BALANCE_CAP: z.coerce.number().positive().default(2600),
+  // Only the mock provider exists so far; it is refused when NODE_ENV=production.
+  PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
+  PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Public base URL of this API, used to build hosted-checkout links.
+  PUBLIC_API_URL: z.string().url().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

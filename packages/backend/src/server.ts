@@ -10,6 +10,7 @@ import swaggerPlugin from './plugins/swagger.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import usersRoutes from './modules/users/users.routes.js';
 import walletRoutes from './modules/wallet/wallet.routes.js';
+import paymentsRoutes from './modules/payments/payments.routes.js';
 import ordersRoutes from './modules/orders/orders.routes.js';
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes.js';
 import operatorsRoutes from './modules/operators/operators.routes.js';
@@ -30,6 +31,7 @@ export async function buildApp() {
   await app.register(authRoutes);
   await app.register(usersRoutes);
   await app.register(walletRoutes);
+  await app.register(paymentsRoutes);
   await app.register(ordersRoutes);
   await app.register(subscriptionsRoutes);
   await app.register(operatorsRoutes);

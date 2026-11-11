@@ -55,6 +55,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
     // Clean slate
     await prisma.auditLog.deleteMany();
     await prisma.walletTransaction.deleteMany();
+    await prisma.payment.deleteMany();
     await prisma.queueSlot.deleteMany();
     await prisma.order.deleteMany();
     await prisma.subscription.deleteMany();
@@ -93,6 +94,32 @@ describe.skipIf(skip)('Full e2e flow', () => {
   afterAll(async () => {
     await app.close();
   });
+
+  /** Starts a checkout and builds the signed "approved" webhook the provider would send. */
+  async function startCheckout(token: string, amount: number) {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/payments/checkout',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { amount },
+    });
+    expect(res.statusCode).toBe(201);
+    const { paymentId } = res.json<{ paymentId: string; checkoutUrl: string }>();
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+
+    const { getPaymentProvider } = await import('../../src/modules/payments/payments.service.js');
+    const provider = getPaymentProvider() as import('../../src/modules/payments/mock-payment-provider.js').MockPaymentProvider;
+    const payload = JSON.stringify({ providerTxId: payment.providerTxId, status: 'approved', amount });
+    return {
+      paymentId,
+      webhook: {
+        method: 'POST' as const,
+        url: '/payments/webhook',
+        headers: { 'content-type': 'application/json', 'x-mock-signature': provider.sign(payload) },
+        payload,
+      },
+    };
+  }
 
   // ─── Step 1: OTP send ────────────────────────────────────────────────────────
 
@@ -196,25 +223,58 @@ describe.skipIf(skip)('Full e2e flow', () => {
     expect(adult.json().verifiedAdult).toBe(true);
   });
 
-  // ─── Step 5: Wallet deposit ───────────────────────────────────────────────────
+  // ─── Step 5: Wallet deposit (checkout + provider webhook) ─────────────────────
 
-  it('deposits funds and writes an audit log entry', async () => {
+  it('has no direct deposit route', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/wallet/deposit',
       headers: { authorization: `Bearer ${userAccessToken}` },
       payload: { amount: 100 },
     });
+    expect(res.statusCode).toBe(404);
+  });
 
-    expect(res.statusCode).toBe(200);
-    expect(parseFloat(res.json().newBalance)).toBeGreaterThanOrEqual(100);
-
-    // Confirm audit log was written inside the transaction
+  it('credits the wallet once per confirmed payment, even under concurrent duplicate webhooks', async () => {
     const userId = app.jwt.decode<{ sub: string }>(userAccessToken)!.sub;
+    const { webhook } = await startCheckout(userAccessToken, 100);
+
+    // Checkout alone credits nothing
+    const before = await prisma.user.findUnique({ where: { id: userId } });
+    expect(before!.walletBalance.toNumber()).toBe(0);
+
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/payments/webhook',
+      headers: { 'content-type': 'application/json', 'x-mock-signature': 'bad' },
+      payload: webhook.payload,
+    });
+    expect(bad.statusCode).toBe(401);
+
+    const responses = await Promise.all([1, 2, 3, 4, 5].map(() => app.inject(webhook)));
+    expect(responses.every((r) => r.statusCode === 200)).toBe(true);
+    expect(responses.filter((r) => r.json().outcome === 'credited')).toHaveLength(1);
+
+    const after = await prisma.user.findUnique({ where: { id: userId } });
+    expect(after!.walletBalance.toNumber()).toBe(100);
+    expect(await prisma.walletTransaction.count({ where: { userId, type: 'deposit' } })).toBe(1);
+
+    // Audit log written inside the same transaction as the credit
     const auditEntries = await prisma.auditLog.findMany({
       where: { entityType: 'wallet', entityId: userId, action: 'wallet:deposit' },
     });
-    expect(auditEntries.length).toBeGreaterThanOrEqual(1);
+    expect(auditEntries).toHaveLength(1);
+  });
+
+  it('rejects a deposit that would exceed the wallet cap', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/payments/checkout',
+      headers: { authorization: `Bearer ${userAccessToken}` },
+      payload: { amount: 2501 },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toBe('WALLET_CAP_EXCEEDED');
   });
 
   // ─── Step 6: Create order (circuit breaker accepts) ─────────────────────────
@@ -403,12 +463,8 @@ describe.skipIf(skip)('Full e2e flow', () => {
       payload: { fullName: 'User Two', idNumber: '987654321', dateOfBirth: '1985-03-20' },
     });
 
-    await app.inject({
-      method: 'POST',
-      url: '/wallet/deposit',
-      headers: { authorization: `Bearer ${t2}` },
-      payload: { amount: 50 },
-    });
+    const { webhook } = await startCheckout(t2, 50);
+    expect((await app.inject(webhook)).json().outcome).toBe('credited');
 
     const orderRes = await app.inject({
       method: 'POST',
