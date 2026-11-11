@@ -209,7 +209,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/me/kyc',
       headers: { authorization: `Bearer ${userAccessToken}` },
-      payload: { fullName: 'Young User', idNumber: '111111111', dateOfBirth: '2015-01-01' },
+      payload: { fullName: 'Young User', idNumber: '111111118', dateOfBirth: '2015-01-01' },
     });
     expect(under.statusCode).toBe(403);
 
@@ -218,10 +218,47 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/me/kyc',
       headers: { authorization: `Bearer ${userAccessToken}` },
-      payload: { fullName: 'Adult User', idNumber: '123456789', dateOfBirth: '1990-05-15' },
+      payload: { fullName: 'Adult User', idNumber: '123456782', dateOfBirth: '1990-05-15' },
     });
     expect(adult.statusCode).toBe(200);
     expect(adult.json().verifiedAdult).toBe(true);
+  });
+
+  it('rejects an ID with a bad check digit and stores valid IDs encrypted', async () => {
+    const userId = app.jwt.decode<{ sub: string }>(userAccessToken)!.sub;
+
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/me/kyc',
+      headers: { authorization: `Bearer ${userAccessToken}` },
+      payload: { fullName: 'Adult User', idNumber: '123456789', dateOfBirth: '1990-05-15' },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().error).toBe('INVALID_ID_NUMBER');
+
+    // Nothing in the row (or the API response) contains the plain ID number
+    const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>`SELECT * FROM "User" WHERE id = ${userId}`;
+    expect(JSON.stringify(rows)).not.toContain('123456782');
+    expect(rows[0]).toMatchObject({ idLast4: '6782', birthYear: 1990, idNumberLegacy: null });
+    expect(rows[0]).not.toHaveProperty('dateOfBirth');
+
+    const { decryptField } = await import('../../src/lib/crypto.js');
+    expect(decryptField(rows[0]!.idNumberEnc as string)).toBe('123456782');
+
+    const me = await app.inject({ method: 'GET', url: '/me', headers: { authorization: `Bearer ${userAccessToken}` } });
+    expect(me.json().idLast4).toBe('6782');
+    expect(me.body).not.toContain('idNumberEnc');
+    expect(me.body).not.toContain('idNumberHash');
+
+    // Same ID on another account is refused, also when typed without the check for leading zeros
+    const other = await prisma.user.create({ data: { phone: '+972507777777' } });
+    const dup = await app.inject({
+      method: 'POST',
+      url: '/me/kyc',
+      headers: { authorization: `Bearer ${app.jwt.sign({ sub: other.id, type: 'user' })}` },
+      payload: { fullName: 'Copy Cat', idNumber: '123456782', dateOfBirth: '1980-01-01' },
+    });
+    expect(dup.statusCode).toBe(409);
   });
 
   // ─── Step 5: Wallet deposit (checkout + provider webhook) ─────────────────────
@@ -493,7 +530,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/me/kyc',
       headers: { authorization: `Bearer ${t2}` },
-      payload: { fullName: 'User Two', idNumber: '987654321', dateOfBirth: '1985-03-20' },
+      payload: { fullName: 'User Two', idNumber: '987654324', dateOfBirth: '1985-03-20' },
     });
 
     const { webhook } = await startCheckout(t2, 50);

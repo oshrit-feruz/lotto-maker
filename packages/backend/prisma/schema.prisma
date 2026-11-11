@@ -78,8 +78,16 @@ model User {
   id            String     @id @default(cuid())
   phone         String     @unique
   fullName      String?
-  idNumber      String?    @unique
-  dateOfBirth   DateTime?
+  // National ID: AES-256-GCM ciphertext, keyed HMAC for the duplicate check,
+  // and the last 4 digits (shown to operators for the prize form).
+  idNumberEnc   String?
+  idNumberHash  String?    @unique
+  idLast4       String?
+  // Plaintext ID from before encryption. Emptied by the startup backfill
+  // (lib/backfill-id-encryption.ts); TODO: drop the column once that has run in production.
+  idNumberLegacy String?
+  // Only the birth year is kept; the full date of birth is used once, for the age check.
+  birthYear     Int?
   verifiedAdult Boolean    @default(false)
   walletBalance Decimal    @default(0) @db.Decimal(12, 2)
   status        UserStatus @default(active)

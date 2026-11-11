@@ -10,7 +10,8 @@ const updateMeSchema = z.object({
 
 const kycSchema = z.object({
   fullName: z.string().min(2).max(100),
-  idNumber: z.string().min(7).max(9),
+  // Format and check digit are validated in the service (400 INVALID_ID_NUMBER)
+  idNumber: z.string().min(1).max(20),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format'),
 });
 

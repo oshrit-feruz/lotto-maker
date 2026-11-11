@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+// A 32-byte key, base64-encoded (e.g. `openssl rand -base64 32`)
+const base64Key32 = z
+  .string()
+  .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64-encoded');
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
@@ -37,6 +42,17 @@ const envSchema = z.object({
   PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
   // Public base URL of this API, used to build hosted-checkout links.
   PUBLIC_API_URL: z.string().url().optional(),
+  // AES-256-GCM key for ID numbers at rest. Losing it makes stored IDs unreadable.
+  ID_ENCRYPTION_KEY: base64Key32.optional(),
+  // HMAC-SHA256 key for the ID-number duplicate check. Changing it breaks that check.
+  ID_HASH_KEY: base64Key32.optional(),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV !== 'production') return;
+  for (const name of ['ID_ENCRYPTION_KEY', 'ID_HASH_KEY'] as const) {
+    if (!env[name]) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'Required in production' });
+    }
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);
