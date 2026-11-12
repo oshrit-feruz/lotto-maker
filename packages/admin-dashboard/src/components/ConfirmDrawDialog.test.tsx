@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ConfirmDrawDialog from './ConfirmDrawDialog';
+import ConfirmDrawDialog, { ESTIMATE_NOTE } from './ConfirmDrawDialog';
 import { computePayout } from '../lib/payout';
 import type { PrizeTier } from '../api/types';
 
@@ -25,8 +25,12 @@ describe('computePayout', () => {
 });
 
 describe('ConfirmDrawDialog', () => {
-  it('shows per-game and grand totals formatted as shekels', () => {
+  it('shows per-game and grand totals as a prize-table estimate, without promising payment', () => {
     render(<ConfirmDrawDialog draw={draw} onConfirm={() => {}} onCancel={() => {}} />);
+    expect(screen.getByText(ESTIMATE_NOTE)).toBeInTheDocument();
+    expect(screen.getByText(/סה״כ משוער לפי טבלת הזכיות/)).toBeInTheDocument();
+    expect(screen.getByText(/האישור מתחיל את סילוק הזכיות/)).toHaveTextContent('„שולמה”');
+    expect(screen.queryByText(/ישולמו מיד|לתשלום/)).toBeNull();
     expect(screen.getByTestId('total-lotto')).toHaveTextContent('₪1,003,703.50');
     expect(screen.getByTestId('total-double')).toHaveTextContent('₪1,000.00');
     expect(screen.getByTestId('total-extra')).toHaveTextContent('₪1.00');
@@ -37,7 +41,7 @@ describe('ConfirmDrawDialog', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
     render(<ConfirmDrawDialog draw={draw} onConfirm={onConfirm} onCancel={onCancel} />);
-    await userEvent.click(screen.getByRole('button', { name: 'אשר ושלם' }));
+    await userEvent.click(screen.getByRole('button', { name: 'אשר תוצאות' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('button', { name: 'ביטול' }));
     expect(onCancel).toHaveBeenCalledTimes(1);

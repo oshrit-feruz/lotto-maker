@@ -16,7 +16,11 @@ export interface Payout {
   winners: number;
 }
 
-/** Total to be paid = sum over tiers of winnersCount × prizeAmount (computed in agorot to avoid float drift). */
+/**
+ * Estimate from the national prize table: sum over tiers of winnersCount × prizeAmount (in agorot
+ * to avoid float drift). The winners counts are national, so this is NOT what this system pays;
+ * settlement computes actual payouts from customers' tickets.
+ */
 export function computePayout(tiers: PrizeTier[]): Payout {
   const agorot: Record<PrizeGame, number> = { lotto: 0, double: 0, extra: 0 };
   let winners = 0;
