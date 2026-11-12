@@ -6,6 +6,7 @@ import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
 import { decryptField, encryptField } from '../../lib/crypto.js';
 import { getPaymentProvider } from '../payments/payments.service.js';
 import { getDefaultCard } from '../payments/cards.service.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 import type { Tx } from './wallet.service.js';
 
 export type WithdrawalStatus = 'requested' | 'approved' | 'rejected' | 'paid' | 'failed' | 'cancelled';
@@ -348,6 +349,7 @@ export async function payoutCard(id: string): Promise<void> {
     actorType: 'system',
     metadata: { providerTxId: result.providerTxId, payout: payout.toFixed(2) },
   });
+  if (count > 0) notifyInBackground(w.userId, 'withdrawal_paid', { amount: payout.toFixed(2) });
 }
 
 /** approved -> failed: the provider declined, so nothing was paid and the hold is released. */
@@ -424,6 +426,7 @@ export async function rejectWithdrawal(id: string, adminId: string, reason: stri
       metadata: { reason },
     });
   });
+  notifyInBackground(w.userId, 'withdrawal_rejected', { amount: w.amount.toString(), reason });
   return toView(await reload(id), true);
 }
 
@@ -446,6 +449,9 @@ export async function markWithdrawalPaid(id: string, adminId: string, bankRefere
     actorId: adminId,
     actorType: 'admin',
     metadata: { bankReference },
+  });
+  notifyInBackground(w.userId, 'withdrawal_paid', {
+    amount: new Decimal(w.amount.toString()).minus(w.fee.toString()).toFixed(2),
   });
   return toView(await reload(id), true);
 }

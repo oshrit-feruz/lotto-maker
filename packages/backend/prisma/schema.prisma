@@ -640,3 +640,46 @@ model UserLimits {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
+
+// ─── Phase 6: notifications ──────────────────────────────────────────────────
+
+enum NotificationChannel {
+  sms
+  email
+  push
+}
+
+enum NotificationStatus {
+  sent
+  failed
+  // Not sent on purpose: the user opted out of the channel, or there is no address for it.
+  skipped
+}
+
+// Every send attempt. The payload never holds an OTP code.
+model Notification {
+  id        String              @id @default(cuid())
+  // Null for a message to someone without an account yet (an OTP at sign-up).
+  userId    String?
+  channel   NotificationChannel
+  template  String
+  payload   Json
+  status    NotificationStatus
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Per user and channel on/off. No row means on. OTP and legal notices ignore it.
+model NotificationPreference {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel
+  enabled   Boolean             @default(true)
+  updatedAt DateTime            @updatedAt
+
+  @@unique([userId, channel])
+}

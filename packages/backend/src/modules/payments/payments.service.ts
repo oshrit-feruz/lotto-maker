@@ -8,6 +8,7 @@ import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
 import { assertWithinBalanceCap, depositTx, reverseDepositTx, type Tx } from '../wallet/wallet.service.js';
 import { saveCardTx } from './cards.service.js';
 import { assertDepositAllowed } from '../limits/limits.service.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 import type { PaymentProvider } from './payment-provider.js';
 import { MockPaymentProvider } from './mock-payment-provider.js';
 
@@ -211,6 +212,10 @@ export async function processWebhook(
 
   if (result.outcome === 'cap_exceeded') {
     await refundRejectedPayment(paymentProvider, result.paymentId, event.providerTxId, result.refundAmount);
+  }
+
+  if (result.outcome === 'credited') {
+    notifyInBackground(result.userId, 'deposit_receipt', { amount: event.amount.toFixed(2) });
   }
 
   return { outcome: result.outcome };

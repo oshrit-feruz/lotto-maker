@@ -4,7 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../prisma.js';
 import { config } from '../../config.js';
 import { orderStatusChange, orderStatusChangeTx, writeAuditLog } from '../../lib/audit-log.js';
-import { notificationService, PAYLOADS } from '../../services/notifications.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 import { creditPrizeTx } from '../wallet/wallet.service.js';
 import { claimExpiry } from '../../lib/prize-claim.js';
 import { scoreOrder, totalOf } from '../../lib/settlement-math.js';
@@ -174,12 +174,13 @@ export async function settleDraw(drawId: string): Promise<{ settled: boolean; pr
     }
     processed++;
 
+    // After the commit, and never able to fail it: notify logs and swallows its own errors
     if (outcome.kind === 'lost') {
-      notificationService.sendToUser(order.userId, PAYLOADS.orderLost()).catch(console.error);
+      notifyInBackground(order.userId, 'order_lost', {});
     } else if (outcome.kind === 'won_wallet') {
-      notificationService.sendToUser(order.userId, PAYLOADS.orderWon(outcome.total.toFixed(2))).catch(console.error);
+      notifyInBackground(order.userId, 'order_won', { amount: outcome.total.toFixed(2) });
     } else {
-      notificationService.sendToUser(order.userId, PAYLOADS.prizeClaim(outcome.total.toFixed(2))).catch(console.error);
+      notifyInBackground(order.userId, 'big_prize_claim_created', { amount: outcome.total.toFixed(2) });
     }
   }
 
@@ -246,6 +247,6 @@ export async function markDrawResultsDelayed(drawId: string): Promise<void> {
     });
     if (count === 0) continue;
     await orderStatusChange(order.id, 'scanned', 'results_delayed', 'system', 'system');
-    notificationService.sendToUser(order.userId, PAYLOADS.resultsDelayed()).catch(console.error);
+    notifyInBackground(order.userId, 'results_delayed', {});
   }
 }

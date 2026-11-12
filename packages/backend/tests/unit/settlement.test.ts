@@ -15,6 +15,7 @@ const h = vi.hoisted(() => {
     state.pending = [];
     state.walletTxs = [];
     state.audit = [];
+    state.notifications = [];
   };
   reset();
 
@@ -44,7 +45,11 @@ const h = vi.hoisted(() => {
     orderWin: { createMany: async ({ data }: any) => void state.wins.push(...data) },
     prizeClaim: { create: async ({ data }: any) => void state.claims.push(data) },
     pendingCardCredit: { create: async ({ data }: any) => void state.pending.push(data) },
+    // The real notify helper runs against these (channels are mocks in the test env)
+    notification: { create: async ({ data }: any) => void state.notifications.push(data) },
+    notificationPreference: { findUnique: async () => null },
     user: {
+      findUnique: async ({ where }: any) => ({ phone: `+972500000${where.id}` }),
       update: async ({ where, data }: any) => {
         const u = state.users[where.id];
         u.balance = new Decimal(u.balance).plus(data.walletBalance.increment);
@@ -60,17 +65,12 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock('../../src/prisma.js', () => ({ prisma: h.fake }));
-vi.mock('../../src/services/notifications.js', () => ({
-  notificationService: { sendToUser: vi.fn().mockResolvedValue(undefined) },
-  PAYLOADS: {
-    orderLost: () => ({}),
-    orderWon: () => ({}),
-    prizeClaim: () => ({}),
-    resultsDelayed: () => ({}),
-  },
-}));
 
 import { settleDraw } from '../../src/modules/results/settlement.service.js';
+import { MockChannel, setChannelsForTests } from '../../src/modules/notifications/channels.js';
+
+const channels = { sms: new MockChannel('sms'), email: new MockChannel('email'), push: new MockChannel('push') };
+setChannelsForTests(channels);
 
 const tier = (game: string, t: string, amount: number) => ({ game, tier: t, prizeAmount: new Decimal(amount) });
 
@@ -210,5 +210,41 @@ describe('settleDraw', () => {
         t: h.state.walletTxs,
       }),
     ).toBe(snapshot);
+  });
+});
+
+describe('settlement notifications', () => {
+  beforeEach(() => {
+    for (const c of Object.values(channels)) {
+      c.sent.length = 0;
+      c.failWith = null;
+    }
+  });
+
+  it('uses the templates: small win, big prize claim and loss', async () => {
+    h.state.draw = makeDraw('results_confirmed');
+    await settleDraw('draw1');
+    await vi.waitFor(() => expect(h.state.notifications.length).toBeGreaterThanOrEqual(5));
+    const byTemplate = (t: string) => h.state.notifications.filter((n: any) => n.template === t);
+    expect(byTemplate('order_won')).toHaveLength(2); // o1, o4
+    expect(byTemplate('big_prize_claim_created').length).toBeGreaterThanOrEqual(1);
+    expect(byTemplate('order_lost')).toHaveLength(1);
+    expect(h.state.notifications.every((n: any) => n.status === 'sent')).toBe(true);
+  });
+
+  it('a channel failure does not fail settlement; it is logged as failed', async () => {
+    channels.push.failWith = new Error('FCM down');
+    channels.sms.failWith = new Error('Twilio down');
+    h.state.draw = makeDraw('results_confirmed');
+
+    const res = await settleDraw('draw1');
+
+    expect(res.settled).toBe(true);
+    expect(h.state.draw.status).toBe('settled');
+    expect(balance('u1')).toBe(106);
+    expect(h.state.orders.find((o: any) => o.id === 'o1').status).toBe('won');
+    await vi.waitFor(() => expect(h.state.notifications.length).toBeGreaterThanOrEqual(5));
+    expect(h.state.notifications.every((n: any) => n.status === 'failed')).toBe(true);
+    expect(h.state.notifications[0].error).toMatch(/down/);
   });
 });

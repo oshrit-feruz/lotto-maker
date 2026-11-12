@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog } from '../../lib/audit-log.js';
-import { notificationService, PAYLOADS } from '../../services/notifications.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 import { TIMEZONE } from '@lotto-maker/shared';
 
 export type PrizeClaimStatus = 'awaiting_pickup' | 'scheduled' | 'collected' | 'expired';
@@ -200,9 +200,7 @@ export async function sendExpiryReminders(now = new Date()): Promise<number> {
     if (count === 0) continue;
     sent++;
     const expiresOn = claim.expiresAt.toLocaleDateString('he-IL', { timeZone: TIMEZONE });
-    notificationService
-      .sendToUser(claim.userId, PAYLOADS.prizeClaimExpiring(claim.amount.toString(), expiresOn))
-      .catch(console.error);
+    notifyInBackground(claim.userId, 'claim_reminder', { amount: claim.amount.toString(), expiresOn });
   }
   return sent;
 }
