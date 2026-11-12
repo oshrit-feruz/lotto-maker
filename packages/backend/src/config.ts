@@ -62,6 +62,17 @@ const envSchema = z.object({
   // Only the mock provider exists so far; it is refused when NODE_ENV=production.
   PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
   PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Phase 6. Only the mock KYC provider exists so far; production returns 503 until a real one is added.
+  KYC_PROVIDER: z.enum(['mock']).default('mock'),
+  // Test switch: the mock provider sends every otherwise-valid check to manual review.
+  KYC_MOCK_FORCE_MANUAL_REVIEW: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  // Raising or removing a responsible-gaming limit takes effect only after this delay.
+  RG_LIMIT_INCREASE_DELAY_HOURS: z.coerce.number().min(0).default(24),
+  // Fee receipts: VAT rate and the business details printed on them.
+  VAT_RATE: z.coerce.number().min(0).max(1).default(0.18),
+  BUSINESS_NAME: z.string().default(''),
+  BUSINESS_ID: z.string().default(''),
+  BUSINESS_ADDRESS: z.string().default(''),
   // Public base URL of this API, used to build hosted-checkout links.
   PUBLIC_API_URL: z.string().url().optional(),
   // AES-256-GCM key for ID numbers at rest. Losing it makes stored IDs unreadable.

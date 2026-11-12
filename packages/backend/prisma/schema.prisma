@@ -583,3 +583,38 @@ model Admin {
 
   confirmedDraws Draw[]
 }
+
+// ─── Phase 6: KYC ────────────────────────────────────────────────────────────
+// The Phase 6 models carry a plain userId with no Prisma relation (and no foreign key in the
+// migrations), so the User model and its relation list stay untouched.
+
+enum KycCheckStatus {
+  verified
+  rejected
+  manual_review
+}
+
+// One identity check by the KYC provider. The ID number is kept only as AES-256-GCM ciphertext
+// plus the keyed hash and the last 4 digits (same as User). A check in `manual_review` is the
+// admin queue; approving it copies the identity onto the User.
+model KycCheck {
+  id           String         @id @default(cuid())
+  userId       String
+  provider     String
+  // The provider's reference for this check.
+  reference    String
+  status       KycCheckStatus
+  reason       String?
+  fullName     String
+  idNumberEnc  String
+  idNumberHash String
+  idLast4      String
+  birthYear    Int
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
