@@ -1,4 +1,6 @@
-const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+import { messageForCode } from './errors';
+
+const BASE_URL =(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 // The backend returns tokens in the response body (no cookie). Both tokens live only in these
 // module variables, never in Web Storage, so a script injected into the page cannot read a
@@ -70,23 +72,26 @@ export function clearTokens() {
   refreshing = null;
 }
 
-/** Best-effort server-side revocation of a token pair this client no longer keeps. Never throws. */
-export async function revokeTokens(t: TokenPair): Promise<void> {
+/**
+ * Best-effort server-side revocation of a refresh token this client no longer keeps. Never throws.
+ * `DELETE /auth/logout` needs only the refresh token (any role, no access token) and answers 204.
+ */
+export async function revokeRefreshToken(token: string): Promise<void> {
   try {
     await fetch(`${BASE_URL}/auth/logout`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.accessToken}` },
-      body: JSON.stringify({ refreshToken: t.refreshToken }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: token }),
     });
   } catch {
     /* best effort */
   }
 }
-const revokeQuietly = (t: TokenPair) => void revokeTokens(t);
+const revokeQuietly = (t: TokenPair) => void revokeRefreshToken(t.refreshToken);
 
-/** Ends the session and returns its tokens (if any) so the caller can revoke them. */
-export function takeTokens(): TokenPair | null {
-  const t = accessToken && refreshToken ? { accessToken, refreshToken } : null;
+/** Ends the session and returns its refresh token (if any) so the caller can revoke it. */
+export function takeRefreshToken(): string | null {
+  const t = refreshToken;
   clearTokens();
   return t;
 }
@@ -115,9 +120,11 @@ async function parse(res: Response): Promise<unknown> {
   }
 }
 
-function toError(res: Response, body: unknown): ApiError {
+/** An ApiError whose message is Hebrew for known backend codes (see errors.ts). */
+export function toError(res: Pick<Response, 'status'>, body: unknown): ApiError {
   const b = (typeof body === 'object' && body !== null ? body : {}) as { error?: string; message?: string };
-  return new ApiError(res.status, b.error ?? 'HTTP_ERROR', b.message ?? b.error ?? `שגיאה ${res.status}`);
+  const code = b.error ?? 'HTTP_ERROR';
+  return new ApiError(res.status, code, messageForCode(code) ?? b.message ?? b.error ?? `שגיאה ${res.status}`);
 }
 
 /**

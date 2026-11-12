@@ -1,4 +1,4 @@
-import { request, revokeTokens, startSession, takeTokens, type TokenPair } from './client';
+import { request, revokeRefreshToken, startSession, takeRefreshToken, type TokenPair } from './client';
 
 export interface Tokens extends TokenPair {
   isNewUser: boolean;
@@ -18,6 +18,6 @@ export async function verifyOtp(phone: string, code: string): Promise<void> {
  * nothing in flight keeps using it, then revokes the refresh token server-side (best effort).
  */
 export function logout(): Promise<void> {
-  const t = takeTokens();
-  return t ? revokeTokens(t) : Promise.resolve();
+  const t = takeRefreshToken();
+  return t ? revokeRefreshToken(t) : Promise.resolve();
 }

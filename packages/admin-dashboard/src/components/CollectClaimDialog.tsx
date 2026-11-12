@@ -4,7 +4,11 @@ import { formatNis } from '../lib/format';
 import { isIdLast4Valid } from '../lib/idCheck';
 import { ConfirmDialog } from './Dialog';
 
-/** Collecting a prize requires typing the claimant's ID last 4 digits. */
+/**
+ * Hand-over of a prize against the claimant's ID card. The admin types the last 4 digits from the
+ * physical card. The claimant's digits on file are never shown and never prefill the input; they
+ * only enable the button, and the server checks the typed digits again (422 ID_MISMATCH).
+ */
 export default function CollectClaimDialog({
   claim,
   busy,
@@ -12,7 +16,8 @@ export default function CollectClaimDialog({
   onConfirm,
   onCancel,
 }: {
-  claim: Pick<PrizeClaim, 'amount' | 'claimantIdLast4' | 'claimantPhone'>;
+  claim: Pick<PrizeClaim, 'amount' | 'claimantIdLast4' | 'claimantPhone'> &
+    Partial<Pick<PrizeClaim, 'claimantName' | 'drawNumber'>>;
   busy?: boolean;
   error?: string | null;
   onConfirm: (idLast4: string) => void;
@@ -34,6 +39,10 @@ export default function CollectClaimDialog({
     >
       <p>
         סכום למסירה: <strong>{formatNis(claim.amount)}</strong>
+        {claim.drawNumber != null && <> · הגרלה {claim.drawNumber}</>}
+      </p>
+      <p>
+        זוכה: {claim.claimantName ?? '—'}
         {claim.claimantPhone && <span className="ltr"> · {claim.claimantPhone}</span>}
       </p>
       {!idKnown && (
@@ -47,12 +56,14 @@ export default function CollectClaimDialog({
           value={typed}
           onChange={(e) => setTyped(e.target.value.replace(/\D/g, '').slice(0, 4))}
           inputMode="numeric"
+          autoComplete="off"
           maxLength={4}
           dir="ltr"
           disabled={!idKnown}
           autoFocus
         />
       </label>
+      <p className="muted">הקלד את הספרות מתעודת הזהות שהזוכה מציג.</p>
       {mismatch && (
         <p className="error" role="alert">
           הספרות אינן תואמות

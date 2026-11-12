@@ -19,13 +19,36 @@ export function formatDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '—' : dateTime.format(d);
 }
 
-/** Converts a `YYYY-MM-DD` day to the ISO instant at its start (or end) in Asia/Jerusalem. */
-export function jerusalemDayToIso(day: string, end = false): string {
-  const time = end ? '23:59:59.999' : '00:00:00.000';
-  const guess = new Date(`${day}T12:00:00Z`);
+const jerusalemOffset = (at: Date): string => {
   const part = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jerusalem', timeZoneName: 'longOffset' })
-    .formatToParts(guess)
+    .formatToParts(at)
     .find((p) => p.type === 'timeZoneName')?.value;
-  const off = part && part !== 'GMT' ? part.replace('GMT', '') : 'Z';
-  return new Date(`${day}T${time}${off}`).toISOString();
+  return part && part !== 'GMT' ? part.replace('GMT', '') : 'Z';
+};
+
+/**
+ * Converts a `datetime-local` value (`YYYY-MM-DDTHH:mm`) read as Asia/Jerusalem wall time to an
+ * ISO instant. Returns null for an invalid value.
+ */
+export function jerusalemLocalToIso(local: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return null;
+  const guess = new Date(`${local}:00Z`);
+  if (Number.isNaN(guess.getTime())) return null;
+  const d = new Date(`${local}:00${jerusalemOffset(guess)}`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** The Asia/Jerusalem wall time of an instant, as a `datetime-local` value (`YYYY-MM-DDTHH:mm`). */
+export function toJerusalemLocalInput(iso: string | Date): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }

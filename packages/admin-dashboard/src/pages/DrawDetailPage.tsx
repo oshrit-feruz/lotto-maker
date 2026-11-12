@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
+import { ApiError } from '../api/client';
 import { confirmDraw, editDrawResults, getDraw } from '../api/draws';
+import { errorText } from '../api/errors';
 import type { DrawDetail, EditResultsBody } from '../api/types';
 import ConfirmDrawDialog from '../components/ConfirmDrawDialog';
 import { Badge, QueryState } from '../components/ui';
@@ -18,7 +20,7 @@ export default function DrawDetailPage() {
       <p>
         <Link to="/draws">← הגרלות</Link>
       </p>
-      <QueryState q={q}>{(draw) => <DrawEditor key={draw.id + draw.status} draw={draw} />}</QueryState>
+      <QueryState q={q}>{(draw) => <DrawEditor key={draw.id} draw={draw} />}</QueryState>
     </>
   );
 }
@@ -30,6 +32,7 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
   const [dirty, setDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(toForm(draw));
@@ -40,12 +43,28 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
     qc.setQueryData(['draw', d.id], d);
     void qc.invalidateQueries({ queryKey: ['draws'] });
   };
-  const save = useMutation({ mutationFn: (b: EditResultsBody) => editDrawResults(draw.id, b), onSuccess: done });
+  const save = useMutation({
+    mutationFn: (b: EditResultsBody) => editDrawResults(draw.id, b),
+    onSuccess: (d) => {
+      setStaleNotice(null);
+      done(d);
+    },
+  });
   const confirm = useMutation({
-    mutationFn: () => confirmDraw(draw.id),
+    // The updatedAt of the draw the admin is looking at: if it changed since, nothing is confirmed.
+    mutationFn: (reviewed: DrawDetail) => confirmDraw(reviewed.id, reviewed.updatedAt),
     onSuccess: (d) => {
       setConfirming(false);
       done(d);
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && (err.code === 'RESULTS_CHANGED' || err.code === 'DRAW_NOT_CONFIRMABLE')) {
+        // Close the dialog so the admin reviews the reloaded results before confirming again.
+        setConfirming(false);
+        setStaleNotice(err.message);
+        void qc.invalidateQueries({ queryKey: ['draw', draw.id] });
+        void qc.invalidateQueries({ queryKey: ['draws'] });
+      }
     },
   });
   const inputsDisabled = readOnly || save.isPending;
@@ -147,15 +166,22 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
         ))}
       </div>
 
+      {staleNotice && <p className="error" role="alert">{staleNotice}</p>}
       {formError && <p className="error" role="alert">{formError}</p>}
-      {save.isError && <p className="error" role="alert">{(save.error as Error).message}</p>}
+      {save.isError && <p className="error" role="alert">{errorText(save.error)}</p>}
 
       {!readOnly && (
         <div className="row">
           <button onClick={onSave} disabled={!dirty || save.isPending}>
             {save.isPending ? 'שומר…' : 'שמור שינויים'}
           </button>
-          <button onClick={() => setConfirming(true)} disabled={dirty || save.isPending || draw.status !== 'results_suggested'}>
+          <button
+            onClick={() => {
+              setStaleNotice(null);
+              confirm.reset();
+              setConfirming(true);
+            }}
+            disabled={dirty || save.isPending || draw.status !== 'results_suggested'}>
             אשר תוצאות
           </button>
           {dirty && <span className="muted">יש שינויים שלא נשמרו – שמור לפני האישור.</span>}
@@ -167,9 +193,12 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
         <ConfirmDrawDialog
           draw={draw}
           busy={confirm.isPending}
-          error={confirm.isError ? (confirm.error as Error).message : null}
-          onConfirm={() => confirm.mutate()}
-          onCancel={() => setConfirming(false)}
+          error={confirm.isError ? errorText(confirm.error) : null}
+          onConfirm={() => confirm.mutate(draw)}
+          onCancel={() => {
+            confirm.reset();
+            setConfirming(false);
+          }}
         />
       )}
     </>

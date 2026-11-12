@@ -11,6 +11,7 @@ import {
   setOnAuthLost,
   startSession,
 } from './client';
+import { logout } from './auth';
 
 const b64url = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const jwt = (payload: object) => `h.${b64url(JSON.stringify(payload))}.sig`;
@@ -65,6 +66,28 @@ describe('startSession', () => {
     expect(getRefreshToken()).toBe('r1');
     expect(sessionStorage.length).toBe(0);
     expect(localStorage.length).toBe(0);
+  });
+});
+
+describe('logout', () => {
+  it('ends the session at once and revokes with the refresh token only', async () => {
+    startSession(admin(1));
+    const p = logout();
+    expect(hasSession()).toBe(false);
+    expect(getRefreshToken()).toBeNull();
+    await p;
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toMatch(/\/auth\/logout$/);
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(init.body as string)).toEqual({ refreshToken: 'r1' });
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+  it('does nothing without a session and never throws', async () => {
+    await expect(logout()).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+    startSession(admin(1));
+    fetchMock.mockRejectedValueOnce(new TypeError('offline'));
+    await expect(logout()).resolves.toBeUndefined();
   });
 });
 
