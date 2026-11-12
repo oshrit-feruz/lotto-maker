@@ -33,7 +33,7 @@ export function WalletView() {
         <h2>תנועות</h2>
         {txs.loading && !txs.data ? <Loading /> : null}
         {txs.error ? <ErrorNotice message={txs.error} onRetry={txs.reload} /> : null}
-        {txs.data && txs.data.data.length === 0 ? <p className="muted">אין תנועות עדיין.</p> : null}
+        {txs.data && txs.data.data.length === 0 ? <p className="muted empty-note">אין תנועות עדיין.</p> : null}
         {txs.data && txs.data.data.length > 0 ? (
           <div className="table-wrap">
             <table className="table">

@@ -42,6 +42,9 @@ export function TicketForm() {
   const [priceError, setPriceError] = useState<string | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
   const seq = useRef(0);
+  // Visual only: which table(s) the Lottomat just filled, so the balls drop in.
+  const [rolling, setRolling] = useState<{ target: number | 'all'; n: number } | null>(null);
+  const rollSeq = useRef(0);
 
   // Coming back from checkout: restore the ticket.
   useEffect(() => {
@@ -90,6 +93,17 @@ export function TicketForm() {
     }, 350);
     return () => clearTimeout(timer);
   }, [requestKey]);
+
+  useEffect(() => {
+    if (!rolling) return;
+    const timer = setTimeout(() => setRolling(null), 1100);
+    return () => clearTimeout(timer);
+  }, [rolling]);
+
+  function roll(target: number | 'all') {
+    rollSeq.current += 1;
+    setRolling({ target, n: rollSeq.current });
+  }
 
   // Keep the open table inside the range when the count shrinks.
   useEffect(() => {
@@ -199,7 +213,15 @@ export function TicketForm() {
               ({filledCount}/{state.tables.length} מלאות)
             </span>
           </h2>
-          <button type="button" className="btn btn-accent btn-sm" onClick={() => dispatch({ type: 'lottomatAll', rng: cryptoRng })}>
+          <button
+            type="button"
+            className={`btn btn-accent btn-sm lottomat-all${rolling?.target === 'all' ? ' rolling' : ''}`}
+            onClick={() => {
+              dispatch({ type: 'lottomatAll', rng: cryptoRng });
+              roll('all');
+            }}
+          >
+            <span className="lottomat-icon" aria-hidden="true" />
             לוטומט לכל הטבלאות
           </button>
         </div>
@@ -208,23 +230,33 @@ export function TicketForm() {
           const done = isTableComplete(state, i);
           const open = i === active;
           return (
-            <div key={i} className={`table-card${done ? ' complete' : ''}`}>
+            <div
+              key={i}
+              className={`table-card${done ? ' complete' : ''}${
+                rolling && (rolling.target === 'all' || rolling.target === i) ? ' rolling' : ''
+              }`}
+            >
               <div className="spread">
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
                   aria-expanded={open}
                   onClick={() => setActive(open ? -1 : i)}
-                  style={{ border: 0, paddingInline: 0 }}
+                  style={{ border: 0, paddingInline: 4 }}
                 >
-                  טבלה {i + 1} {done ? '✓' : ''}
+                  <span className="table-title">טבלה {i + 1}</span>
+                  {done ? <span className="table-done">✓</span> : null}
                 </button>
                 <div className="row">
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    onClick={() => dispatch({ type: 'lottomatTable', table: i, rng: cryptoRng })}
+                    onClick={() => {
+                      dispatch({ type: 'lottomatTable', table: i, rng: cryptoRng });
+                      roll(i);
+                    }}
                   >
+                    <span className="lottomat-icon" aria-hidden="true" />
                     לוטומט
                   </button>
                   <button
@@ -274,7 +306,7 @@ export function TicketForm() {
             מלאו את כל הטבלאות כדי לראות מחיר.
           </p>
         ) : loadingPrice ? (
-          <p className="muted small" style={{ margin: '0 0 8px' }}>
+          <p className="muted small loading" style={{ margin: '0 0 8px' }}>
             מחשב מחיר…
           </p>
         ) : priceError ? (

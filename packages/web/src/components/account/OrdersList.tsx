@@ -23,7 +23,7 @@ export function OrdersList() {
   if (error) return <ErrorNotice message={error} onRetry={reload} />;
   if (!data || data.data.length === 0) {
     return (
-      <div className="card">
+      <div className="card empty">
         <p>עדיין אין הזמנות.</p>
         <Link className="btn" href="/ticket">
           למילוי טופס ראשון
