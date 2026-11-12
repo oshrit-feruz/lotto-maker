@@ -22,6 +22,7 @@ import adminKycRoutes from './modules/admin/admin-kyc.routes.js';
 import limitsRoutes from './modules/limits/limits.routes.js';
 import adminLimitsRoutes from './modules/admin/admin-limits.routes.js';
 import notificationsRoutes from './modules/notifications/notifications.routes.js';
+import receiptsRoutes from './modules/receipts/receipts.routes.js';
 import { MAX_SCAN_BYTES } from './lib/scan-file.js';
 import resultsRoutes from './modules/results/results.routes.js';
 
@@ -53,6 +54,7 @@ export async function buildApp() {
   await app.register(limitsRoutes);
   await app.register(adminLimitsRoutes);
   await app.register(notificationsRoutes);
+  await app.register(receiptsRoutes);
 
   // Health check
   app.get('/health', async () => ({ status: 'ok' }));

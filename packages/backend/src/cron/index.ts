@@ -4,6 +4,7 @@ import { startSubscriptionScheduler } from '../services/subscription-scheduler.j
 
 import { startWalletScheduler } from '../modules/wallet/wallet.scheduler.js';
 import { startPrizeClaimScheduler } from '../modules/prize-claims/prize-claims.scheduler.js';
+import { startReceiptScheduler } from '../modules/receipts/receipts.scheduler.js';
 
 export function startAllSchedulers(): void {
   startWalletScheduler();
@@ -11,4 +12,5 @@ export function startAllSchedulers(): void {
   startResultsScheduler();
   startDrawsScheduler();
   startSubscriptionScheduler();
+  startReceiptScheduler();
 }

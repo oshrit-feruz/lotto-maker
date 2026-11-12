@@ -9,6 +9,7 @@ import { computeOrderPrice } from '../../lib/pricing.js';
 import { getPriceRow } from '../../lib/price-row.js';
 import { cutoffsOf, getOpenDraws } from '../../lib/draws.js';
 import { assertCanPlaceOrder } from '../limits/limits.service.js';
+import { issueReceiptsInBackground } from '../receipts/receipts.service.js';
 import { assertValidTicket } from '../tickets/tickets.service.js';
 import type { TicketBody } from '../tickets/tickets.service.js';
 import { r2Service, DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../storage/r2.service.js';
@@ -196,6 +197,9 @@ export async function createOrder(params: CreateOrderParams) {
   for (const o of created.orders) {
     await orderStatusChange(o.orderId, 'pending', 'in_queue', userId, 'user');
   }
+
+  // Fee receipts, after the commit; a failure is picked up by the receipt sweep
+  issueReceiptsInBackground(created.orders.map((o) => o.orderId));
 
   const first = created.orders[0]!;
   return {

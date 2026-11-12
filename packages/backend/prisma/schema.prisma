@@ -683,3 +683,45 @@ model NotificationPreference {
 
   @@unique([userId, channel])
 }
+
+// ─── Phase 6: fee receipts ───────────────────────────────────────────────────
+
+enum ReceiptKind {
+  receipt
+  // Issued when a paid order is refunded; references the original receipt, amounts are negative.
+  credit
+}
+
+// Last number issued per year. The row lock taken by the upsert in the receipt's own transaction
+// is what makes numbers sequential, never repeated and never skipped.
+model ReceiptCounter {
+  year Int @id
+  last Int
+}
+
+// A receipt for the SERVICE FEE of one order (the ticket price is held for the customer and is not
+// our income). Not a tax invoice until an accountant approves the format.
+model Receipt {
+  id                String      @id @default(cuid())
+  // "2026-000001"
+  number            String      @unique
+  year              Int
+  seq               Int
+  kind              ReceiptKind @default(receipt)
+  orderId           String
+  userId            String
+  originalReceiptId String?
+  customerName      String?
+  idLast4           String?
+  // Fee including VAT, the VAT in it and the net amount. Negative on a credit receipt.
+  feeAmount         Decimal     @db.Decimal(10, 2)
+  vatRate           Decimal     @db.Decimal(5, 4)
+  vatAmount         Decimal     @db.Decimal(10, 2)
+  netAmount         Decimal     @db.Decimal(10, 2)
+  issuedAt          DateTime    @default(now())
+
+  @@unique([year, seq])
+  // One receipt and at most one credit receipt per order
+  @@unique([orderId, kind])
+  @@index([userId, issuedAt])
+}
