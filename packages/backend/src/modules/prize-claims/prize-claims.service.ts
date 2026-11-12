@@ -60,12 +60,26 @@ export async function listClaims(status?: PrizeClaimStatus) {
     orderBy: { createdAt: 'desc' },
     take: 100,
     include: {
-      // Not idLast4: the admin types the digits from the physical ID, they are not shown for copying.
-      user: { select: { fullName: true, phone: true } },
+      user: { select: { fullName: true, phone: true, idLast4: true } },
       order: { select: { id: true, draw: { select: { drawNumber: true } } } },
     },
   });
-  return rows.map((c: ClaimRow & { user: unknown; order: unknown }) => ({ ...toView(c), user: c.user, order: c.order }));
+  type Row = ClaimRow & {
+    user: { fullName: string | null; phone: string; idLast4: string | null };
+    order: { id: string; draw: { drawNumber: number } | null };
+  };
+  return rows.map((c: Row) => ({
+    ...toView(c),
+    // Flat claimant fields for the admin dashboard. The ID last 4 is shown because the dashboard
+    // asks for it. The hand-over check (collectClaim) still compares the digits the admin types
+    // from the physical ID card, so the dashboard should not prefill that input from this value.
+    claimantName: c.user.fullName,
+    claimantPhone: c.user.phone,
+    claimantIdLast4: c.user.idLast4,
+    drawNumber: c.order.draw?.drawNumber ?? null,
+    user: { fullName: c.user.fullName, phone: c.user.phone },
+    order: c.order,
+  }));
 }
 
 export async function scheduleClaimAsAdmin(claimId: string, adminId: string, slot: Date, now = new Date()) {

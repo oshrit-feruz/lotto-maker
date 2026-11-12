@@ -51,24 +51,45 @@ function assertValidResults(body: EditResultsBody): void {
   }
 }
 
-export function listDraws(status?: string) {
-  return prisma.draw.findMany({
-    where: status ? { status: status as never } : {},
-    orderBy: { drawAt: 'desc' },
-    take: 50,
-    select: {
-      id: true,
-      drawNumber: true,
-      drawAt: true,
-      salesCloseAt: true,
-      status: true,
-      suggestedAt: true,
-      confirmedAt: true,
-      settledAt: true,
-      needsAttention: true,
-      attentionReason: true,
-    },
-  });
+const drawListSelect = {
+  id: true,
+  drawNumber: true,
+  drawAt: true,
+  salesCloseAt: true,
+  status: true,
+  suggestedAt: true,
+  confirmedAt: true,
+  settledAt: true,
+  needsAttention: true,
+  attentionReason: true,
+  updatedAt: true,
+} as const;
+
+export const DRAWS_DEFAULT_PAGE_SIZE = 50;
+export const DRAWS_MAX_PAGE_SIZE = 200;
+
+/**
+ * Newest draws first. Without paging this is the old response: a plain array of the latest 50.
+ * With `page` and/or `pageSize` it is `{ items, total, page, pageSize }`.
+ */
+export async function listDraws(status?: string, paging: { page?: number; pageSize?: number } = {}) {
+  const where = status ? { status: status as never } : {};
+  if (paging.page === undefined && paging.pageSize === undefined) {
+    return prisma.draw.findMany({ where, orderBy: { drawAt: 'desc' }, take: DRAWS_DEFAULT_PAGE_SIZE, select: drawListSelect });
+  }
+  const page = paging.page ?? 1;
+  const pageSize = paging.pageSize ?? DRAWS_DEFAULT_PAGE_SIZE;
+  const [items, total] = await Promise.all([
+    prisma.draw.findMany({
+      where,
+      orderBy: { drawAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: drawListSelect,
+    }),
+    prisma.draw.count({ where }),
+  ]);
+  return { items, total, page, pageSize };
 }
 
 export async function getDraw(drawId: string) {
@@ -135,30 +156,46 @@ export async function editDrawResults(drawId: string, adminId: string, body: Edi
   return getDraw(drawId);
 }
 
-/** Confirms the results: `results_suggested` -> `results_confirmed`, recorded with the admin's id. */
-export async function confirmDraw(drawId: string, adminId: string) {
+const resultsChanged = () =>
+  new AppError(409, 'RESULTS_CHANGED', 'The results changed since you reviewed them. Reload and review again.');
+
+/**
+ * Confirms the results: `results_suggested` -> `results_confirmed`, recorded with the admin's id.
+ * `expectedUpdatedAt` is the draw's updatedAt the admin reviewed; if the draw changed since (an edit,
+ * a new scrape), nothing is confirmed and 409 RESULTS_CHANGED is returned.
+ */
+export async function confirmDraw(drawId: string, adminId: string, expectedUpdatedAt?: Date) {
   const draw = await getDraw(drawId);
   if (draw.status !== 'results_suggested') {
     throw new AppError(409, 'DRAW_NOT_CONFIRMABLE', `Draw is ${draw.status}, expected results_suggested`);
   }
+  if (expectedUpdatedAt && draw.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw resultsChanged();
   const games = new Set(draw.prizeTiers.map((t) => t.game));
   if (draw.numbers.length !== LOTTO_PICK_COUNT || draw.strong === null || !games.has('lotto') || !games.has('double')) {
     throw new AppError(422, 'RESULTS_INCOMPLETE', 'Numbers, strong and the lotto and double prize tables are required');
   }
 
   await prisma.$transaction(async (tx) => {
+    // updatedAt in the condition: an edit that lands between the read above and here is not confirmed
     const { count } = await tx.draw.updateMany({
-      where: { id: drawId, status: 'results_suggested' },
+      where: {
+        id: drawId,
+        status: 'results_suggested',
+        ...(expectedUpdatedAt ? { updatedAt: expectedUpdatedAt } : {}),
+      },
       data: { status: 'results_confirmed', confirmedAt: new Date(), confirmedById: adminId },
     });
-    if (count === 0) throw new AppError(409, 'DRAW_NOT_CONFIRMABLE');
+    if (count === 0) throw expectedUpdatedAt ? resultsChanged() : new AppError(409, 'DRAW_NOT_CONFIRMABLE');
     await writeAuditLogTx(tx, {
       entityType: 'draw',
       entityId: drawId,
       action: 'draw:results_confirmed',
       actorId: adminId,
       actorType: 'admin',
-      metadata: { drawNumber: draw.drawNumber },
+      metadata: {
+        drawNumber: draw.drawNumber,
+        reviewedUpdatedAt: (expectedUpdatedAt ?? draw.updatedAt).toISOString(),
+      },
     });
   });
 
