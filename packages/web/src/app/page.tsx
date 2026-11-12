@@ -4,8 +4,8 @@ import { formatDateTime, formatShekel } from '@/lib/format';
 import { publicGet } from '@/lib/server-api';
 import type { UpcomingDraw } from '@/lib/types';
 
-// Server-rendered; the draw list is cached for a minute.
-export const revalidate = 60;
+// Rendered per request (never baked at build time); the backend data itself is cached by fetch.
+export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const upcoming = await publicGet<UpcomingDraw[]>('/draws/upcoming');
