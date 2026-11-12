@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
-import { formatDateTime, formatShekel } from '@/lib/format';
+import { formatShekel, formatShortDateTime } from '@/lib/format';
 import { WITHDRAWAL_STATUS_LABELS } from '@/lib/labels';
 import type { SavedCardView, WithdrawalQuote, WithdrawalView } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
@@ -148,7 +148,8 @@ export function Withdrawals() {
                 <option value="">ברירת מחדל</option>
                 {cards.data.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.brand ?? 'כרטיס'} •••• {c.last4}
+                    {/* LRI…PDI keeps the dots before the digits inside RTL text (no markup in an option). */}
+                    {c.brand ?? 'כרטיס'} {'\u2066'}•••• {c.last4}{'\u2069'}
                   </option>
                 ))}
               </select>
@@ -236,7 +237,7 @@ export function Withdrawals() {
       {list.data && list.data.length === 0 ? <p className="muted empty-note">אין בקשות משיכה.</p> : null}
       {list.data && list.data.length > 0 ? (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table table-cards withdrawal-table">
             <thead>
               <tr>
                 <th>תאריך</th>
@@ -249,14 +250,27 @@ export function Withdrawals() {
             <tbody>
               {list.data.map((w) => (
                 <tr key={w.id}>
-                  <td className="small">{formatDateTime(w.createdAt)}</td>
-                  <td dir="ltr">{formatShekel(w.amount)}</td>
-                  <td className="small">{w.method === 'card' ? 'כרטיס' : `בנק${w.bankAccountLast4 ? ` ••${w.bankAccountLast4}` : ''}`}</td>
-                  <td className="small">
+                  <td className="small cell-date nowrap">{formatShortDateTime(w.createdAt)}</td>
+                  <td className="cell-amount">
+                    <span dir="ltr" className="amount">
+                      {formatShekel(w.amount)}
+                    </span>
+                  </td>
+                  <td className="small cell-dest">
+                    {w.method === 'card' ? (
+                      'כרטיס'
+                    ) : (
+                      <>
+                        בנק{' '}
+                        {w.bankAccountLast4 ? <span dir="ltr">••{w.bankAccountLast4}</span> : null}
+                      </>
+                    )}
+                  </td>
+                  <td className="small cell-status">
                     {WITHDRAWAL_STATUS_LABELS[w.status] ?? w.status}
                     {w.failureReason ? ` (${w.failureReason})` : ''}
                   </td>
-                  <td>
+                  <td className="cell-action">
                     {w.status === 'requested' ? (
                       <button className="btn btn-danger btn-sm" onClick={() => void cancel(w.id)}>
                         ביטול
