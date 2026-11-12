@@ -6,6 +6,10 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <div className="container">
+        <div className="footer-brand">
+          <span className="brand-mark" aria-hidden="true" />
+          {BRAND_NAME}
+        </div>
         <nav className="footer-links" aria-label="קישורים">
           <Link href="/about">אודות</Link>
           <Link href="/fees">מחשבון עמלות</Link>
@@ -18,13 +22,19 @@ export function SiteFooter() {
             <strong>{BRAND_NAME}</strong> הוא שירות שליחות פרטי: אנו מגישים את הטפסים בשמכם בנקודות מכירה מורשות.
             השירות <strong>אינו קשור למפעל הפיס, אינו מטעמו ואינו מורשה על ידו</strong>.
           </p>
-          <p>
-            <span className="age-badge" aria-label="מגיל 18 בלבד">
+          <div className="responsible">
+            <span className="age-badge" aria-label="מגיל 18 בלבד" dir="ltr">
               18+
             </span>
-            השתתפות בהגרלות מותרת מגיל 18 בלבד. הימורים עלולים להתמכר. שחקו באחריות ובסכומים שאתם יכולים להרשות
-            לעצמכם להפסיד. לעזרה ותמיכה בהתמכרות להימורים: קו סיוע <a href={`tel:${HELPLINE}`}>{HELPLINE}</a>.
-          </p>
+            <p style={{ margin: 0 }}>
+              השתתפות בהגרלות מותרת מגיל 18 בלבד. הימורים עלולים להתמכר. שחקו באחריות ובסכומים שאתם יכולים להרשות
+              לעצמכם להפסיד. לעזרה ותמיכה בהתמכרות להימורים: קו סיוע{' '}
+              <a className="helpline" href={`tel:${HELPLINE}`}>
+                {HELPLINE}
+              </a>
+              .
+            </p>
+          </div>
           <p className="small">התוצאות הרשמיות הן אך ורק אלו המפורסמות על ידי מפעל הפיס.</p>
         </div>
       </div>

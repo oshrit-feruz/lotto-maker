@@ -1,6 +1,7 @@
 'use client';
 
 import { LOTTO_NUMBER_MAX, LOTTO_STRONG_MAX } from '@lotto-maker/shared';
+import type { CSSProperties } from 'react';
 import type { TableState } from '@/lib/ticket-state';
 
 interface Props {
@@ -21,8 +22,11 @@ export function TablePicker({ index, table, needNumbers, needStrong, onNumber, o
   return (
     <div className="stack">
       <div>
-        <div className="small muted" id={`t${index}-n`}>
-          בחרו {needNumbers} מספרים ({table.numbers.length}/{needNumbers})
+        <div className="picker-label" id={`t${index}-n`}>
+          <span>בחרו {needNumbers} מספרים</span>{' '}
+          <span className="picker-count" dir="ltr">
+            ({table.numbers.length}/{needNumbers})
+          </span>
         </div>
         <div className="picker" role="group" aria-labelledby={`t${index}-n`} dir="ltr">
           {NUMBERS.map((n) => {
@@ -35,6 +39,7 @@ export function TablePicker({ index, table, needNumbers, needStrong, onNumber, o
                 disabled={!on && full}
                 onClick={() => onNumber(n)}
                 aria-label={`מספר ${n}`}
+                style={on ? ({ '--d': table.numbers.indexOf(n) } as CSSProperties) : undefined}
               >
                 {n}
               </button>
@@ -43,7 +48,7 @@ export function TablePicker({ index, table, needNumbers, needStrong, onNumber, o
         </div>
       </div>
       <div>
-        <div className="small muted" id={`t${index}-s`}>
+        <div className="picker-label" id={`t${index}-s`}>
           {needStrong === 1 ? 'המספר החזק' : `בחרו ${needStrong} מספרים חזקים`}
         </div>
         <div className="strong-picker" role="group" aria-labelledby={`t${index}-s`} dir="ltr">
@@ -54,6 +59,7 @@ export function TablePicker({ index, table, needNumbers, needStrong, onNumber, o
               aria-pressed={table.strongNumbers.includes(n)}
               onClick={() => onStrong(n)}
               aria-label={`מספר חזק ${n}`}
+              style={{ '--d': table.numbers.length } as CSSProperties}
             >
               {n}
             </button>

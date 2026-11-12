@@ -1,5 +1,5 @@
 export function Loading() {
-  return <p className="muted">טוען…</p>;
+  return <p className="muted loading">טוען…</p>;
 }
 
 export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
