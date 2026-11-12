@@ -132,6 +132,7 @@ model User {
   tickets       Ticket[]
   prizeClaims   PrizeClaim[]
   pendingCardCredits PendingCardCredit[]
+  savedCards    SavedCard[]
 
   @@index([phone])
 }
@@ -474,6 +475,23 @@ model PendingCardCredit {
   user      User                    @relation(fields: [userId], references: [id])
 
   @@index([userId, status])
+}
+
+// A card the user paid with, tokenised by the payment provider. The newest active card is the
+// default one for payouts. Only last4 and brand are ever shown to the client.
+model SavedCard {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String
+  last4     String
+  brand     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, token])
+  @@index([userId, active, createdAt])
 }
 
 // Back-office admin: confirms draw results. Separate from Operator.

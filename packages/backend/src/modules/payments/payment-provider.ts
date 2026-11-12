@@ -15,6 +15,13 @@ export interface WebhookEvent {
   amount: number;
   cardLast4?: string;
   cardToken?: string;
+  cardBrand?: string;
+}
+
+export interface CardCreditResult {
+  providerTxId: string;
+  /** `failed`: the provider declined, nothing moved. A thrown error means the outcome is unknown. */
+  status: 'paid' | 'failed';
 }
 
 /**
@@ -27,4 +34,9 @@ export interface PaymentProvider {
   /** Must throw AppError(401, 'INVALID_WEBHOOK_SIGNATURE') if the signature does not verify. */
   verifyWebhook(rawBody: Buffer, headers: IncomingHttpHeaders): Promise<WebhookEvent>;
   refund(providerTxId: string, amount: number): Promise<void>;
+  /**
+   * Pays `amount` out to a saved card (a withdrawal or a prize excess). Must be idempotent on
+   * `idempotencyKey`: repeating a call with the same key never pays twice and returns the same result.
+   */
+  creditCard(cardToken: string, amount: number, idempotencyKey: string): Promise<CardCreditResult>;
 }
