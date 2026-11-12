@@ -1,10 +1,3 @@
-const shekel = new Intl.NumberFormat('he-IL', {
-  style: 'currency',
-  currency: 'ILS',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 /** Parses a money value from the API (strings like "12.50", or numbers). NaN-safe: returns null. */
 export function toAmount(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
@@ -12,10 +5,16 @@ export function toAmount(value: string | number | null | undefined): number | nu
   return Number.isFinite(n) ? n : null;
 }
 
-/** "₪12.50" style, in Hebrew locale. Unknown values render as "—". */
+/**
+ * "₪1,234.50". Formatted by hand, not with Intl, so the server and every
+ * browser produce the same string (no hydration mismatch). Unknown → "—".
+ */
 export function formatShekel(value: string | number | null | undefined): string {
   const n = toAmount(value);
-  return n === null ? '—' : shekel.format(n);
+  if (n === null) return '—';
+  const [int, dec] = Math.abs(n).toFixed(2).split('.');
+  const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${n < 0 ? '-' : ''}₪${grouped}.${dec}`;
 }
 
 const dateTime = new Intl.DateTimeFormat('he-IL', {
