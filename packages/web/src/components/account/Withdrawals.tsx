@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
 import { formatDateTime, formatShekel } from '@/lib/format';
 import { WITHDRAWAL_STATUS_LABELS } from '@/lib/labels';
-import type { SavedCardView, WithdrawalView } from '@/lib/types';
+import type { SavedCardView, WithdrawalQuote, WithdrawalView } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { QUOTE_DEBOUNCE_MS, describeQuote, quoteMatches, quotePath } from '@/lib/withdrawal-quote';
 import { ErrorNotice, Loading, NotAvailable } from './Notice';
 
 type Method = 'card' | 'bank';
@@ -13,7 +14,9 @@ type Method = 'card' | 'bank';
 /**
  * Withdrawals, Phase 3 contract:
  * POST /wallet/withdrawals {amount, method: 'card'|'bank', savedCardId?, bank?},
- * GET /wallet/withdrawals, POST /wallet/withdrawals/:id/cancel.
+ * GET /wallet/withdrawals, POST /wallet/withdrawals/:id/cancel, and
+ * GET /wallet/withdrawals/quote?amount=&method= for the fee, net amount and minimum before sending.
+ * Statuses: requested | approved | rejected | paid | failed | cancelled (only `requested` can be cancelled).
  */
 export function Withdrawals() {
   const list = useApi<WithdrawalView[]>('wallet/withdrawals');
@@ -30,9 +33,21 @@ export function Withdrawals() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Fee, net amount and minimum from GET /wallet/withdrawals/quote, asked once typing pauses.
+  const [debouncedPath, setDebouncedPath] = useState<string | null>(null);
+  const wantedPath = quotePath(amount, method);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPath(wantedPath), QUOTE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [wantedPath]);
+  const quoteState = useApi<WithdrawalQuote>(debouncedPath);
+  const quote = wantedPath && quoteMatches(quoteState.data, amount, method) ? quoteState.data : null;
+  const shown = quote ? describeQuote(quote) : null;
+
   function validate(): string | null {
     if (!/^\d+(\.\d{1,2})?$/.test(amount)) return 'נא להזין סכום, עד שתי ספרות אחרי הנקודה.';
     if (Number(amount) <= 0) return 'נא להזין סכום חיובי.';
+    if (shown?.problem) return shown.problem;
     if (method === 'card' && (cards.data?.length ?? 0) === 0) return 'אין כרטיס שמור למשיכה. בחרו העברה בנקאית.';
     if (method === 'bank') {
       if (holderName.trim().length < 2) return 'נא להזין את שם בעל החשבון.';
@@ -186,8 +201,31 @@ export function Withdrawals() {
             </div>
           </div>
         )}
-        <p className="small muted">בהעברה בנקאית עשויה לחול עמלה, שתוצג לפני האישור הסופי. משיכות נבדקות ומאושרות לפני תשלום.</p>
-        <button className="btn" type="submit" disabled={busy}>
+        <div aria-live="polite">
+          {shown ? (
+            <>
+              <ul className="price-lines">
+                {shown.lines.map((l) => (
+                  <li key={l.label}>
+                    <span>{l.label}</span>
+                    <span dir="ltr">{l.value}</span>
+                  </li>
+                ))}
+              </ul>
+              {shown.problem ? <div className="alert alert-warn small">{shown.problem}</div> : null}
+              <p className="small muted">
+                מינימום למשיכה: <span dir="ltr">{formatShekel(quote!.min)}</span>. משיכות נבדקות ומאושרות לפני תשלום.
+              </p>
+            </>
+          ) : (
+            <p className="small muted">
+              {wantedPath && (quoteState.loading || wantedPath !== debouncedPath)
+                ? 'מחשבים עמלה וסכום לקבלה…'
+                : 'העמלה והסכום שתקבלו יוצגו כאן לפני השליחה. משיכות נבדקות ומאושרות לפני תשלום.'}
+            </p>
+          )}
+        </div>
+        <button className="btn" type="submit" disabled={busy || (shown !== null && !shown.canSubmit)}>
           {busy ? 'שולח…' : 'בקשת משיכה'}
         </button>
       </form>
