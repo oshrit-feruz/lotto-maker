@@ -131,6 +131,20 @@ describe('loadConfig: development and test', () => {
     expect(errors.join('\n')).toMatch(/JWT_SECRET/);
   });
 
+  it('treats empty values as unset', () => {
+    const r = loadConfig({
+      DATABASE_URL: 'postgresql://x',
+      JWT_SECRET: 'x'.repeat(16),
+      JWT_REFRESH_SECRET: 'y'.repeat(16),
+      SENTRY_DSN: '',
+      ID_ENCRYPTION_KEY: '',
+      TWILIO_ACCOUNT_SID: ' ',
+    });
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.config.SENTRY_DSN).toBeUndefined();
+    expect(errorsOf(prodEnv({ REDIS_URL: '' }))).toEqual(['REDIS_URL is missing (OTP, rate limits and job locks)']);
+  });
+
   it('parses RUN_API / RUN_JOBS flags', () => {
     const base = { DATABASE_URL: 'postgresql://x', JWT_SECRET: 'x'.repeat(16), JWT_REFRESH_SECRET: 'y'.repeat(16) };
     const r = loadConfig({ ...base, RUN_JOBS: 'false', RUN_API: '1' });

@@ -171,7 +171,9 @@ export function productionProblems(env: Env, raw: NodeJS.ProcessEnv): string[] {
 export type ConfigResult = { ok: true; config: Config } | { ok: false; errors: string[] };
 
 /** Parses and checks an environment. Pure: tests call it with a hand-made env. */
-export function loadConfig(raw: NodeJS.ProcessEnv): ConfigResult {
+export function loadConfig(input: NodeJS.ProcessEnv): ConfigResult {
+  // An empty value (`SENTRY_DSN=` copied from .env.example) means unset, not an invalid value
+  const raw = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined && v.trim() !== ''));
   const parsed = envSchema.safeParse(raw);
   if (!parsed.success) {
     const errors = Object.entries(parsed.error.flatten().fieldErrors).map(
