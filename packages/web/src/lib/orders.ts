@@ -23,6 +23,8 @@ export function isSafeRedirect(url: string): boolean {
 }
 
 export function newIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  return `k${Date.now()}${Math.random().toString(36).slice(2)}`;
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // Older browsers without randomUUID still have getRandomValues.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }

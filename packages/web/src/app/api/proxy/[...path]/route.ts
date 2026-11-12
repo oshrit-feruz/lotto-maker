@@ -37,7 +37,11 @@ async function handle(req: NextRequest, { params }: Ctx): Promise<Response> {
   if (!accessToken) await doRefresh();
 
   const body = method === 'GET' ? undefined : await req.text();
-  const target = `${apiBaseUrl()}/${path}${req.nextUrl.search}`;
+  // The allowlist above already limits each segment to [A-Za-z0-9_-]. Encode anyway, and build the URL
+  // on the fixed API origin, so nothing from the request can change the host or escape the path.
+  const target = new URL(apiBaseUrl());
+  target.pathname = `${target.pathname.replace(/\/$/, '')}/${params.path.map(encodeURIComponent).join('/')}`;
+  req.nextUrl.searchParams.forEach((value, key) => target.searchParams.append(key, value));
   const idempotencyKey = req.headers.get('idempotency-key');
 
   const forward = () =>

@@ -13,7 +13,7 @@ export function formatShekel(value: string | number | null | undefined): string 
   const n = toAmount(value);
   if (n === null) return '—';
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
-  const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const grouped = Number(int).toLocaleString('en-US');
   return `${n < 0 ? '-' : ''}₪${grouped}.${dec}`;
 }
 
