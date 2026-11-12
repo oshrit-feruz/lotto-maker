@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
+import { Decimal } from 'decimal.js';
+import Fastify,{ type FastifyInstance } from 'fastify';
 
 const fake = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof import('./helpers/fake-prisma.js').createFakePrisma> }));
 
@@ -152,6 +153,69 @@ describe('payments: webhook', () => {
     expect(fake.db.walletTxs).toHaveLength(0);
     expect(payment.status).toBe('refunded');
     expect(provider.refunds).toEqual([{ providerTxId, amount: 100 }]);
+  });
+
+  describe('refund after approval', () => {
+    async function approved(amount: number) {
+      const c = await checkout(amount);
+      const ok = signedWebhook({ providerTxId: c.providerTxId, status: 'approved', amount });
+      await processWebhook(ok.rawBody, ok.headers);
+      return c;
+    }
+    const refundEvent = (providerTxId: string, amount: number) =>
+      signedWebhook({ providerTxId, status: 'refunded', amount });
+
+    it('debits the wallet once and links the reversal to the payment', async () => {
+      const { providerTxId, payment } = await approved(100);
+      const { rawBody, headers } = refundEvent(providerTxId, 100);
+
+      await expect(processWebhook(rawBody, headers)).resolves.toEqual({ outcome: 'reversed' });
+
+      expect(fake.db.balanceOf(USER)).toBe(0);
+      expect(payment.status).toBe('refunded');
+      expect(fake.db.walletTxs).toHaveLength(2);
+      expect(fake.db.walletTxs[1]).toMatchObject({ type: 'refund_reversal', amount: 100, paymentId: payment.id });
+      expect(fake.db.users.get(USER).status).toBe('active');
+      expect(fake.db.auditLogs.some((l) => l.action === 'payment:chargeback_shortfall')).toBe(false);
+    });
+
+    it('treats a repeated refund as a no-op', async () => {
+      const { providerTxId } = await approved(100);
+      const { rawBody, headers } = refundEvent(providerTxId, 100);
+      await processWebhook(rawBody, headers);
+
+      await expect(processWebhook(rawBody, headers)).resolves.toEqual({ outcome: 'duplicate' });
+      await expect(processWebhook(rawBody, headers)).resolves.toEqual({ outcome: 'duplicate' });
+
+      expect(fake.db.balanceOf(USER)).toBe(0);
+      expect(fake.db.walletTxs.filter((t) => t.type === 'refund_reversal')).toHaveLength(1);
+    });
+
+    it('takes only the remaining balance, suspends the user and logs the shortfall', async () => {
+      const { providerTxId, payment } = await approved(100);
+      fake.db.users.get(USER).walletBalance = new Decimal(30); // 70 already spent
+
+      const { rawBody, headers } = refundEvent(providerTxId, 100);
+      await expect(processWebhook(rawBody, headers)).resolves.toEqual({ outcome: 'reversed' });
+
+      expect(fake.db.balanceOf(USER)).toBe(0);
+      expect(fake.db.walletTxs[1]).toMatchObject({ type: 'refund_reversal', amount: 30, paymentId: payment.id });
+      expect(fake.db.users.get(USER).status).toBe('suspended');
+      const log = fake.db.auditLogs.find((l) => l.action === 'payment:chargeback_shortfall');
+      expect(log.metadata).toMatchObject({ shortfall: '70', userId: USER });
+    });
+
+    it('never goes negative when the wallet is already empty', async () => {
+      const { providerTxId } = await approved(100);
+      fake.db.users.get(USER).walletBalance = new Decimal(0);
+
+      const { rawBody, headers } = refundEvent(providerTxId, 100);
+      await processWebhook(rawBody, headers);
+
+      expect(fake.db.balanceOf(USER)).toBe(0);
+      expect(fake.db.walletTxs.filter((t) => t.type === 'refund_reversal')).toHaveLength(0);
+      expect(fake.db.users.get(USER).status).toBe('suspended');
+    });
   });
 
   it('allows a deposit that lands exactly on the cap', async () => {

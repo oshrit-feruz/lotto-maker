@@ -146,6 +146,56 @@ export async function depositTx(
   return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
 }
 
+export interface ReversalResult {
+  debited: number;
+  shortfall: number;
+}
+
+/**
+ * Takes back a credited payment that the provider refunded or charged back.
+ * Debits at most the current balance, so the wallet never goes negative; any
+ * remainder is returned as `shortfall` for the caller to act on. Runs inside
+ * the caller's transaction. The (paymentId, type) unique constraint makes a
+ * second reversal of the same payment fail at the database.
+ */
+export async function reverseDepositTx(
+  tx: Tx,
+  userId: string,
+  amount: number,
+  description: string,
+  paymentId: string,
+): Promise<ReversalResult> {
+  const users = await tx.$queryRaw<Array<{ walletBalance: string }>>`
+    SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
+  `;
+  const user = users[0];
+  if (!user) throw new AppError(404, 'USER_NOT_FOUND');
+
+  const owed = new Decimal(amount);
+  const debit = Decimal.min(new Decimal(user.walletBalance), owed);
+  const shortfall = owed.minus(debit);
+
+  if (debit.greaterThan(0)) {
+    await tx.user.update({
+      where: { id: userId },
+      data: { walletBalance: { decrement: debit.toNumber() } },
+    });
+    const walletTx = await tx.walletTransaction.create({
+      data: { userId, type: 'refund_reversal', amount: debit.toNumber(), description, paymentId },
+    });
+    await writeAuditLogTx(tx, {
+      entityType: 'wallet',
+      entityId: userId,
+      action: 'wallet:refund_reversal',
+      actorId: 'system',
+      actorType: 'system',
+      metadata: { amount: debit.toFixed(2), transactionId: walletTx.id, paymentId },
+    });
+  }
+
+  return { debited: debit.toNumber(), shortfall: shortfall.toNumber() };
+}
+
 /** Throws 422 WALLET_CAP_EXCEEDED if balance + amount would pass the configured cap. */
 export function assertWithinBalanceCap(balance: string | number, amount: number): void {
   if (new Decimal(balance).plus(amount).greaterThan(config.WALLET_BALANCE_CAP)) {

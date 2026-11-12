@@ -29,6 +29,10 @@ export function createFakePrisma() {
         if (data.walletBalance?.increment !== undefined) {
           user.walletBalance = new Decimal(user.walletBalance).plus(data.walletBalance.increment);
         }
+        if (data.walletBalance?.decrement !== undefined) {
+          user.walletBalance = new Decimal(user.walletBalance).minus(data.walletBalance.decrement);
+        }
+        if (data.status !== undefined) user.status = data.status;
         return user;
       },
     },
@@ -63,7 +67,7 @@ export function createFakePrisma() {
     },
     walletTransaction: {
       create: async ({ data }: any) => {
-        if (data.paymentId && walletTxs.some((t) => t.paymentId === data.paymentId)) {
+        if (data.paymentId && walletTxs.some((t) => t.paymentId === data.paymentId && t.type === data.type)) {
           throw new Error('unique constraint violation: paymentId');
         }
         const tx = { id: nextId('wtx'), ...data };

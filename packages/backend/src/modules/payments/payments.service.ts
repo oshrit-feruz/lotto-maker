@@ -5,7 +5,7 @@ import { prisma } from '../../prisma.js';
 import { config } from '../../config.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
-import { assertWithinBalanceCap, depositTx, type Tx } from '../wallet/wallet.service.js';
+import { assertWithinBalanceCap, depositTx, reverseDepositTx, type Tx } from '../wallet/wallet.service.js';
 import type { PaymentProvider } from './payment-provider.js';
 import { MockPaymentProvider } from './mock-payment-provider.js';
 
@@ -107,6 +107,7 @@ export type WebhookOutcome =
   | 'credited'
   | 'failed'
   | 'refunded'
+  | 'reversed'
   | 'duplicate'
   | 'ignored'
   | 'cap_exceeded';
@@ -132,6 +133,9 @@ export async function processWebhook(
     const base = { paymentId: payment.id, userId: payment.userId };
 
     if (event.status === 'pending') return { ...base, outcome: 'ignored' as const };
+    if (payment.status === 'approved' && event.status === 'refunded') {
+      return { ...base, ...(await reverseApprovedPayment(tx, payment)) };
+    }
     if (payment.status !== 'pending') return { ...base, outcome: 'duplicate' as const };
 
     if (event.status !== 'approved') {
@@ -200,6 +204,52 @@ export async function processWebhook(
   }
 
   return { outcome: result.outcome };
+}
+
+/**
+ * approved -> refunded: the provider gave the money back, so the credit must
+ * leave the wallet. Only one delivery can win the conditional update; repeats
+ * find the payment already `refunded` and do nothing. If the user has already
+ * spent part of it, the wallet is emptied (never negative), the account is
+ * suspended and the shortfall is written to the audit log.
+ */
+async function reverseApprovedPayment(tx: Tx, payment: { id: string; userId: string; amount: { toString(): string } }) {
+  const { count } = await tx.payment.updateMany({
+    where: { id: payment.id, status: 'approved' },
+    data: { status: 'refunded' },
+  });
+  if (count === 0) return { outcome: 'duplicate' as const };
+
+  const amount = new Decimal(payment.amount.toString());
+  const { debited, shortfall } = await reverseDepositTx(
+    tx,
+    payment.userId,
+    amount.toNumber(),
+    'ביטול הפקדה (זיכוי מהספק)',
+    payment.id,
+  );
+
+  await writeAuditLogTx(tx, {
+    entityType: 'payment',
+    entityId: payment.id,
+    action: 'payment:approved->refunded',
+    actorId: 'system',
+    actorType: 'system',
+    metadata: { amount: amount.toFixed(2), debited: String(debited) },
+  });
+
+  if (shortfall > 0) {
+    await tx.user.update({ where: { id: payment.userId }, data: { status: 'suspended' } });
+    await writeAuditLogTx(tx, {
+      entityType: 'payment',
+      entityId: payment.id,
+      action: 'payment:chargeback_shortfall',
+      actorId: 'system',
+      actorType: 'system',
+      metadata: { userId: payment.userId, amount: amount.toFixed(2), shortfall: String(shortfall) },
+    });
+  }
+  return { outcome: 'reversed' as const };
 }
 
 async function refundRejectedPayment(
