@@ -6,6 +6,7 @@ import {
   parseCurrentLotto,
   parseNextLotteryResponse,
   parseAnnouncedPrize,
+  parseAnnouncedPrizeDetailed,
   normalizeTier,
   PaisParseError,
 } from '../../src/services/pais-lotto-parser.js';
@@ -116,5 +117,31 @@ describe('parseNextLotteryResponse', () => {
     expect(info.doublePrize).toBeNull();
     expect(parseAnnouncedPrize('5.5 מיליון')).toBe('5500000.00');
     expect(parseAnnouncedPrize(0)).toBeNull();
+  });
+  // Documented examples of the UNVERIFIED unit rule (below 1,000 = millions). Not confirmed
+  // against a real pais response yet.
+  it.each([
+    ['5,000,000', '5000000.00', '5,000,000', false],
+    [5000000, '5000000.00', '5000000', false],
+    ['5', '5000000.00', '5', true],
+    [10, '10000000.00', '10', true],
+    ['5.5 מיליון', '5500000.00', '5.5 מיליון', true],
+    [999, '999000000.00', '999', true],
+    [1000, '1000.00', '1000', false],
+    ['n/a', null, 'n/a', false],
+    [null, null, null, false],
+  ])('%j -> %s (raw %j, assumedMillions %s)', (input, value, raw, assumedMillions) => {
+    expect(parseAnnouncedPrizeDetailed(input)).toEqual({ value, raw, assumedMillions });
+  });
+  it('reports the raw values and whether the rule fired', () => {
+    const info = parseNextLotteryResponse([
+      { displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: '5,000,000', secondPrize: 10 },
+    ]);
+    expect(info).toMatchObject({
+      firstPrizeRaw: '5,000,000',
+      doublePrizeRaw: '10',
+      firstPrizeAssumedMillions: false,
+      doublePrizeAssumedMillions: true,
+    });
   });
 });
