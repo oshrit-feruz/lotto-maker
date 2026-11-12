@@ -49,6 +49,7 @@ import {
   startSlot,
 } from '../../src/modules/operators/operators.service.js';
 import { config } from '../../src/config.js';
+import { MAX_SCAN_BYTES } from '../../src/lib/scan-file.js';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
 import operatorsRoutes from '../../src/modules/operators/operators.routes.js';
@@ -304,16 +305,28 @@ describe('POST /operator/queue/:slotId/scan', () => {
   });
   afterEach(() => app.close());
 
-  function upload() {
+  const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('rest-of-jpeg')]);
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest')]);
+  const HEIC = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic'), Buffer.from('rest')]);
+  const PDF = Buffer.from('%PDF-1.7\n1 0 obj\n');
+  const TEXT = Buffer.from('hello, I am not an image');
+
+  // Always claims image/jpeg and scan.jpg: only the bytes tell the truth
+  function upload(file: Buffer = JPEG) {
     const boundary = '----TestBoundary';
-    const payload = [
-      `--${boundary}`,
-      'Content-Disposition: form-data; name="image"; filename="scan.jpg"',
-      'Content-Type: image/jpeg',
-      '',
-      'fake-image-bytes',
-      `--${boundary}--`,
-    ].join('\r\n');
+    const payload = Buffer.concat([
+      Buffer.from(
+        [
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="image"; filename="scan.jpg"',
+          'Content-Type: image/jpeg',
+          '',
+          '',
+        ].join('\r\n'),
+      ),
+      file,
+      Buffer.from(`\r\n--${boundary}--`),
+    ]);
     return app.inject({
       method: 'POST',
       url: '/operator/queue/slot-1/scan',
@@ -346,5 +359,40 @@ describe('POST /operator/queue/:slotId/scan', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ scanned: true });
     expect(mockUpload).toHaveBeenCalledOnce();
+    expect(mockUpload.mock.calls[0]![0]).toMatch(/^scans\/slot-1-\d+\.jpg$/);
+    expect(mockUpload.mock.calls[0]![2]).toBe('image/jpeg');
+  });
+
+  it.each([
+    ['PNG', () => PNG, 'png', 'image/png'],
+    ['HEIC', () => HEIC, 'heic', 'image/heic'],
+  ])('accepts a %s and stores it with its real extension and content type', async (_n, file, ext, contentType) => {
+    db.slotFindUnique.mockResolvedValue(slot({ status: 'done' }, 'keyed'));
+    const res = await upload(file());
+    expect(res.statusCode).toBe(200);
+    expect(mockUpload.mock.calls[0]![0]).toMatch(new RegExp(`\\.${ext}$`));
+    expect(mockUpload.mock.calls[0]![2]).toBe(contentType);
+  });
+
+  it.each([
+    ['a PDF', () => PDF],
+    ['a text file renamed to .jpg', () => TEXT],
+  ])('rejects %s with 415 UNSUPPORTED_SCAN_TYPE and stores nothing', async (_n, file) => {
+    db.slotFindUnique.mockResolvedValue(slot({ status: 'done' }, 'keyed'));
+    const res = await upload(file());
+    expect(res.statusCode).toBe(415);
+    expect(res.json().error).toBe('UNSUPPORTED_SCAN_TYPE');
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(db.orderUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a file over 10 MB with 413 SCAN_TOO_LARGE and stores nothing', async () => {
+    db.slotFindUnique.mockResolvedValue(slot({ status: 'done' }, 'keyed'));
+    const big = Buffer.concat([JPEG, Buffer.alloc(MAX_SCAN_BYTES)]);
+    const res = await upload(big);
+    expect(res.statusCode).toBe(413);
+    expect(res.json().error).toBe('SCAN_TOO_LARGE');
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(db.orderUpdateMany).not.toHaveBeenCalled();
   });
 });

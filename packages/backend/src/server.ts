@@ -14,6 +14,7 @@ import paymentsRoutes from './modules/payments/payments.routes.js';
 import ordersRoutes from './modules/orders/orders.routes.js';
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes.js';
 import operatorsRoutes from './modules/operators/operators.routes.js';
+import { MAX_SCAN_BYTES } from './lib/scan-file.js';
 import resultsRoutes from './modules/results/results.routes.js';
 
 export async function buildApp() {
@@ -25,7 +26,7 @@ export async function buildApp() {
   await app.register(rateLimitPlugin);
   await app.register(authPlugin);
   await app.register(swaggerPlugin);
-  await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB
+  await app.register(multipart, { limits: { fileSize: MAX_SCAN_BYTES } }); // 10 MB
 
   // Routes
   await app.register(authRoutes);

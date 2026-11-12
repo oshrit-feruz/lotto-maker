@@ -481,14 +481,21 @@ describe.skipIf(skip)('Full e2e flow', () => {
 
   it('operator uploads scan → order becomes scanned', async () => {
     const boundary = '----FormBoundary7MA4YWxkTrZu0gW';
-    const body = [
-      `--${boundary}`,
-      'Content-Disposition: form-data; name="file"; filename="scan.jpg"',
-      'Content-Type: image/jpeg',
-      '',
-      'fake-image-bytes',
-      `--${boundary}--`,
-    ].join('\r\n');
+    // The upload is validated by its magic bytes, so it must start like a JPEG
+    const body = Buffer.concat([
+      Buffer.from(
+        [
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="file"; filename="scan.jpg"',
+          'Content-Type: image/jpeg',
+          '',
+          '',
+        ].join('\r\n'),
+      ),
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      Buffer.from('fake-image-bytes'),
+      Buffer.from(`\r\n--${boundary}--`),
+    ]);
 
     const res = await app.inject({
       method: 'POST',
