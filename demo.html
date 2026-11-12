@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pais Lotto — Demo</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --blue:    #1d4ed8;
+  --blue-lt: #eff6ff;
+  --gold:    #d97706;
+  --gold-lt: #fef3c7;
+  --green:   #059669;
+  --red:     #dc2626;
+  --txt:     #0f172a;
+  --sub:     #64748b;
+  --border:  #e2e8f0;
+  --bg:      #f8fafc;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  direction: rtl;
+  background: #fff;
+  color: var(--txt);
+  font-size: 16px;
+}
+
+/* ── App shell ── */
+#app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 430px;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 0 40px rgba(0,0,0,.12);
+}
+
+/* ── Progress bar ── */
+#progress-bar {
+  height: 3px;
+  background: var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+#progress-fill {
+  position: absolute;
+  top: 0; right: 0;
+  height: 100%;
+  background: var(--blue);
+  transition: width .3s;
+}
+
+/* ── Screens ── */
+.screen {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+.screen.active { display: flex; }
+
+.scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 20px 24px;
+}
+
+/* ── Bottom nav ── */
+.tab-bar {
+  display: flex;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 10px;
+  font-size: 10px;
+  color: #94a3b8;
+  cursor: pointer;
+  gap: 3px;
+  user-select: none;
+}
+.tab-item.active { color: var(--blue); }
+.tab-item svg { width: 22px; height: 22px; }
+
+/* ── Top nav bar ── */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px 4px;
+  flex-shrink: 0;
+  min-height: 52px;
+}
+.top-bar .back-btn {
+  background: var(--bg);
+  border: none;
+  border-radius: 50%;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--sub);
+}
+.top-bar h2 {
+  flex: 1;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+}
+.top-bar .spacer { width: 38px; }
+
+/* ── Typography ── */
+.page-title { font-size: 26px; font-weight: 800; color: var(--txt); margin-bottom: 4px; }
+.page-sub   { font-size: 14px; color: var(--sub); margin-bottom: 20px; }
+
+/* ── Inputs ── */
+.field { margin-bottom: 16px; }
+.field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sub);
+  margin-bottom: 7px;
+}
+.field input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  font-size: 16px;
+  font-family: inherit;
+  direction: rtl;
+  outline: none;
+  background: var(--bg);
+  color: var(--txt);
+  transition: border-color .2s, background .2s;
+  -webkit-appearance: none;
+}
+.field input:focus { border-color: var(--blue); background: #fff; }
+
+/* ── Buttons ── */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+  font-family: inherit;
+  text-align: center;
+  margin-bottom: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.btn:active { opacity: .8; transform: scale(.98); }
+.btn-primary { background: linear-gradient(135deg, #1e40af, #3b82f6); color: #fff; }
+.btn-gold    { background: linear-gradient(135deg, #b45309, #fbbf24); color: #fff; }
+.btn-success { background: linear-gradient(135deg, #047857, #34d399); color: #fff; }
+.btn-outline {
+  background: #fff;
+  border: 1.5px solid var(--border);
+  color: var(--sub);
+  margin-top: 0;
+}
+.btn-ghost {
+  background: var(--blue-lt);
+  color: var(--blue);
+}
+
+/* ── Cards ── */
+.card {
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+
+/* ══════════════════════════════════════
+   SCREEN 1 — Login
+══════════════════════════════════════ */
+.login-hero {
+  background: linear-gradient(160deg, #1e3a8a 0%, #1d4ed8 60%, #3b82f6 100%);
+  padding: 56px 24px 36px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.login-logo {
+  width: 76px; height: 76px;
+  background: rgba(255,255,255,.18);
+  border-radius: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px;
+  margin: 0 auto 16px;
+  border: 2px solid rgba(255,255,255,.3);
+}
+.login-hero h1 { color: #fff; font-size: 24px; font-weight: 800; }
+.login-hero p  { color: rgba(255,255,255,.75); font-size: 14px; margin-top: 6px; }
+
+/* ══════════════════════════════════════
+   SCREEN 2 — OTP
+══════════════════════════════════════ */
+.otp-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  direction: ltr;
+  margin: 24px 0;
+}
+.otp-cell {
+  flex: 1;
+  max-width: 50px;
+  height: 60px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 800;
+  color: var(--blue);
+  background: var(--bg);
+}
+.otp-cell.filled { border-color: var(--blue); background: var(--blue-lt); }
+
+/* ══════════════════════════════════════
+   SCREEN 4 — Wallet
+══════════════════════════════════════ */
+.wallet-hero {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  border-radius: 22px;
+  padding: 24px;
+  color: #fff;
+  margin-bottom: 20px;
+}
+.wallet-hero .lbl   { font-size: 13px; opacity: .7; }
+.wallet-hero .bal   { font-size: 40px; font-weight: 900; margin: 6px 0 4px; }
+.wallet-hero .upd   { font-size: 12px; opacity: .55; }
+.quick-amounts      { display: flex; gap: 8px; margin-bottom: 16px; }
+.quick-amounts button {
+  flex: 1; padding: 11px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 14px; font-weight: 700;
+  color: var(--blue);
+  cursor: pointer;
+  transition: all .15s;
+}
+.quick-amounts button.active {
+  border-color: var(--blue);
+  background: var(--blue-lt);
+}
+
+/* ══════════════════════════════════════
+   SCREEN 5 — Game Select
+══════════════════════════════════════ */
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  background: #fff;
+  transition: all .15s;
+  user-select: none;
+}
+.game-row:active { background: var(--blue-lt); border-color: var(--blue); }
+.game-row .ico { width: 54px; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0; }
+.game-row .info { flex: 1; }
+.game-row .name { font-size: 18px; font-weight: 800; }
+.game-row .days { font-size: 12px; color: var(--sub); margin-top: 3px; }
+.game-row .price { font-size: 17px; font-weight: 800; color: var(--blue); background: var(--blue-lt); padding: 6px 12px; border-radius: 10px; white-space: nowrap; }
+
+/* ══════════════════════════════════════
+   SCREEN 6 — Number Picker
+══════════════════════════════════════ */
+.selected-row {
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.selected-row .lbl   { font-size: 12px; color: var(--sub); }
+.selected-row .nums  { font-size: 15px; font-weight: 700; color: var(--blue); }
+.section-label { font-size: 13px; font-weight: 600; color: var(--sub); margin: 14px 0 8px; }
+.num-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.num-btn {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .1s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.num-btn.sel  { background: var(--blue);  border-color: var(--blue);  color: #fff; }
+.num-btn.str  { background: var(--gold);  border-color: var(--gold);  color: #fff; }
+.num-btn:active { transform: scale(.9); }
+
+/* ══════════════════════════════════════
+   SCREEN 7 — Cart
+══════════════════════════════════════ */
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
+.chip {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800;
+}
+.chip.blue   { background: var(--blue); color: #fff; }
+.chip.gold   { background: var(--gold); color: #fff; }
+.divider { height: 1px; background: var(--border); margin: 12px 0; }
+.total-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.total-row span    { font-size: 15px; color: var(--sub); }
+.total-row .amount { font-size: 22px; font-weight: 900; color: var(--txt); }
+.charge-box { background: var(--blue-lt); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--blue); margin: 14px 0; }
+
+/* ══════════════════════════════════════
+   SCREEN 8 — Success
+══════════════════════════════════════ */
+.success-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; text-align: center; }
+.success-circle { width: 104px; height: 104px; border-radius: 52px; background: linear-gradient(135deg, #047857, #34d399); display: flex; align-items: center; justify-content: center; font-size: 52px; margin-bottom: 24px; box-shadow: 0 16px 40px rgba(5,150,105,.3); }
+.success-wrap h2 { font-size: 24px; font-weight: 900; margin-bottom: 6px; }
+.success-wrap .ord { font-size: 13px; color: var(--sub); margin-bottom: 20px; }
+.info-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 16px; text-align: right; }
+.info-box .row { display: flex; justify-content: space-between; font-size: 14px; padding: 5px 0; }
+.info-box .row span   { color: var(--sub); }
+.info-box .row strong { color: var(--txt); font-weight: 700; }
+.alert-box { border-radius: 14px; padding: 12px 14px; font-size: 13px; margin-bottom: 14px; width: 100%; }
+.alert-yellow { background: var(--gold-lt); color: #92400e; }
+
+/* ══════════════════════════════════════
+   SCREEN 9 — History
+══════════════════════════════════════ */
+.filter-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; scrollbar-width: none; }
+.filter-row::-webkit-scrollbar { display: none; }
+.fchip { padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; border: 1.5px solid var(--border); color: var(--sub); background: #fff; flex-shrink: 0; }
+.fchip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.hist-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 16px; margin-bottom: 10px; cursor: pointer; }
+.hist-ico { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.hist-ico.won  { background: #dcfce7; }
+.hist-ico.lost { background: #fee2e2; }
+.hist-ico.pend { background: var(--gold-lt); }
+.hist-ico.keyd { background: var(--blue-lt); }
+.hist-info { flex: 1; }
+.hist-info .ht  { font-size: 15px; font-weight: 700; }
+.hist-info .hs  { font-size: 12px; color: var(--sub); margin-top: 3px; }
+.hist-r { text-align: left; }
+.hist-r .hp { font-size: 15px; font-weight: 800; }
+.badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 7px; display: inline-block; margin-top: 4px; }
+.badge.won  { background: #dcfce7; color: #047857; }
+.badge.lost { background: #fee2e2; color: var(--red); }
+.badge.pend { background: var(--gold-lt); color: #92400e; }
+.badge.keyd { background: var(--blue-lt); color: var(--blue); }
+
+/* ══════════════════════════════════════
+   SCREEN 10 — Subscriptions
+══════════════════════════════════════ */
+.sub-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.sub-name    { font-size: 18px; font-weight: 800; }
+.sub-detail  { font-size: 12px; color: var(--sub); margin-top: 3px; }
+.toggle-wrap { display: flex; align-items: center; gap: 10px; }
+.badge-sub   { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 7px; }
+.badge-on    { background: #dcfce7; color: #047857; }
+.badge-off   { background: var(--bg); color: var(--sub); }
+.toggle {
+  width: 44px; height: 26px;
+  border-radius: 13px;
+  background: #22c55e;
+  position: relative;
+  cursor: pointer;
+  transition: background .2s;
+  flex-shrink: 0;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  top: 3px; right: 3px;
+  transition: right .2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+.toggle.off              { background: var(--border); }
+.toggle.off::after       { right: auto; left: 3px; }
+.sub-chips               { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.sub-chip {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--blue-lt);
+  color: var(--blue);
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.sub-chip.g { background: var(--gold-lt); color: var(--gold); }
+.sub-meta { display: flex; gap: 16px; padding-top: 12px; border-top: 1px solid var(--border); margin-top: 4px; }
+.sub-meta-item span  { font-size: 11px; color: var(--sub); display: block; }
+.sub-meta-item strong { font-size: 13px; color: var(--txt); }
+
+/* ══════════════════════════════════════
+   KYC notice
+══════════════════════════════════════ */
+.notice {
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.notice.yellow { background: var(--gold-lt); color: #92400e; }
+.notice.blue   { background: var(--blue-lt); color: #1e40af; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+
+  <!-- ════════ SCREEN 1: Login ════════ -->
+  <div class="screen active" id="s1">
+    <div class="login-hero">
+      <div class="login-logo">🎰</div>
+      <h1>כניסה לאפליקציה</h1>
+      <p>הגש טופס לוטו מהטלפון שלך</p>
+    </div>
+    <div class="scroll-body">
+      <div style="margin-top:8px;">
+        <div class="field">
+          <label>מספר טלפון</label>
+          <input type="tel" placeholder="+972 50 123 4567" value="+972 50 555 1234">
+        </div>
+        <button class="btn btn-primary" onclick="goTo(2)">שלח קוד אימות ←</button>
+        <p style="text-align:center; font-size:12px; color:var(--sub); margin:12px 0 20px;">
+          בהמשך אתה מאשר את <span style="color:var(--blue)">תנאי השימוש</span> ו<span style="color:var(--blue)">מדיניות פרטיות</span>
+        </p>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+          <span style="font-size:12px; color:var(--sub);">או</span>
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+        </div>
+        <button class="btn btn-outline">📧 &nbsp; כניסה עם דוא"ל</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 2: OTP ════════ -->
+  <div class="screen" id="s2">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goTo(1)">→</button>
+      <h2>אימות OTP</h2>
+      <div class="spacer"></div>
+    </div>
+    <div class="scroll-body">
+      <p class="page-sub" style="text-align:center; margin-bottom:0;">קוד בן 6 ספרות נשלח ל‑<strong>+972 50 555 1234</strong></p>
+      <div class="otp-row">
+        <div class="otp-cell filled">3</div>
+        <div class="otp-cell filled">7</div>
+        <div class="otp-cell filled">2</div>
+        <div class="otp-cell">_</div>
+        <div class="otp-cell">_</div>
+        <div class="otp-cell">_</div>
+      </div>
+      <p style="text-align:center; font-size:13px; color:var(--sub); margin-bottom:20px;">
+        לא קיבלת? <span style="color:var(--blue); font-weight:600; cursor:pointer;">שלח שוב (45 שניות)</span>
+      </p>
+      <button class="btn btn-primary" onclick="goTo(3)">אמת ←</button>
+      <div class="notice blue" style="margin-top:16px;">
+        <span>ℹ️</span><span>השימוש בשירות מותר לבני 18+ בלבד</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 3: KYC ════════ -->
+  <div class="screen" id="s3">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goTo(2)">→</button>
+      <h2>אישור גיל</h2>
+      <div class="spacer"></div>
+    </div>
+    <div class="scroll-body">
+      <p class="page-sub">נדרש אימות חד-פעמי לפני הגשת טפסים</p>
+      <div class="notice yellow">
+        <span>⚠️</span>
+        <span>הפרטים נשמרים בצורה מוצפנת ומשמשים לאימות גיל בלבד.</span>
+      </div>
+      <div class="field">
+        <label>שם מלא</label>
+        <input placeholder="ישראל ישראלי" value="ישראל ישראלי">
+      </div>
+      <div class="field">
+        <label>מספר תעודת זהות</label>
+        <input placeholder="123456789" value="305401234" type="number">
+      </div>
+      <div class="field">
+        <label>תאריך לידה</label>
+        <input placeholder="1990-03-15" value="1990-03-15" type="date">
+      </div>
+      <button class="btn btn-primary" onclick="goTo(4)">אישור ובדיקת גיל ←</button>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 4: Wallet ════════ -->
+  <div class="screen" id="s4">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goTo(5)">→</button>
+      <h2>ארנק</h2>
+      <div class="spacer"></div>
+    </div>
+    <div class="scroll-body">
+      <div class="wallet-hero">
+        <div class="lbl">יתרה נוכחית</div>
+        <div class="bal">₪91.60</div>
+        <div class="upd">עדכון: עכשיו</div>
+      </div>
+      <div class="field">
+        <label>סכום להפקדה</label>
+        <input id="depositAmt" placeholder="הכנס סכום" value="100" type="number">
+      </div>
+      <div class="quick-amounts">
+        <button onclick="setAmt(50)" id="q50">₪50</button>
+        <button onclick="setAmt(100)" id="q100" class="active">₪100</button>
+        <button onclick="setAmt(200)" id="q200">₪200</button>
+      </div>
+      <button class="btn btn-primary" onclick="goTo(5)">הפקד כסף ←</button>
+      <div style="margin-top:20px;">
+        <div style="font-size:15px; font-weight:700; margin-bottom:12px;">היסטוריית עסקאות</div>
+        <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:14px; font-weight:600;">הגשת טופס — לוטו</div>
+            <div style="font-size:12px; color:var(--sub); margin-top:3px;">07/01/2025</div>
+          </div>
+          <div style="font-size:16px; font-weight:800; color:var(--red);">-₪8.40</div>
+        </div>
+        <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:14px; font-weight:600;">הפקדה</div>
+            <div style="font-size:12px; color:var(--sub); margin-top:3px;">05/01/2025</div>
+          </div>
+          <div style="font-size:16px; font-weight:800; color:var(--green);">+₪100.00</div>
+        </div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item" onclick="goTo(5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>משחקים</span></div>
+      <div class="tab-item" onclick="goTo(9)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg><span>הזמנות</span></div>
+      <div class="tab-item" onclick="goTo(10)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>מנויים</span></div>
+      <div class="tab-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>ארנק</span></div>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 5: Game Select ════════ -->
+  <div class="screen" id="s5">
+    <div class="top-bar" style="justify-content:space-between;">
+      <div style="background:var(--blue-lt); border-radius:10px; padding:7px 14px; font-size:13px; font-weight:700; color:var(--blue);">₪91.60</div>
+      <div style="width:38px; height:38px; background:var(--bg); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; cursor:pointer;" onclick="goTo(4)">👤</div>
+    </div>
+    <div class="scroll-body" style="padding-top:8px;">
+      <div class="page-title">בחר משחק</div>
+      <p class="page-sub">כל המשחקים מופעלים על ידי פיס</p>
+      <div class="game-row" onclick="goTo(6)">
+        <div class="ico" style="background:#dbeafe;">🎲</div>
+        <div class="info"><div class="name">לוטו</div><div class="days">ג׳ ה׳ ש׳ &nbsp;•&nbsp; 6 מספרים מ-37</div></div>
+        <div class="price">₪8.40</div>
+      </div>
+      <div class="game-row" onclick="goTo(6)">
+        <div class="ico" style="background:#dcfce7;">🍀</div>
+        <div class="info"><div class="name">צ׳אנס</div><div class="days">ג׳ ה׳ ש׳ &nbsp;•&nbsp; 6 מספרים מ-37</div></div>
+        <div class="price">₪8.40</div>
+      </div>
+      <div class="game-row" onclick="goTo(6)">
+        <div class="ico" style="background:var(--gold-lt);">7️⃣</div>
+        <div class="info"><div class="name">777</div><div class="days">כל יום &nbsp;•&nbsp; 3 מספרים מ-10</div></div>
+        <div class="price">₪5.00</div>
+      </div>
+      <div class="game-row" onclick="goTo(6)">
+        <div class="ico" style="background:#fce7f3;">🔢</div>
+        <div class="info"><div class="name">1-2-3</div><div class="days">כל יום &nbsp;•&nbsp; 4 מספרים מ-10</div></div>
+        <div class="price">₪3.00</div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>משחקים</span></div>
+      <div class="tab-item" onclick="goTo(9)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg><span>הזמנות</span></div>
+      <div class="tab-item" onclick="goTo(10)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>מנויים</span></div>
+      <div class="tab-item" onclick="goTo(4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>ארנק</span></div>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 6: Number Picker ════════ -->
+  <div class="screen" id="s6">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goTo(5)">→</button>
+      <h2>לוטו — בחירת מספרים</h2>
+      <div class="spacer"></div>
+    </div>
+    <div class="scroll-body" style="padding-top:8px;">
+      <div class="selected-row">
+        <span class="lbl">נבחרו (6/6):</span>
+        <span class="nums" id="selNums">5 · 12 · 18 · 24 · 31 · 36</span>
+      </div>
+      <div class="num-grid" id="mainGrid"></div>
+      <div class="section-label">מספר חזק (אופציונלי)</div>
+      <div class="num-grid" id="strongGrid"></div>
+      <div style="height:14px;"></div>
+      <button class="btn btn-gold" onclick="goTo(7)">הוסף לעגלה ←</button>
+      <button class="btn btn-outline" onclick="clearNums()">נקה הכל</button>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 7: Cart ════════ -->
+  <div class="screen" id="s7">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goTo(6)">→</button>
+      <h2>סיכום הזמנה</h2>
+      <div class="spacer"></div>
+    </div>
+    <div class="scroll-body">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="background:var(--blue-lt); color:var(--blue); font-size:12px; font-weight:700; padding:5px 12px; border-radius:8px;">לוטו — ג׳ ה׳ ש׳</span>
+          <span style="font-size:20px; font-weight:900;">₪8.40</span>
+        </div>
+        <div class="chip-row">
+          <div class="chip blue">5</div><div class="chip blue">12</div><div class="chip blue">18</div>
+          <div class="chip blue">24</div><div class="chip blue">31</div><div class="chip blue">36</div>
+          <div class="chip gold">3</div>
+        </div>
+        <div style="font-size:12px; color:var(--sub); margin-top:8px;">מספר חזק: 3 &nbsp;•&nbsp; הגרלה: 07/01/2025 20:30</div>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; font-size:14px; color:var(--sub); margin-bottom:6px;"><span>עלות טופס</span><span>₪8.00</span></div>
+        <div style="display:flex; justify-content:space-between; font-size:14px; color:var(--sub);"><span>עמלת שירות</span><span>₪0.40</span></div>
+        <div class="divider"></div>
+        <div class="total-row"><span>סה"כ לתשלום</span><span class="amount">₪8.40</span></div>
+      </div>
+      <div class="charge-box">💳 ייגבה מהארנק שלך &nbsp;•&nbsp; יתרה לאחר: <strong>₪83.20</strong></div>
+      <button class="btn btn-primary" onclick="goTo(8)">שלח הזמנה ←</button>
+      <button class="btn btn-outline" onclick="goTo(6)">ערוך מספרים</button>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 8: Success ════════ -->
+  <div class="screen" id="s8">
+    <div class="success-wrap">
+      <div class="success-circle">✓</div>
+      <h2>הטופס הוגש בהצלחה!</h2>
+      <p class="ord">מספר הזמנה: <strong>#ORD-20250107-001</strong></p>
+      <div class="info-box">
+        <div class="row"><span>משחק</span><strong>לוטו</strong></div>
+        <div class="row"><span>מספרים</span><strong>5, 12, 18, 24, 31, 36</strong></div>
+        <div class="row"><span>מספר חזק</span><strong>3</strong></div>
+        <div class="row"><span>הגרלה</span><strong>07/01/2025 20:30</strong></div>
+        <div class="row"><span>נגבה</span><strong>₪8.40</strong></div>
+        <div class="row"><span>יתרה נותרת</span><strong>₪83.20</strong></div>
+      </div>
+      <div class="alert-box alert-yellow" style="text-align:center;">🔔 תקבל התראה כשהאופרטור יגיש את הטופס</div>
+      <button class="btn btn-primary" onclick="goTo(5)">חזור לבחירת משחק</button>
+      <button class="btn btn-ghost" onclick="goTo(9)">ראה הזמנות שלי</button>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 9: History ════════ -->
+  <div class="screen" id="s9">
+    <div class="top-bar" style="justify-content:center;">
+      <h2>הזמנות שלי</h2>
+    </div>
+    <div class="scroll-body" style="padding-top:8px;">
+      <div class="filter-row">
+        <div class="fchip active">הכל</div>
+        <div class="fchip">ממתין</div>
+        <div class="fchip">הוגש</div>
+        <div class="fchip">זכייה 🎉</div>
+        <div class="fchip">ללא זכייה</div>
+      </div>
+      <div class="hist-item">
+        <div class="hist-ico keyd">🎫</div>
+        <div class="hist-info"><div class="ht">לוטו</div><div class="hs">07/01/2025 • 5, 12, 18, 24, 31, 36</div></div>
+        <div class="hist-r"><div class="hp">₪8.40</div><div class="badge keyd">הוגש</div></div>
+      </div>
+      <div class="hist-item">
+        <div class="hist-ico won">🎉</div>
+        <div class="hist-info"><div class="ht">לוטו</div><div class="hs">03/01/2025 • 7, 14, 19, 22, 30, 35</div></div>
+        <div class="hist-r"><div class="hp">₪8.40</div><div class="badge won">זכייה!</div></div>
+      </div>
+      <div class="hist-item">
+        <div class="hist-ico pend">⏳</div>
+        <div class="hist-info"><div class="ht">צ׳אנס</div><div class="hs">10/01/2025 • 3, 9, 21, 28, 33, 37</div></div>
+        <div class="hist-r"><div class="hp">₪8.40</div><div class="badge pend">ממתין</div></div>
+      </div>
+      <div class="hist-item">
+        <div class="hist-ico lost">❌</div>
+        <div class="hist-info"><div class="ht">777</div><div class="hs">05/01/2025 • 2, 5, 8</div></div>
+        <div class="hist-r"><div class="hp">₪5.00</div><div class="badge lost">ללא זכייה</div></div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item" onclick="goTo(5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>משחקים</span></div>
+      <div class="tab-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg><span>הזמנות</span></div>
+      <div class="tab-item" onclick="goTo(10)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>מנויים</span></div>
+      <div class="tab-item" onclick="goTo(4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>ארנק</span></div>
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 10: Subscriptions ════════ -->
+  <div class="screen" id="s10">
+    <div class="top-bar" style="justify-content:center;">
+      <h2>מנויים</h2>
+    </div>
+    <div class="scroll-body" style="padding-top:8px;">
+      <p class="page-sub" style="margin-top:-4px;">הגשה אוטומטית לכל הגרלה</p>
+      <div class="card">
+        <div class="sub-header">
+          <div><div class="sub-name">לוטו</div><div class="sub-detail">פעיל מ-01/01/2025</div></div>
+          <div class="toggle-wrap">
+            <span class="badge-sub badge-on">פעיל</span>
+            <div class="toggle" onclick="toggleSub(this)"></div>
+          </div>
+        </div>
+        <div class="sub-chips">
+          <div class="sub-chip">5</div><div class="sub-chip">12</div><div class="sub-chip">18</div>
+          <div class="sub-chip">24</div><div class="sub-chip">31</div><div class="sub-chip">36</div>
+          <div class="sub-chip g">3</div>
+        </div>
+        <div class="sub-meta">
+          <div class="sub-meta-item"><span>תדירות</span><strong>כל הגרלה</strong></div>
+          <div class="sub-meta-item"><span>עלות</span><strong>₪8.40</strong></div>
+          <div class="sub-meta-item"><span>הגרלה הבאה</span><strong>07/01 20:30</strong></div>
+        </div>
+      </div>
+      <div class="card" style="border-style:dashed; border-color:#cbd5e1;">
+        <div class="sub-header">
+          <div><div class="sub-name">צ׳אנס</div><div class="sub-detail">מושהה</div></div>
+          <div class="toggle-wrap">
+            <span class="badge-sub badge-off">מושהה</span>
+            <div class="toggle off" onclick="toggleSub(this)"></div>
+          </div>
+        </div>
+        <div class="sub-chips">
+          <div class="sub-chip">3</div><div class="sub-chip">9</div><div class="sub-chip">21</div>
+          <div class="sub-chip">28</div><div class="sub-chip">33</div><div class="sub-chip">37</div>
+        </div>
+        <div class="sub-meta">
+          <div class="sub-meta-item"><span>תדירות</span><strong>כל הגרלה</strong></div>
+          <div class="sub-meta-item"><span>עלות</span><strong>₪8.40</strong></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="goTo(5)">+ הוסף מנוי חדש</button>
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item" onclick="goTo(5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>משחקים</span></div>
+      <div class="tab-item" onclick="goTo(9)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg><span>הזמנות</span></div>
+      <div class="tab-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>מנויים</span></div>
+      <div class="tab-item" onclick="goTo(4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>ארנק</span></div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+const TOTAL = 10;
+let cur = 1;
+
+function goTo(n) {
+  document.getElementById('s' + cur).classList.remove('active');
+  cur = n;
+  document.getElementById('s' + cur).classList.add('active');
+  document.getElementById('progress-fill').style.width = ((cur / TOTAL) * 100) + '%';
+  window.scrollTo(0, 0);
+}
+
+/* ── Quick amount buttons ── */
+function setAmt(v) {
+  document.getElementById('depositAmt').value = v;
+  ['50','100','200'].forEach(a => {
+    document.getElementById('q' + a).classList.toggle('active', Number(a) === v);
+  });
+}
+
+/* ── Number grids ── */
+const SEL  = [5,12,18,24,31,36];
+const STR  = [3];
+
+function buildGrid(id, max, initSel, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = '';
+  for (let n = 1; n <= max; n++) {
+    const b = document.createElement('button');
+    b.className = 'num-btn' + (initSel.includes(n) ? ' ' + cls : '');
+    b.textContent = n;
+    b.addEventListener('click', function() {
+      this.classList.toggle(cls);
+      if (id === 'mainGrid') updateSelNums();
+    });
+    el.appendChild(b);
+  }
+}
+
+function updateSelNums() {
+  const btns = document.querySelectorAll('#mainGrid .num-btn.sel');
+  const nums = Array.from(btns).map(b => b.textContent).join(' · ');
+  document.getElementById('selNums').textContent = nums || '—';
+}
+
+function clearNums() {
+  document.querySelectorAll('#mainGrid .num-btn.sel').forEach(b => b.classList.remove('sel'));
+  document.querySelectorAll('#strongGrid .num-btn.str').forEach(b => b.classList.remove('str'));
+  document.getElementById('selNums').textContent = '—';
+}
+
+/* ── Subscription toggle ── */
+function toggleSub(el) {
+  const isOff = el.classList.toggle('off');
+  const badge = el.previousElementSibling;
+  badge.textContent = isOff ? 'מושהה' : 'פעיל';
+  badge.className = 'badge-sub ' + (isOff ? 'badge-off' : 'badge-on');
+}
+
+/* ── Swipe support ── */
+let tx = 0;
+document.getElementById('app').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+document.getElementById('app').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - tx;
+  if (Math.abs(dx) > 60) {
+    // RTL: swipe right = go forward (next), swipe left = go back (prev)
+    if (dx > 0 && cur < TOTAL) goTo(cur + 1);
+    if (dx < 0 && cur > 1)     goTo(cur - 1);
+  }
+}, { passive: true });
+
+/* ── Init ── */
+buildGrid('mainGrid',  37, SEL, 'sel');
+buildGrid('strongGrid', 7, STR, 'str');
+goTo(1);
+</script>
+</body>
+</html>
