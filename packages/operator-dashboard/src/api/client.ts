@@ -51,9 +51,13 @@ export interface QueueSlotWithOrder {
   createdAt: string;
   order: {
     gameType: string;
-    numbers: number[];
-    strongNumber: number | null;
     type: string;
+    drawNumber: number | null;
+    ticketType: 'regular' | 'double' | null;
+    systematicType: string | null;
+    /** True when the form must be keyed with Extra; the scan then needs the printed Extra digits. */
+    extra: boolean;
+    tables: Array<{ numbers: number[]; strongNumbers: number[] }>;
     /** Last 4 digits of the customer's ID number, for the prize form. Nothing else about the customer is sent. */
     idLast4: string | null;
   };
@@ -71,8 +75,10 @@ export async function doneSlot(slotId: string): Promise<QueueSlotWithOrder> {
   return api.post(`operator/queue/${slotId}/done`).json();
 }
 
-export async function uploadScan(slotId: string, file: File): Promise<{ scanned: boolean }> {
+export async function uploadScan(slotId: string, file: File, extraDigits?: string): Promise<{ scanned: boolean }> {
   const formData = new FormData();
+  // Text fields go before the file: the server reads them when it starts on the file
+  if (extraDigits) formData.append('extraDigits', extraDigits);
   formData.append('image', file);
   return api.post(`operator/queue/${slotId}/scan`, { body: formData }).json();
 }

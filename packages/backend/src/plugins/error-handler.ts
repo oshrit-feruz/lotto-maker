@@ -7,6 +7,7 @@ export class AppError extends Error {
     public readonly statusCode: number,
     public readonly code: string,
     message?: string,
+    public readonly details?: unknown,
   ) {
     super(message ?? code);
     this.name = 'AppError';
@@ -19,6 +20,7 @@ export default fp(async function errorHandler(app: FastifyInstance) {
       return reply.status(error.statusCode).send({
         error: error.code,
         message: error.message,
+        ...(error.details !== undefined ? { details: error.details } : {}),
       });
     }
 

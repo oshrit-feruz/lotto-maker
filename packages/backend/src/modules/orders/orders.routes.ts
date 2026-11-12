@@ -1,12 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createOrder, getOrders, getOrderById, getOrderScanUrl } from './orders.service.js';
+import { ticketBodySchema } from '../tickets/tickets.service.js';
+import { assertGameEnabled } from '../../lib/games.js';
 
+// Lotto only. Chance / 777 / 123 keep their code but new orders are blocked (403 GAME_NOT_AVAILABLE).
 const createOrderSchema = z.object({
-  gameType: z.enum(['lotto', 'chance', 'seven77', 'one23']),
-  numbers: z.array(z.number().int().positive()).min(1).max(10),
-  strongNumber: z.number().int().positive().optional(),
-  type: z.enum(['one_time', 'subscription']),
+  gameType: z.enum(['lotto', 'chance', 'seven77', 'one23']).default('lotto'),
+  ticket: ticketBodySchema,
+  type: z.enum(['one_time', 'subscription']).default('one_time'),
   subscriptionId: z.string().optional(),
 });
 
@@ -19,11 +21,10 @@ const listOrdersSchema = z.object({
 export default async function ordersRoutes(app: FastifyInstance) {
   app.post('/orders', { preHandler: [app.authenticate] }, async (request, reply) => {
     const body = createOrderSchema.parse(request.body);
+    assertGameEnabled(body.gameType);
     const result = await createOrder({
       userId: request.user.sub,
-      gameType: body.gameType,
-      numbers: body.numbers,
-      strongNumber: body.strongNumber,
+      ticket: body.ticket,
       type: body.type,
       subscriptionId: body.subscriptionId,
     });

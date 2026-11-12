@@ -1,3 +1,4 @@
+import { validateExtraDigits } from '@lotto-maker/shared';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import type { PrismaClient } from '@prisma/client';
@@ -42,9 +43,19 @@ export async function getQueue(locationId: string) {
       order: {
         select: {
           gameType: true,
-          numbers: true,
-          strongNumber: true,
           type: true,
+          draw: { select: { drawNumber: true } },
+          ticket: {
+            select: {
+              type: true,
+              systematicType: true,
+              extra: true,
+              tables: {
+                orderBy: { position: 'asc' },
+                select: { numbers: true, strongNumbers: true },
+              },
+            },
+          },
           user: { select: { idLast4: true } },
         },
       },
@@ -55,9 +66,12 @@ export async function getQueue(locationId: string) {
     ...slot,
     order: {
       gameType: order.gameType,
-      numbers: order.numbers,
-      strongNumber: order.strongNumber,
       type: order.type,
+      drawNumber: order.draw?.drawNumber ?? null,
+      ticketType: order.ticket?.type ?? null,
+      systematicType: order.ticket?.systematicType ?? null,
+      extra: order.ticket?.extra ?? false,
+      tables: order.ticket?.tables ?? [],
       idLast4: order.user.idLast4,
     },
   }));
@@ -75,7 +89,7 @@ async function loadSlotForOperator(slotId: string, operatorId: string) {
     prisma.operator.findUnique({ where: { id: operatorId } }),
     prisma.queueSlot.findUnique({
       where: { id: slotId },
-      include: { order: { select: { status: true, userId: true } } },
+      include: { order: { select: { status: true, userId: true, ticket: { select: { extra: true } } } } },
     }),
   ]);
 
@@ -173,10 +187,18 @@ export async function completeSlot(slotId: string, operatorId: string) {
  * the form has actually been keyed (slot done, order keyed). Call it before
  * uploading the file so a rejected request stores nothing.
  */
-export async function assertCanAttachScan(slotId: string, operatorId: string) {
+export async function assertCanAttachScan(
+  slotId: string,
+  operatorId: string,
+  /** When given, also checks the Extra digits the terminal printed (required if the ticket has Extra). */
+  extraDigits?: number[],
+) {
   const { slot } = await loadSlotForOperator(slotId, operatorId);
   if (slot.status !== 'done') throw new AppError(409, 'SLOT_NOT_KEYED', 'Scan is only allowed after the form was keyed');
   if (slot.order.status !== 'keyed') throw new AppError(409, 'ORDER_NOT_KEYED');
+  if (extraDigits !== undefined && slot.order.ticket?.extra && !validateExtraDigits(extraDigits)) {
+    throw new AppError(400, 'EXTRA_DIGITS_REQUIRED', 'Extra digits (6 digits, each 1-7) are required for this ticket');
+  }
   return slot;
 }
 
@@ -184,13 +206,20 @@ export async function attachScan(
   slotId: string,
   operatorId: string,
   scanKey: string,
+  /** The 6 Extra digits the terminal printed. Required when the ticket has Extra. */
+  extraDigits: number[] = [],
 ) {
-  const slot = await assertCanAttachScan(slotId, operatorId);
+  const slot = await assertCanAttachScan(slotId, operatorId, extraDigits);
 
   await prisma.$transaction(async (tx: Tx) => {
     const { count } = await tx.order.updateMany({
       where: { id: slot.orderId, status: 'keyed' },
-      data: { ticketScanKey: scanKey, status: 'scanned', scannedAt: new Date() },
+      data: {
+        ticketScanKey: scanKey,
+        status: 'scanned',
+        scannedAt: new Date(),
+        extraDigits: slot.order.ticket?.extra ? extraDigits : [],
+      },
     });
     if (count === 0) throw new AppError(409, 'ORDER_NOT_KEYED');
     await orderStatusChangeTx(tx, slot.orderId, 'keyed', 'scanned', operatorId, 'operator');

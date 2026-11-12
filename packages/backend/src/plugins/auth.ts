@@ -6,7 +6,7 @@ import { AppError } from './error-handler.js';
 export interface JwtPayload {
   sub: string;
   phone?: string;
-  type: 'user' | 'operator';
+  type: 'user' | 'operator' | 'admin';
 }
 
 // Augment @fastify/jwt to use our payload type
@@ -21,6 +21,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest) => Promise<void>;
     authenticateOperator: (request: FastifyRequest) => Promise<void>;
+    authenticateAdmin: (request: FastifyRequest) => Promise<void>;
   }
 }
 
@@ -41,7 +42,20 @@ export default fp(async function authPlugin(app: FastifyInstance) {
     }
   });
 
-  app.decorate('authenticateOperator', async (request: FastifyRequest) => {
+  // Admins are a separate role from operators: an operator token never passes here
+  app.decorate('authenticateAdmin', async (request: FastifyRequest) => {
+    try {
+      await request.jwtVerify();
+      if (request.user.type !== 'admin') {
+        throw new AppError(403, 'FORBIDDEN');
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw new AppError(401, 'UNAUTHORIZED');
+    }
+  });
+
+  app.decorate('authenticateOperator',async (request: FastifyRequest) => {
     try {
       // EventSource can't set headers — allow token via query param for SSE
       const query = request.query as Record<string, string>;

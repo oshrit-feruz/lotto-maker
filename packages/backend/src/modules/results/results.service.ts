@@ -1,33 +1,15 @@
 import { prisma } from '../../prisma.js';
 import type { GameType, DrawResult } from '@lotto-maker/shared';
-import { creditWinning, refund } from '../wallet/wallet.service.js';
+import { refund } from '../wallet/wallet.service.js';
 import { orderStatusChange } from '../../lib/audit-log.js';
-import {
-  fetchLatestForDate,
-  ScraperNetworkError,
-  ScraperValidationError,
-} from '../../services/results-scraper.js';
-import { notificationService, PAYLOADS } from '../../services/notifications.js';
+import { fetchLatestForDate } from '../../services/results-scraper.js';
 
 export type { DrawResult };
 
-// Minimum matches required for any prize, per game
-const MIN_MATCHES_FOR_WIN: Partial<Record<GameType, number>> = {
-  seven77: 3, // 777 (Keno): player picks 7, Pais draws 17; need ≥3 hits for smallest prize
-};
-
-function checkWin(
-  gameType: GameType,
-  orderNumbers: number[],
-  orderStrong: number | null,
-  result: DrawResult,
-): boolean {
-  const matchCount = orderNumbers.filter((n) => result.winningNumbers.includes(n)).length;
-  const strongMatch =
-    orderStrong !== null && orderStrong === (result.strongNumber ?? null);
-  const minMatches = MIN_MATCHES_FOR_WIN[gameType] ?? 2;
-  return matchCount >= minMatches || (matchCount >= 1 && strongMatch);
-}
+// Winnings are NOT decided here any more. The old checkWin (2 hits, or 1 + strong, credited the
+// whole price back) was wrong. Lotto is settled per draw by settlement.service.ts, and only after
+// an admin has confirmed the results. chance / 777 / 123 accept no new orders (ENABLED_GAMES) and
+// have no settlement until their prize rules are implemented.
 
 function drawDayBounds(drawDate: Date): { startOfDay: Date; endOfDay: Date } {
   const startOfDay = new Date(drawDate);
@@ -40,59 +22,6 @@ export async function fetchDrawResults(
   drawDate: Date,
 ): Promise<DrawResult | null> {
   return fetchLatestForDate(gameType, drawDate);
-}
-
-export async function processResults(gameType: GameType, drawDate: Date): Promise<void> {
-  const result = await fetchDrawResults(gameType, drawDate);
-  if (!result) return;
-
-  const { startOfDay, endOfDay } = drawDayBounds(drawDate);
-
-  const orders = await prisma.order.findMany({
-    where: { gameType, drawDate: { gte: startOfDay, lt: endOfDay }, status: 'scanned' },
-    select: { id: true, userId: true, numbers: true, strongNumber: true, totalCharged: true },
-  });
-
-  for (const order of orders) {
-    const numbers = order.numbers as number[];
-    const won = checkWin(gameType, numbers, order.strongNumber, result);
-    const newStatus = won ? 'won' : 'lost';
-
-    // Idempotency guard: only proceed if we own this transition (concurrent runs skip)
-    const { count } = await prisma.order.updateMany({
-      where: { id: order.id, status: 'scanned' },
-      data: { status: newStatus },
-    });
-    if (count === 0) continue;
-
-    await orderStatusChange(order.id, 'scanned', newStatus, 'system', 'system');
-
-    if (won) {
-      await creditWinning(order.userId, parseFloat(order.totalCharged.toString()), order.id);
-      notificationService
-        .sendToUser(order.userId, PAYLOADS.orderWon(order.totalCharged.toString()))
-        .catch(console.error);
-    } else {
-      notificationService
-        .sendToUser(order.userId, PAYLOADS.orderLost())
-        .catch(console.error);
-    }
-  }
-}
-
-export async function markResultsDelayed(gameType: GameType, drawDate: Date): Promise<void> {
-  const { startOfDay, endOfDay } = drawDayBounds(drawDate);
-
-  const orders = await prisma.order.findMany({
-    where: { gameType, drawDate: { gte: startOfDay, lt: endOfDay }, status: 'scanned' },
-    select: { id: true, userId: true },
-  });
-
-  for (const order of orders) {
-    await prisma.order.update({ where: { id: order.id }, data: { status: 'results_delayed' } });
-    await orderStatusChange(order.id, 'scanned', 'results_delayed', 'system', 'system');
-    notificationService.sendToUser(order.userId, PAYLOADS.resultsDelayed()).catch(console.error);
-  }
 }
 
 export async function cancelDraw(gameType: GameType, drawDate: Date): Promise<void> {
@@ -116,100 +45,5 @@ export async function cancelDraw(gameType: GameType, drawDate: Date): Promise<vo
       order.id,
       `ביטול הגרלה ${gameType}`,
     );
-  }
-}
-
-export async function processResultsWithRetry(
-  gameType: GameType,
-  drawDate: Date,
-  attemptsLeft = 3,
-): Promise<void> {
-  let result: DrawResult | null;
-
-  try {
-    result = await fetchDrawResults(gameType, drawDate);
-  } catch (err) {
-    if (err instanceof ScraperValidationError) {
-      // Malformed / unsupported game data — do not retry, do not mark delayed
-      console.error(
-        `[results] Scraper validation error for ${gameType}:`,
-        (err as Error).message,
-      );
-      return;
-    }
-    // Network error or other transient failure — retry
-    if (err instanceof ScraperNetworkError) {
-      console.warn(
-        `[results] Network error for ${gameType} (${attemptsLeft} attempt(s) left):`,
-        (err as Error).message,
-      );
-    }
-    if (attemptsLeft <= 1) {
-      await markResultsDelayed(gameType, drawDate);
-      return;
-    }
-    setTimeout(
-      () => void processResultsWithRetry(gameType, drawDate, attemptsLeft - 1),
-      5 * 60 * 1000,
-    );
-    return;
-  }
-
-  if (!result) {
-    // Scraper succeeded but results not yet published for this draw date
-    if (attemptsLeft <= 1) {
-      await markResultsDelayed(gameType, drawDate);
-      return;
-    }
-    setTimeout(
-      () => void processResultsWithRetry(gameType, drawDate, attemptsLeft - 1),
-      5 * 60 * 1000,
-    );
-    return;
-  }
-
-  const { startOfDay, endOfDay } = drawDayBounds(drawDate);
-
-  const orders = await prisma.order.findMany({
-    where: {
-      gameType,
-      drawDate: { gte: startOfDay, lt: endOfDay },
-      status: { in: ['scanned', 'results_delayed'] },
-    },
-    select: {
-      id: true,
-      userId: true,
-      numbers: true,
-      strongNumber: true,
-      totalCharged: true,
-      status: true,
-    },
-  });
-
-  for (const order of orders) {
-    const numbers = order.numbers as number[];
-    const won = checkWin(gameType, numbers, order.strongNumber, result);
-    const newStatus = won ? 'won' : 'lost';
-    const fromStatus = order.status as string;
-
-    // Idempotency guard: only proceed if we own this transition (concurrent runs skip)
-    const { count } = await prisma.order.updateMany({
-      where: { id: order.id, status: { in: ['scanned', 'results_delayed'] } },
-      data: { status: newStatus },
-    });
-    if (count === 0) continue;
-
-    await orderStatusChange(order.id, fromStatus, newStatus, 'system', 'system');
-
-    if (won) {
-      await creditWinning(order.userId, parseFloat(order.totalCharged.toString()), order.id);
-      notificationService
-        .sendToUser(order.userId, PAYLOADS.orderWon(order.totalCharged.toString()))
-        .catch(console.error);
-    } else {
-      notificationService
-        .sendToUser(order.userId, PAYLOADS.orderLost())
-        .catch(console.error);
-    }
   }
 }

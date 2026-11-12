@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { GAME_DISPLAY_NAMES, GAME_BASE_PRICE, SERVICE_FEE } from '@lotto-maker/shared';
+import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
 import type { GameType } from '@lotto-maker/shared';
 import { drawsApi } from '../../api/client.js';
 import type { UpcomingDraw } from '../../api/client.js';
@@ -42,7 +42,8 @@ interface Props {
 }
 
 export function GameSelectScreen({ onSelect }: Props) {
-  const games: GameType[] = ['lotto', 'chance', 'seven77', 'one23'];
+  // Lotto only: the other games are blocked on the server (ENABLED_GAMES=lotto)
+  const games: GameType[] = ['lotto'];
   const [upcoming, setUpcoming] = useState<UpcomingDraw[]>([]);
   const [loadingDraws, setLoadingDraws] = useState(true);
   const [now, setNow] = useState(Date.now());
@@ -70,13 +71,12 @@ export function GameSelectScreen({ onSelect }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>בחר משחק</Text>
-      <Text style={styles.subtitle}>ההגרלות מתקיימות שלושה פעמים בשבוע</Text>
+      <Text style={styles.subtitle}>הגרלות בימי שלישי ושבת, ולעיתים גם ביום נוסף</Text>
       {games.map((game) => {
         const draw = upcoming.find((u) => u.gameType === game);
         const color = GAME_COLORS[game];
         const isOpen = draw ? now < new Date(draw.hardCutoff).getTime() : false;
         const msUntilDraw = draw ? new Date(draw.drawTime).getTime() - now : 0;
-        const price = GAME_BASE_PRICE[game] + SERVICE_FEE;
 
         return (
           <TouchableOpacity
@@ -118,10 +118,9 @@ export function GameSelectScreen({ onSelect }: Props) {
               )}
             </View>
 
-            {/* Price */}
+            {/* Price: depends on the tables chosen, shown live on the ticket screen */}
             <View style={styles.cardFooter}>
-              <Text style={styles.priceLabel}>עלות טופס</Text>
-              <Text style={[styles.price, { color }]}>₪{price.toFixed(1)}</Text>
+              <Text style={styles.priceLabel}>המחיר מחושב לפי מספר הטבלאות</Text>
             </View>
           </TouchableOpacity>
         );

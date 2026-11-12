@@ -19,6 +19,12 @@ export const PAYLOADS = {
     data: { type: 'ORDER_WON' },
   }),
 
+  prizeClaim: (winAmount: string): NotificationPayload => ({
+    title: 'זכית בפרס גדול! 🎉',
+    body: `זכית ב-₪${winAmount}. את הפרס אוספים בהצגת טופס המקור ותעודת זהות.`,
+    data: { type: 'PRIZE_CLAIM' },
+  }),
+
   orderLost: (): NotificationPayload => ({
     title: 'תוצאות הגרלה',
     body: 'לא הייתה זכייה הפעם. בהצלחה בפעם הבאה!',

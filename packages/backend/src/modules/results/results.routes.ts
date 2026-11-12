@@ -3,6 +3,8 @@ import { fetchDrawResults } from './results.service.js';
 import { resultsScraper, ScraperNetworkError, ScraperValidationError } from '../../services/results-scraper.js';
 import { getNextDrawInfo } from '../../lib/draw-schedule.js';
 import type { GameType } from '@lotto-maker/shared';
+import { cutoffsOf, getOpenDraws } from '../../lib/draws.js';
+import { isGameEnabled } from '../../lib/games.js';
 
 const VALID_GAMES = ['lotto', 'chance', 'seven77', 'one23'] as const;
 
@@ -34,14 +36,29 @@ export default async function resultsRoutes(app: FastifyInstance) {
   // Upcoming draw times and cutoffs for all games (public, no auth)
   app.get('/draws/upcoming', async (_request, reply) => {
     const now = new Date();
-    const upcoming = VALID_GAMES.map((gameType) => {
+    const upcoming = [];
+    for (const gameType of VALID_GAMES) {
+      if (!isGameEnabled(gameType)) continue;
+      if (gameType === 'lotto') {
+        // Lotto draws and cutoffs come from the Draw table (synced from pais.co.il)
+        for (const draw of await getOpenDraws(3, now)) {
+          upcoming.push({
+            gameType,
+            drawNumber: draw.drawNumber,
+            drawTime: draw.drawAt.toISOString(),
+            salesCloseAt: draw.salesCloseAt.toISOString(),
+            hardCutoff: cutoffsOf(draw).hardCutoff.toISOString(),
+          });
+        }
+        continue;
+      }
       const { drawTime, hardCutoff } = getNextDrawInfo(gameType, now);
-      return {
+      upcoming.push({
         gameType,
         drawTime: drawTime.toISOString(),
         hardCutoff: hardCutoff.toISOString(),
-      };
-    });
+      });
+    }
     return reply.send(upcoming);
   });
 

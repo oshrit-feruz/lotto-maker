@@ -1,14 +1,14 @@
 import { create } from 'zustand';
-import type { GameType } from '@lotto-maker/shared';
+import type { TicketPayload } from '../api/client.js';
 
+/** A lotto ticket waiting in the cart. Prices come from /tickets/calculate; nothing is hard-coded. */
 export interface CartItem {
   id: string;
-  gameType: GameType;
-  numbers: number[];
-  strongNumber?: number;
+  ticket: TicketPayload;
   type: 'one_time' | 'subscription';
-  subscriptionDays?: string[];
+  /** Pais price for all draws of this ticket. */
   price: number;
+  /** Our fee for all draws of this ticket. */
   fee: number;
 }
 

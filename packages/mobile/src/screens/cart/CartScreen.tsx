@@ -5,7 +5,7 @@ import {
 import { useCartStore } from '../../store/cart.store.js';
 import { useAuthStore } from '../../store/auth.store.js';
 import { ordersApi, walletApi } from '../../api/client.js';
-import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
+import { TICKET_TYPE_LABELS } from '@lotto-maker/shared';
 
 interface Props {
   onOrderPlaced: () => void;
@@ -33,12 +33,7 @@ export function CartScreen({ onOrderPlaced }: Props) {
     setLoading(true);
     try {
       for (const item of items) {
-        await ordersApi.create({
-          gameType: item.gameType,
-          numbers: item.numbers,
-          strongNumber: item.strongNumber,
-          type: item.type,
-        });
+        await ordersApi.create({ gameType: 'lotto', ticket: item.ticket, type: item.type });
       }
       const { balance } = await walletApi.getBalance();
       updateUser({ walletBalance: balance });
@@ -51,6 +46,10 @@ export function CartScreen({ onOrderPlaced }: Props) {
         Alert.alert('התור מלא', 'הגענו לקיבולת לערב זה. נסה להזמין מוקדם יותר בפעם הבאה.');
       } else if (e.code === 'CUTOFF_PASSED') {
         Alert.alert('מאוחר מדי', 'ההגרלה הסגירה הזמנות. נסה להגרלה הבאה.');
+      } else if (e.code === 'NOT_ENOUGH_DRAWS') {
+        Alert.alert('מספר ההגרלות גדול מדי', 'עדיין לא פורסמו מספיק הגרלות קרובות. הקטן את מספר ההגרלות.');
+      } else if (e.code === 'GAME_NOT_AVAILABLE') {
+        Alert.alert('המשחק אינו זמין', 'המשחק הזה אינו זמין כרגע להזמנה.');
       } else {
         Alert.alert('שגיאה', 'ההזמנה נכשלה. נסה שנית.');
       }
@@ -75,11 +74,13 @@ export function CartScreen({ onOrderPlaced }: Props) {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <View style={styles.rowLeft}>
-              <Text style={styles.gameName}>{GAME_DISPLAY_NAMES[item.gameType]}</Text>
-              <Text style={styles.numbers}>{item.numbers.join(', ')}{item.strongNumber ? ` | ${item.strongNumber}` : ''}</Text>
+              <Text style={styles.gameName}>{TICKET_TYPE_LABELS[item.ticket.type]}{item.ticket.extra ? ' + Extra' : ''}</Text>
+              <Text style={styles.numbers}>
+                {item.ticket.tables.length} טבלאות · {item.ticket.drawCount} הגרלות
+              </Text>
             </View>
             <View style={styles.rowRight}>
-              <Text style={styles.itemPrice}>₪{(item.price + item.fee).toFixed(1)}</Text>
+              <Text style={styles.itemPrice}>₪{(item.price + item.fee).toFixed(2)}</Text>
               <TouchableOpacity onPress={() => removeItem(item.id)}>
                 <Text style={styles.remove}>הסר</Text>
               </TouchableOpacity>

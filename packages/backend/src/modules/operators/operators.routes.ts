@@ -60,6 +60,13 @@ export default async function operatorsRoutes(app: FastifyInstance) {
     }
     if (data.file.truncated) throw tooLarge();
 
+    // Extra digits printed by the terminal, sent as a text field before the file (e.g. "123456")
+    const extraField = data.fields['extraDigits'] as { value?: unknown } | undefined;
+    const extraText = typeof extraField?.value === 'string' ? extraField.value.trim() : '';
+    const extraDigits = extraText ? extraText.split('').map(Number) : [];
+    // Reject before storing anything
+    await assertCanAttachScan(slotId, request.user.sub, extraDigits);
+
     // Trust the bytes, not the client's mimetype or filename
     const type = detectScanType(buffer);
     if (!type) {
@@ -69,7 +76,7 @@ export default async function operatorsRoutes(app: FastifyInstance) {
     const key = `scans/${slotId}-${Date.now()}.${type.ext}`;
     const scanKey = await r2Service.upload(key, buffer, type.contentType);
 
-    const result = await attachScan(slotId, request.user.sub, scanKey);
+    const result = await attachScan(slotId, request.user.sub, scanKey, extraDigits);
     return reply.send(result);
   });
 
