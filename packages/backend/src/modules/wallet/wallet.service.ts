@@ -259,6 +259,20 @@ export async function getBalance(userId: string): Promise<number> {
   return parseFloat(user.walletBalance.toString());
 }
 
+// Fixed Hebrew descriptions for the types whose stored text varies or is internal.
+// A prize is stored as type `winning`.
+const TYPE_DESCRIPTIONS: Partial<Record<string, string>> = {
+  withdrawal_hold: 'בקשת משיכה',
+  withdrawal_release: 'ביטול משיכה',
+  winning: 'זכייה',
+  refund_reversal: 'ביטול הפקדה',
+};
+
+/** The text shown in the wallet history: the fixed description of the type, else the stored one. */
+export function describeTransaction(type: string, stored: string): string {
+  return TYPE_DESCRIPTIONS[type] ?? stored;
+}
+
 export async function getTransactions(userId: string, page: number, limit: number) {
   const skip = (page - 1) * limit;
   const [data, total] = await Promise.all([
@@ -270,5 +284,10 @@ export async function getTransactions(userId: string, page: number, limit: numbe
     }),
     prisma.walletTransaction.count({ where: { userId } }),
   ]);
-  return { data, total, page, limit };
+  return {
+    data: data.map((t) => ({ ...t, description: describeTransaction(t.type, t.description) })),
+    total,
+    page,
+    limit,
+  };
 }
