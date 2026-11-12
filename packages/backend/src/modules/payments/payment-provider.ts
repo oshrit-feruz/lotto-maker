@@ -9,6 +9,11 @@ export interface CheckoutSession {
   paymentId: string;
 }
 
+export interface CheckoutReturnUrls {
+  successUrl?: string;
+  cancelUrl?: string;
+}
+
 export interface WebhookEvent {
   providerTxId: string;
   status: ProviderPaymentStatus;
@@ -30,7 +35,11 @@ export interface CardCreditResult {
  */
 export interface PaymentProvider {
   readonly name: string;
-  createCheckout(userId: string, amount: number): Promise<CheckoutSession>;
+  /**
+   * `returnUrls` (already checked against CHECKOUT_RETURN_ORIGINS) is where the hosted page sends
+   * the user after paying or cancelling. A provider without per-payment return URLs may ignore it.
+   */
+  createCheckout(userId: string, amount: number, returnUrls?: CheckoutReturnUrls): Promise<CheckoutSession>;
   /** Must throw AppError(401, 'INVALID_WEBHOOK_SIGNATURE') if the signature does not verify. */
   verifyWebhook(rawBody: Buffer, headers: IncomingHttpHeaders): Promise<WebhookEvent>;
   refund(providerTxId: string, amount: number): Promise<void>;

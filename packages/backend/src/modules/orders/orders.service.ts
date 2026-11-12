@@ -11,6 +11,7 @@ import { cutoffsOf, getOpenDraws } from '../../lib/draws.js';
 import { assertCanPlaceOrder } from '../limits/limits.service.js';
 import { issueReceiptsInBackground } from '../receipts/receipts.service.js';
 import { assertValidTicket } from '../tickets/tickets.service.js';
+import { ticketFingerprint } from '@lotto-maker/shared';
 import type { TicketBody } from '../tickets/tickets.service.js';
 import { r2Service, DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../storage/r2.service.js';
 
@@ -25,12 +26,71 @@ export interface CreateOrderParams {
   ticket: TicketBody;
   type: 'one_time' | 'subscription';
   subscriptionId?: string;
+  /** Idempotency-Key header. A repeat for the same user returns the first result and charges nothing. */
+  idempotencyKey?: string;
+}
+
+/** Same content as the ticket that was bought with this key? Otherwise the key is being reused. */
+function sameTicket(
+  stored: { type: string; systematicType: string | null; extra: boolean; drawCount: number; tables: Array<{ numbers: number[]; strongNumbers: number[] }> },
+  ticket: TicketBody,
+): boolean {
+  return (
+    stored.type === ticket.type &&
+    stored.extra === ticket.extra &&
+    stored.drawCount === ticket.drawCount &&
+    ticketFingerprint(stored.tables, stored.systematicType) === ticketFingerprint(ticket.tables, ticket.systematicType)
+  );
+}
+
+/** The response of the order that was created with this key, or null if there is none. */
+async function findIdempotentOrder(userId: string, idempotencyKey: string, ticket: TicketBody) {
+  const stored = await prisma.ticket.findUnique({
+    where: { userId_idempotencyKey: { userId, idempotencyKey } },
+    include: {
+      tables: true,
+      orders: { include: { draw: { select: { drawNumber: true, drawAt: true, salesCloseAt: true } } } },
+    },
+  });
+  if (!stored) return null;
+  if (!sameTicket(stored, ticket)) {
+    throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'This Idempotency-Key was used for a different ticket');
+  }
+  const orders = [...stored.orders]
+    .filter((o) => o.draw)
+    .sort((a, b) => a.draw!.drawAt.getTime() - b.draw!.drawAt.getTime())
+    .map((o) => ({ order: o, draw: o.draw!, cutoffs: cutoffsOf(o.draw!) }));
+  const first = orders[0];
+  if (!first) return null;
+  const total = orders.reduce((sum, o) => sum.plus(o.order.totalCharged.toString()), new Decimal(0));
+  return {
+    ticketId: stored.id,
+    orderId: first.order.id,
+    status: first.order.status,
+    totalCharged: total.toFixed(2),
+    drawTime: first.draw.drawAt,
+    visibleCutoff: first.cutoffs.visibleCutoff,
+    orders: orders.map((o) => ({
+      orderId: o.order.id,
+      drawNumber: o.draw.drawNumber,
+      drawAt: o.draw.drawAt,
+      visibleCutoff: o.cutoffs.visibleCutoff,
+    })),
+    /** True when this is a repeat of an earlier request with the same Idempotency-Key. */
+    replayed: true,
+  };
 }
 
 export async function createOrder(params: CreateOrderParams) {
-  const { userId, ticket, type, subscriptionId } = params;
+  const { userId, ticket, type, subscriptionId, idempotencyKey } = params;
 
   assertGameEnabled('lotto');
+
+  // A repeat is answered before any other check: the draw may have closed since the first try.
+  if (idempotencyKey) {
+    const previous = await findIdempotentOrder(userId, idempotencyKey, ticket);
+    if (previous) return previous;
+  }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   if (!user.verifiedAdult) {
@@ -88,111 +148,122 @@ export async function createOrder(params: CreateOrderParams) {
   // Self-exclusion (403 SELF_EXCLUDED) and the monthly loss limit (422 LOSS_LIMIT)
   await assertCanPlaceOrder(userId, grandTotal);
 
-  const created = await prisma.$transaction(
-    async (tx: Tx) => {
-      // Advisory lock scoped to transaction — prevents concurrent circuit-breaker accepts
-      // $executeRaw, not $queryRaw: the function returns void, which Prisma cannot deserialize
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.id}::text))`;
+  let created;
+  try {
+    created = await prisma.$transaction(
+      async (tx: Tx) => {
+        // Advisory lock scoped to transaction — prevents concurrent circuit-breaker accepts
+        // $executeRaw, not $queryRaw: the function returns void, which Prisma cannot deserialize
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.id}::text))`;
 
-      const rows = await tx.$queryRaw<Array<{ walletBalance: string }>>`
-        SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
-      `;
-      const u = rows[0];
-      if (!u) throw new AppError(404, 'USER_NOT_FOUND');
-      if (new Decimal(u.walletBalance).lessThan(grandTotal)) {
-        throw new AppError(402, 'INSUFFICIENT_BALANCE');
-      }
+        const rows = await tx.$queryRaw<Array<{ walletBalance: string }>>`
+          SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
+        `;
+        const u = rows[0];
+        if (!u) throw new AppError(404, 'USER_NOT_FOUND');
+        if (new Decimal(u.walletBalance).lessThan(grandTotal)) {
+          throw new AppError(402, 'INSUFFICIENT_BALANCE');
+        }
 
-      await tx.user.update({
-        where: { id: userId },
-        data: { walletBalance: { decrement: grandTotal.toFixed(2) } },
-      });
+        await tx.user.update({
+          where: { id: userId },
+          data: { walletBalance: { decrement: grandTotal.toFixed(2) } },
+        });
 
-      const newTicket = await tx.ticket.create({
-        data: {
-          userId,
-          type: ticket.type,
-          systematicType: ticket.systematicType,
-          extra: ticket.extra,
-          drawCount: ticket.drawCount,
-          tables: {
-            create: ticket.tables.map((t, position) => ({
-              position,
-              numbers: t.numbers,
-              strongNumbers: t.strongNumbers,
-            })),
-          },
-        },
-      });
-
-      const orders: Array<{ orderId: string; drawNumber: number; drawAt: Date; hardCutoff: Date; visibleCutoff: Date }> = [];
-
-      for (const draw of draws) {
-        const { hardCutoff, visibleCutoff } = cutoffsOf(draw);
-        const drawMinutesLeft = Math.floor((hardCutoff.getTime() - Date.now()) / 60000);
-        const priority = (type === 'subscription' ? SUBSCRIPTION_PRIORITY : ONE_TIME_PRIORITY)
-          + Math.max(0, 200 - drawMinutesLeft);
-
-        const newOrder = await tx.order.create({
+        const newTicket = await tx.ticket.create({
           data: {
             userId,
-            subscriptionId: subscriptionId ?? null,
-            gameType: 'lotto',
-            ticketId: newTicket.id,
-            drawId: draw.id,
-            drawDate: draw.drawAt,
-            drawTime: draw.drawAt,
-            type,
-            status: 'in_queue',
-            price: orderPrice.toFixed(2),
-            fee: orderFee.toFixed(2),
-            totalCharged: orderTotal.toFixed(2),
+            type: ticket.type,
+            systematicType: ticket.systematicType,
+            extra: ticket.extra,
+            drawCount: ticket.drawCount,
+            idempotencyKey: idempotencyKey ?? null,
+            tables: {
+              create: ticket.tables.map((t, position) => ({
+                position,
+                numbers: t.numbers,
+                strongNumbers: t.strongNumbers,
+              })),
+            },
           },
         });
 
-        const walletTx = await tx.walletTransaction.create({
-          data: {
-            userId,
-            type: 'charge',
-            amount: orderTotal.toFixed(2),
+        const orders: Array<{ orderId: string; drawNumber: number; drawAt: Date; hardCutoff: Date; visibleCutoff: Date }> = [];
+
+        for (const draw of draws) {
+          const { hardCutoff, visibleCutoff } = cutoffsOf(draw);
+          const drawMinutesLeft = Math.floor((hardCutoff.getTime() - Date.now()) / 60000);
+          const priority = (type === 'subscription' ? SUBSCRIPTION_PRIORITY : ONE_TIME_PRIORITY)
+            + Math.max(0, 200 - drawMinutesLeft);
+
+          const newOrder = await tx.order.create({
+            data: {
+              userId,
+              subscriptionId: subscriptionId ?? null,
+              gameType: 'lotto',
+              ticketId: newTicket.id,
+              drawId: draw.id,
+              drawDate: draw.drawAt,
+              drawTime: draw.drawAt,
+              type,
+              status: 'in_queue',
+              price: orderPrice.toFixed(2),
+              fee: orderFee.toFixed(2),
+              totalCharged: orderTotal.toFixed(2),
+            },
+          });
+
+          const walletTx = await tx.walletTransaction.create({
+            data: {
+              userId,
+              type: 'charge',
+              amount: orderTotal.toFixed(2),
+              orderId: newOrder.id,
+              description: `הזמנת לוטו ${draw.drawNumber}`,
+            },
+          });
+
+          // Same audit entry walletService.charge writes, inside the charging transaction
+          await writeAuditLogTx(tx, {
+            entityType: 'wallet',
+            entityId: userId,
+            action: 'wallet:charge',
+            actorId: userId,
+            actorType: 'user',
+            metadata: { amount: orderTotal.toFixed(2), transactionId: walletTx.id },
+          });
+
+          await tx.queueSlot.create({
+            data: {
+              orderId: newOrder.id,
+              locationId: location.id,
+              priority,
+              deadline: hardCutoff,
+              status: 'waiting',
+            },
+          });
+
+          orders.push({
             orderId: newOrder.id,
-            description: `הזמנת לוטו ${draw.drawNumber}`,
-          },
-        });
+            drawNumber: draw.drawNumber,
+            drawAt: draw.drawAt,
+            hardCutoff,
+            visibleCutoff,
+          });
+        }
 
-        // Same audit entry walletService.charge writes, inside the charging transaction
-        await writeAuditLogTx(tx, {
-          entityType: 'wallet',
-          entityId: userId,
-          action: 'wallet:charge',
-          actorId: userId,
-          actorType: 'user',
-          metadata: { amount: orderTotal.toFixed(2), transactionId: walletTx.id },
-        });
-
-        await tx.queueSlot.create({
-          data: {
-            orderId: newOrder.id,
-            locationId: location.id,
-            priority,
-            deadline: hardCutoff,
-            status: 'waiting',
-          },
-        });
-
-        orders.push({
-          orderId: newOrder.id,
-          drawNumber: draw.drawNumber,
-          drawAt: draw.drawAt,
-          hardCutoff,
-          visibleCutoff,
-        });
-      }
-
-      return { ticketId: newTicket.id, orders };
-    },
-    { isolationLevel: 'Serializable' },
-  );
+        return { ticketId: newTicket.id, orders };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  } catch (err) {
+    // A concurrent request with the same key won the unique index: answer with its order
+    if (idempotencyKey && (err as { code?: string }).code === 'P2002') {
+      const previous = await findIdempotentOrder(userId, idempotencyKey, ticket);
+      if (previous) return previous;
+    }
+    throw err;
+  }
 
   for (const o of created.orders) {
     await orderStatusChange(o.orderId, 'pending', 'in_queue', userId, 'user');
@@ -216,6 +287,7 @@ export async function createOrder(params: CreateOrderParams) {
       drawAt: o.drawAt,
       visibleCutoff: o.visibleCutoff,
     })),
+    replayed: false,
   };
 }
 

@@ -3,7 +3,13 @@ import type { IncomingHttpHeaders } from 'node:http';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { AppError } from '../../plugins/error-handler.js';
-import type { CardCreditResult, CheckoutSession, PaymentProvider, WebhookEvent } from './payment-provider.js';
+import type {
+  CardCreditResult,
+  CheckoutReturnUrls,
+  CheckoutSession,
+  PaymentProvider,
+  WebhookEvent,
+} from './payment-provider.js';
 
 export const MOCK_SIGNATURE_HEADER = 'x-mock-signature';
 
@@ -26,9 +32,13 @@ export class MockPaymentProvider implements PaymentProvider {
     private readonly baseUrl: string,
   ) {}
 
-  async createCheckout(_userId: string, _amount: number): Promise<CheckoutSession> {
+  /** The mock just carries the return URLs on its hosted-page link; the page links back to them. */
+  async createCheckout(_userId: string, _amount: number, returnUrls: CheckoutReturnUrls = {}): Promise<CheckoutSession> {
     const paymentId = `mock_${nanoid(24)}`;
-    return { paymentId, checkoutUrl: `${this.baseUrl}/payments/mock-checkout/${paymentId}` };
+    const url = new URL(`${this.baseUrl}/payments/mock-checkout/${paymentId}`);
+    if (returnUrls.successUrl) url.searchParams.set('successUrl', returnUrls.successUrl);
+    if (returnUrls.cancelUrl) url.searchParams.set('cancelUrl', returnUrls.cancelUrl);
+    return { paymentId, checkoutUrl: url.toString() };
   }
 
   sign(rawBody: Buffer | string): string {

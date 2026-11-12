@@ -15,6 +15,7 @@ import ordersRoutes from './modules/orders/orders.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
 import prizeClaimsRoutes from './modules/prize-claims/prize-claims.routes.js';
 import adminMoneyRoutes from './modules/admin/admin-money.routes.js';
+import adminUsersRoutes from './modules/admin/admin-users.routes.js';
 import ticketsRoutes from './modules/tickets/tickets.routes.js';
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes.js';
 import operatorsRoutes from './modules/operators/operators.routes.js';
@@ -46,6 +47,7 @@ export async function buildApp() {
   await app.register(ticketsRoutes);
   await app.register(adminRoutes);
   await app.register(adminMoneyRoutes);
+  await app.register(adminUsersRoutes);
   await app.register(prizeClaimsRoutes);
   await app.register(subscriptionsRoutes);
   await app.register(operatorsRoutes);

@@ -73,6 +73,25 @@ const envSchema = z.object({
   BUSINESS_NAME: z.string().default(''),
   BUSINESS_ID: z.string().default(''),
   BUSINESS_ADDRESS: z.string().default(''),
+  // Origins the hosted checkout may send the user back to (successUrl / cancelUrl), comma-separated,
+  // e.g. "https://lotto.example,http://localhost:5173". Empty: return URLs are refused.
+  CHECKOUT_RETURN_ORIGINS: z
+    .string()
+    .default('')
+    .transform((v, ctx) =>
+      v
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+        .map((o) => {
+          try {
+            return new URL(o).origin;
+          } catch {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: `not an origin: ${o}` });
+            return z.NEVER;
+          }
+        }),
+    ),
   // Public base URL of this API, used to build hosted-checkout links.
   PUBLIC_API_URL: z.string().url().optional(),
   // AES-256-GCM key for ID numbers at rest. Losing it makes stored IDs unreadable.
