@@ -117,8 +117,10 @@ export function parseCurrentLotto(html: string): ParsedLottoDraw {
   }
 
   const extraDigits = intsFrom($(SELECTORS.extraDigits).map((_i, el) => $(el).text()).get());
+  // Read before the guard: validateExtraDigits is a type predicate, so extraDigits is `never` in the false branch.
+  const extraDigitsText = extraDigits.join(',');
   if (!validateExtraDigits(extraDigits)) {
-    throw new PaisParseError(`expected ${EXTRA_DIGIT_COUNT} Extra digits 1-7, got [${extraDigits.join(',')}]`);
+    throw new PaisParseError(`expected ${EXTRA_DIGIT_COUNT} Extra digits 1-7, got [${extraDigitsText}]`);
   }
 
   const prizeTiers: ParsedPrizeTier[] = [];
