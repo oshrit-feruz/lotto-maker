@@ -235,16 +235,17 @@ export async function creditPrizeTx(
       where: { id: userId },
       data: { walletBalance: { increment: credited.toFixed(2) } },
     });
-    const walletTx = await tx.walletTransaction.create({
+    await tx.walletTransaction.create({
       data: { userId, type: 'winning', amount: credited.toFixed(2), orderId, description: 'זכייה' },
     });
+    // The wallet transaction is identified by (orderId, type 'winning'); its row is not read back
     await writeAuditLogTx(tx, {
       entityType: 'wallet',
       entityId: userId,
       action: 'wallet:winning',
       actorId: 'system',
       actorType: 'system',
-      metadata: { amount: credited.toFixed(2), orderId, transactionId: walletTx.id },
+      metadata: { amount: credited.toFixed(2), orderId },
     });
   }
   return { credited, excess };

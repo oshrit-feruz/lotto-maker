@@ -4,7 +4,7 @@ import { computeOrderPrice } from '../../src/lib/pricing.js';
 
 const regular = {
   pricePerTable: new Decimal('3.00'),
-  extraPricePerTable: null,
+  extraPricePerForm: null,
   feePerOrder: new Decimal('2.50'),
 };
 const double = { ...regular, pricePerTable: new Decimal('6.00') };
@@ -41,10 +41,12 @@ describe('computeOrderPrice', () => {
       /Extra price/,
     );
   });
-  it('prices Extra per table when configured', () => {
-    const row = { ...regular, extraPricePerTable: new Decimal('1.00') };
+  it('prices Extra once per form (6 ₪), not per table', () => {
+    const row = { ...regular, extraPricePerForm: new Decimal('6.00') };
     const p = computeOrderPrice({ tables: tables(4), systematicType: null, extra: true }, row);
-    expect(p.extraPrice).toBe('4.00');
-    expect(p.total).toBe('18.50');
+    expect(p.extraPrice).toBe('6.00');
+    expect(p.total).toBe('20.50');
+    const p2 = computeOrderPrice({ tables: tables(10), systematicType: null, extra: true }, row);
+    expect(p2.extraPrice).toBe('6.00');
   });
 });

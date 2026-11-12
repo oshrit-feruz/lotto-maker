@@ -168,6 +168,19 @@ describe('settleDraw', () => {
     expect(h.state.draw.status).toBe('settled');
   });
 
+  it('a hit on a tier with a 0 ₪ prize is never paid as 0: the order waits and the draw is flagged', async () => {
+    h.state.draw = { ...makeDraw('results_confirmed'), prizeTiers: [tier('lotto', '3', 0)] };
+    h.state.orders = [makeOrder('z1', 'u1', [4, 11, 19, 1, 2, 3], 1)]; // 3 hits -> tier "3", prize 0
+    const res = await settleDraw('draw1');
+    expect(res.settled).toBe(false);
+    expect(h.state.orders[0].status).toBe('scanned');
+    expect(h.state.wins).toHaveLength(0);
+    expect(balance('u1')).toBe(100);
+    expect(h.state.draw.status).toBe('results_confirmed');
+    expect(h.state.draw.needsAttention).toBe(true);
+    expect(h.state.draw.attentionReason).toContain('lotto:3');
+  });
+
   it('running twice credits nothing extra', async () => {
     h.state.draw = makeDraw('results_confirmed');
     await settleDraw('draw1');

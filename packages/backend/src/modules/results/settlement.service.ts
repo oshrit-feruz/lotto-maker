@@ -34,6 +34,8 @@ export interface SettlementDraw {
 
 export type OrderOutcome =
   | { kind: 'skipped' }
+  /** The ticket hit a tier with no prize amount on the draw. Left unsettled for an admin. */
+  | { kind: 'needs_attention'; tiers: string[] }
   | { kind: 'lost' }
   | { kind: 'won_wallet'; total: Decimal }
   | { kind: 'won_claim'; total: Decimal };
@@ -59,6 +61,7 @@ export async function settleOrderTx(
   prizes: PrizeTable,
 ): Promise<OrderOutcome> {
   let lines: WinLine[] = [];
+  const unpriced = new Set<string>();
   if (order.ticket && draw.strong !== null) {
     lines = scoreOrder(
       {
@@ -70,8 +73,11 @@ export async function settleOrderTx(
       },
       { numbers: draw.numbers, strong: draw.strong, extraDigits: draw.extraDigits },
       prizes,
+      (game, tier) => unpriced.add(`${game}:${tier}`),
     );
   }
+  // Never pay 0 for a hit: leave the order as it is (no writes) and flag the draw
+  if (unpriced.size > 0) return { kind: 'needs_attention', tiers: [...unpriced] };
   const total = totalOf(lines);
   const won = total.gt(0);
 
@@ -142,6 +148,7 @@ export async function settleDraw(drawId: string): Promise<{ settled: boolean; pr
 
   let processed = 0;
   let failed = 0;
+  const attention = new Set<string>();
   for (const order of orders) {
     let outcome: OrderOutcome;
     try {
@@ -152,6 +159,10 @@ export async function settleDraw(drawId: string): Promise<{ settled: boolean; pr
       continue;
     }
     if (outcome.kind === 'skipped') continue;
+    if (outcome.kind === 'needs_attention') {
+      outcome.tiers.forEach((t) => attention.add(t));
+      continue;
+    }
     processed++;
 
     if (outcome.kind === 'lost') {
@@ -166,9 +177,20 @@ export async function settleDraw(drawId: string): Promise<{ settled: boolean; pr
   // A failed order keeps the draw open: the next run retries it
   if (failed > 0) return { settled: false, processed };
 
+  // A hit on a tier without a prize amount keeps the draw open and flags it for the admin
+  if (attention.size > 0) {
+    const reason = `tickets hit tiers with no prize amount: ${[...attention].join(', ')}`;
+    await prisma.draw.updateMany({
+      where: { id: drawId, status: 'results_confirmed' },
+      data: { needsAttention: true, attentionReason: reason },
+    });
+    console.error(`[settlement] draw ${drawId} needs admin attention: ${reason}`);
+    return { settled: false, processed };
+  }
+
   const { count } = await prisma.draw.updateMany({
     where: { id: drawId, status: 'results_confirmed' },
-    data: { status: 'settled', settledAt: new Date() },
+    data: { status: 'settled', settledAt: new Date(), needsAttention: false, attentionReason: null },
   });
   if (count > 0) {
     await writeAuditLog({

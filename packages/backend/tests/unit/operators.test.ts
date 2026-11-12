@@ -266,9 +266,17 @@ describe('getQueue payload', () => {
         deadline: new Date('2026-01-01T10:00:00Z'),
         order: {
           gameType: 'lotto',
-          numbers: [1, 2, 3, 4, 5, 6],
-          strongNumber: 3,
           type: 'one_time',
+          draw: { drawNumber: 3984 },
+          ticket: {
+            type: 'regular',
+            systematicType: null,
+            extra: true,
+            tables: [
+              { numbers: [1, 2, 3, 4, 5, 6], strongNumbers: [3] },
+              { numbers: [7, 8, 9, 10, 11, 12], strongNumbers: [4] },
+            ],
+          },
           user: { idLast4: '6782' },
         },
       },
@@ -277,9 +285,15 @@ describe('getQueue payload', () => {
     const { slots } = await getQueue('loc-A');
     expect(slots[0]!.order).toEqual({
       gameType: 'lotto',
-      numbers: [1, 2, 3, 4, 5, 6],
-      strongNumber: 3,
       type: 'one_time',
+      drawNumber: 3984,
+      ticketType: 'regular',
+      systematicType: null,
+      extra: true,
+      tables: [
+        { numbers: [1, 2, 3, 4, 5, 6], strongNumbers: [3] },
+        { numbers: [7, 8, 9, 10, 11, 12], strongNumbers: [4] },
+      ],
       idLast4: '6782',
     });
     expect(JSON.stringify(slots)).not.toContain('userId');

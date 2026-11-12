@@ -24,5 +24,5 @@ export const TICKET_TYPE_LIMITS: Record<TicketType, TicketTypeLimits> = {
 
 export const TICKET_TYPE_LABELS: Record<TicketType, string> = {
   regular: 'לוטו רגיל',
-  double: 'לוטו כפול',
+  double: 'דאבל לוטו',
 };

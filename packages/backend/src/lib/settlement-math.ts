@@ -40,7 +40,7 @@ export function lottoTier(hits: number, strongHit: boolean): string | null {
 
 /**
  * Extra: digits are compared position by position; 2 or more matching digits win.
- * TODO verify at terminal: that "in the right order" means same position, not a leading run.
+ * Verified on pais.co.il: the published odds (6 digits = 1:7^6) only hold for positional matching.
  */
 export function extraTier(ticketDigits: number[], drawDigits: number[]): string | null {
   let matches = 0;
@@ -51,15 +51,25 @@ export function extraTier(ticketDigits: number[], drawDigits: number[]): string 
 /**
  * Expands the ticket into plain combinations, matches each against the draw, and prices
  * every hit from the draw's prize table (a double ticket uses the double table).
- * A tier whose prize is 0 (nobody won it, or not entered yet) pays nothing.
+ * A tier whose prize is 0 pays nothing here, but a ticket that HITS such a tier (an unwon
+ * jackpot shows 0 ₪, or the tier is missing) is reported through `onUnpriced` so the caller
+ * can hold the order for an admin instead of silently paying 0.
  */
-export function scoreOrder(order: OrderToScore, draw: DrawNumbers, prizes: PrizeTable): WinLine[] {
+export function scoreOrder(
+  order: OrderToScore,
+  draw: DrawNumbers,
+  prizes: PrizeTable,
+  onUnpriced?: (game: PrizeGameKey, tier: string) => void,
+): WinLine[] {
   const game: PrizeGameKey = order.ticketType === 'double' ? 'double' : 'lotto';
   const byKey = new Map<string, WinLine>();
 
   const add = (g: PrizeGameKey, tier: string) => {
     const prize = prizes[g][tier];
-    if (!prize || prize.lte(0)) return;
+    if (!prize || prize.lte(0)) {
+      onUnpriced?.(g, tier);
+      return;
+    }
     const key = `${g}:${tier}`;
     const line = byKey.get(key) ?? { game: g, tier, count: 0, amount: new Decimal(0) };
     line.count += 1;

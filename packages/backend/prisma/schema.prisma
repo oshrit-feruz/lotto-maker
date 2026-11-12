@@ -381,8 +381,8 @@ model PriceList {
   effectiveFrom      DateTime
   // Pais price of one table, not including Extra.
   pricePerTable      Decimal    @db.Decimal(8, 2)
-  // Pais price of Extra per table. Null = not known, Extra is refused.
-  extraPricePerTable Decimal?   @db.Decimal(8, 2)
+  // Pais price of Extra per form (once per order, not per table). Null = Extra is refused.
+  extraPricePerForm  Decimal?   @db.Decimal(8, 2)
   // Our fee per order (one ticket for one draw).
   feePerOrder        Decimal    @db.Decimal(8, 2)
   createdAt          DateTime   @default(now())
@@ -403,10 +403,13 @@ model Draw {
   confirmedAt   DateTime?
   confirmedById String?
   settledAt     DateTime?
+  // Set when a ticket hit a tier with no prize amount (e.g. an unwon jackpot showing 0 ₪)
+  needsAttention  Boolean  @default(false)
+  attentionReason String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  confirmedBy   Admin?     @relation(fields: [confirmedById], references: [id])
+  confirmedBy  Admin?     @relation(fields: [confirmedById], references: [id])
   prizeTiers    PrizeTier[]
   orders        Order[]
 

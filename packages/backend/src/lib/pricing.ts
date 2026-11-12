@@ -1,13 +1,13 @@
 import { Decimal } from 'decimal.js';
 import { countTicketCombinations } from '@lotto-maker/shared';
-import type { TableInput, TicketType } from '@lotto-maker/shared';
-import { prisma } from '../prisma.js';
+import type { TableInput } from '@lotto-maker/shared';
+// No prisma import here: this module must stay loadable in unit tests (getPriceRow is in price-row.ts).
 import { AppError } from '../plugins/error-handler.js';
 
 /** A PriceList row (Prisma Decimals are accepted through toString). */
 export interface PriceRow {
   pricePerTable: { toString(): string };
-  extraPricePerTable: { toString(): string } | null;
+  extraPricePerForm: { toString(): string } | null;
   feePerOrder: { toString(): string };
 }
 
@@ -30,7 +30,7 @@ export interface PriceBreakdown {
   total: string;
 }
 
-/** Pure. Price = combinations × table price, plus Extra per table, plus our fee. */
+/** Pure. Price = combinations × table price, plus Extra once per form, plus our fee. */
 export function computeOrderPrice(input: PriceInput, row: PriceRow): PriceBreakdown {
   const combinations = countTicketCombinations(input.tables, input.systematicType);
   const tablePrice = new Decimal(row.pricePerTable.toString());
@@ -38,10 +38,11 @@ export function computeOrderPrice(input: PriceInput, row: PriceRow): PriceBreakd
 
   let extraPrice = new Decimal(0);
   if (input.extra) {
-    if (row.extraPricePerTable === null) {
+    if (row.extraPricePerForm === null) {
       throw new AppError(422, 'EXTRA_NOT_AVAILABLE', 'Extra price is not configured');
     }
-    extraPrice = new Decimal(row.extraPricePerTable.toString()).times(input.tables.length);
+    // Once per form (order), regardless of the number of tables
+    extraPrice = new Decimal(row.extraPricePerForm.toString());
   }
 
   const fee = new Decimal(row.feePerOrder.toString());
@@ -52,14 +53,4 @@ export function computeOrderPrice(input: PriceInput, row: PriceRow): PriceBreakd
     fee: fee.toFixed(2),
     total: paisPrice.plus(extraPrice).plus(fee).toFixed(2),
   };
-}
-
-/** The price row in force at `at`: the latest effectiveFrom not after it. */
-export async function getPriceRow(type: TicketType, at: Date = new Date()) {
-  const row = await prisma.priceList.findFirst({
-    where: { ticketType: type, effectiveFrom: { lte: at } },
-    orderBy: { effectiveFrom: 'desc' },
-  });
-  if (!row) throw new AppError(503, 'PRICE_NOT_CONFIGURED', `No price for ${type} lotto`);
-  return row;
 }

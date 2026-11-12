@@ -20,14 +20,23 @@ vi.mock('firebase-admin', () => ({
   default: { initializeApp: vi.fn(), messaging: vi.fn(() => ({ send: vi.fn() })) },
 }));
 
-// Control the draw results per test. The mock sits at the scraper boundary:
-// results.service calls its own fetchDrawResults internally, so mocking that
-// export would not be seen and the tests would hit the real Pais site.
-const mockFetchLatestForDate = vi.fn();
-vi.mock('../../src/services/results-scraper.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/services/results-scraper.js')>();
-  return { ...original, fetchLatestForDate: mockFetchLatestForDate };
+// Draw results are not scraped in this test: the draw is confirmed directly in the database
+// and settled through settleDraw, so nothing here touches the Pais site.
+
+/** A one-order lotto ticket: two plain tables (the form takes tables in pairs). */
+const ticketPayload = (tables: Array<{ numbers: number[]; strongNumbers: number[] }>) => ({
+  gameType: 'lotto',
+  type: 'one_time',
+  ticket: { type: 'regular', systematicType: null, extra: false, drawCount: 1, tables },
 });
+const TABLES_A = [
+  { numbers: [1, 2, 3, 4, 5, 6], strongNumbers: [3] },
+  { numbers: [7, 8, 9, 10, 11, 12], strongNumbers: [4] },
+];
+const TABLES_B = [
+  { numbers: [2, 4, 6, 8, 10, 12], strongNumbers: [1] },
+  { numbers: [1, 3, 5, 7, 9, 11], strongNumbers: [2] },
+];
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const skip = !TEST_DB_URL;
@@ -45,6 +54,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
   let operatorId: string;
   let orderId: string;
   let slotId: string;
+  let drawId: string;
 
   beforeAll(async () => {
     const { buildApp } = await import('../../src/server.js');
@@ -60,7 +70,12 @@ describe.skipIf(skip)('Full e2e flow', () => {
     await prisma.walletTransaction.deleteMany();
     await prisma.payment.deleteMany();
     await prisma.queueSlot.deleteMany();
+    await prisma.orderWin.deleteMany();
+    await prisma.prizeClaim.deleteMany();
+    await prisma.pendingCardCredit.deleteMany();
     await prisma.order.deleteMany();
+    await prisma.ticket.deleteMany(); // tables cascade
+    await prisma.draw.deleteMany(); // prize tiers cascade
     await prisma.subscription.deleteMany();
     await prisma.user.deleteMany();
     await prisma.operator.deleteMany();
@@ -89,6 +104,13 @@ describe.skipIf(skip)('Full e2e flow', () => {
       },
     });
     operatorId = operator.id;
+
+    // One announced draw that is still open for orders (PriceList rows come from the migration)
+    const salesCloseAt = new Date(Date.now() + 6 * 3600_000);
+    const draw = await prisma.draw.create({
+      data: { drawNumber: 9001, salesCloseAt, drawAt: new Date(salesCloseAt.getTime() + 15 * 60_000) },
+    });
+    drawId = draw.id;
 
     // Operator JWT (sub = operator.id, type = 'operator')
     operatorToken = app.jwt.sign({ sub: operatorId, type: 'operator' });
@@ -326,12 +348,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/orders',
       headers: { authorization: `Bearer ${userAccessToken}` },
-      payload: {
-        gameType: 'lotto',
-        numbers: [1, 2, 3, 4, 5, 6],
-        strongNumber: 3,
-        type: 'one_time',
-      },
+      payload: ticketPayload(TABLES_A),
     });
 
     expect(res.statusCode).toBe(201);
@@ -366,12 +383,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/orders',
       headers: { authorization: `Bearer ${userAccessToken}` },
-      payload: {
-        gameType: 'lotto',
-        numbers: [7, 8, 9, 10, 11, 12],
-        strongNumber: 5,
-        type: 'one_time',
-      },
+      payload: ticketPayload(TABLES_B),
     });
 
     expect(res.statusCode).toBe(503);
@@ -424,9 +436,12 @@ describe.skipIf(skip)('Full e2e flow', () => {
     expect(ours.body).not.toContain('userId');
     expect(ours.json().slots[0].order).toEqual({
       gameType: 'lotto',
-      numbers: [1, 2, 3, 4, 5, 6],
-      strongNumber: 3,
       type: 'one_time',
+      drawNumber: 9001,
+      ticketType: 'regular',
+      systematicType: null,
+      extra: false,
+      tables: TABLES_A,
       idLast4: '6782',
     });
   });
@@ -556,18 +571,28 @@ describe.skipIf(skip)('Full e2e flow', () => {
       select: { walletBalance: true },
     });
 
-    // Mock results: numbers 1-6 with strong 3 — exact match → win
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
-    mockFetchLatestForDate.mockResolvedValueOnce({
-      drawNumber: 1234,
-      gameType: 'lotto',
-      winningNumbers: [1, 2, 3, 4, 5, 6],
-      strongNumber: 3,
-      drawDate: order!.drawDate,
+    // Confirmed results: table 1 hits 1,2,3 and table 2 hits 10,11,12, no strong number on either
+    // → 3 hits twice → tier "3" pays 10 ₪ each, 20 ₪ in total (a small prize, paid to the wallet)
+    await prisma.draw.update({
+      where: { id: drawId },
+      data: {
+        numbers: [1, 2, 3, 10, 11, 12],
+        strong: 7,
+        extraDigits: [1, 2, 3, 4, 5, 6],
+        status: 'results_confirmed',
+        confirmedAt: new Date(),
+        prizeTiers: {
+          create: [
+            { game: 'lotto', tier: '3', winnersCount: 100, prizeAmount: '10.00' },
+            { game: 'double', tier: '3', winnersCount: 50, prizeAmount: '20.00' },
+          ],
+        },
+      },
     });
 
-    const { processResultsWithRetry } = await import('../../src/modules/results/results.service.js');
-    await processResultsWithRetry('lotto', order!.drawDate);
+    const { settleDraw } = await import('../../src/modules/results/settlement.service.js');
+    const settled = await settleDraw(drawId);
+    expect(settled.settled).toBe(true);
 
     const updatedOrder = await prisma.order.findUnique({ where: { id: orderId } });
     expect(updatedOrder?.status).toBe('won');
@@ -579,7 +604,8 @@ describe.skipIf(skip)('Full e2e flow', () => {
 
     const diff = parseFloat(balanceAfter!.walletBalance.toString())
       - parseFloat(balanceBefore!.walletBalance.toString());
-    expect(diff).toBeGreaterThan(0);
+    expect(diff).toBe(20);
+    expect((await prisma.draw.findUnique({ where: { id: drawId } }))?.status).toBe('settled');
 
     // Winning audit log inside the wallet transaction
     const winAudit = await prisma.auditLog.findMany({
@@ -613,23 +639,27 @@ describe.skipIf(skip)('Full e2e flow', () => {
     const { webhook } = await startCheckout(t2, 50);
     expect((await app.inject(webhook)).json().outcome).toBe('credited');
 
+    // The first draw is settled; announce the next one for this order
+    const nextClose = new Date(Date.now() + 8 * 3600_000);
+    const nextDraw = await prisma.draw.create({
+      data: { drawNumber: 9002, salesCloseAt: nextClose, drawAt: new Date(nextClose.getTime() + 15 * 60_000) },
+    });
+
     const orderRes = await app.inject({
       method: 'POST',
       url: '/orders',
       headers: { authorization: `Bearer ${t2}` },
-      payload: { gameType: 'lotto', numbers: [2, 4, 6, 8, 10, 12], strongNumber: 1, type: 'one_time' },
+      payload: ticketPayload(TABLES_B),
     });
+    expect(orderRes.statusCode).toBe(201);
     const orderId2 = orderRes.json<{ orderId: string }>().orderId;
 
     // Force order to scanned state
     await prisma.order.update({ where: { id: orderId2 }, data: { status: 'scanned' } });
-    const order2 = await prisma.order.findUnique({ where: { id: orderId2 } });
 
-    // fetchDrawResults always returns null → exhausts retries immediately (attemptsLeft=1)
-    mockFetchLatestForDate.mockResolvedValue(null);
-
-    const { markResultsDelayed } = await import('../../src/modules/results/results.service.js');
-    await markResultsDelayed('lotto', order2!.drawDate);
+    // The results never arrived for this draw
+    const { markDrawResultsDelayed } = await import('../../src/modules/results/settlement.service.js');
+    await markDrawResultsDelayed(nextDraw.id);
 
     const delayed = await prisma.order.findUnique({ where: { id: orderId2 } });
     expect(delayed?.status).toBe('results_delayed');

@@ -35,8 +35,10 @@ describe('lottoTier / extraTier', () => {
     expect(lottoTier(3, true)).toBe('3+s');
   });
   it('extra needs 2 or more matching digits', () => {
-    expect(extraTier([3, 2, 2, 2, 2, 2], DRAW.extraDigits)).toBeNull();
-    expect(extraTier([3, 1, 2, 2, 2, 2], DRAW.extraDigits)).toBe('2');
+    // Matching is positional (Pais odds: 6 digits = 1:7^6)
+    expect(extraTier([3, 2, 2, 1, 2, 2], DRAW.extraDigits)).toBeNull(); // 1 position
+    expect(extraTier([3, 2, 2, 2, 2, 2], DRAW.extraDigits)).toBe('2'); // positions 0 and 3
+    expect(extraTier([3, 1, 2, 2, 2, 2], DRAW.extraDigits)).toBe('3'); // positions 0, 1 and 3
   });
 });
 

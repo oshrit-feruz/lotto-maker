@@ -10,18 +10,20 @@ import {
 } from '../../src/services/pais-lotto-parser.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// NOTE: synthetic fixture, see its header. Only the two 5+strong rows come from the issue.
-const HTML = readFileSync(resolve(__dirname, '../fixtures/pais-current-lotto-3983.html'), 'utf8');
+// The real page for draw 3983, captured from pais.co.il (pruned to the results region).
+const HTML = readFileSync(resolve(__dirname, '../fixtures/pais-current-lotto-3983-real.html'), 'utf8');
 
-describe('parseCurrentLotto – draw 3983 fixture', () => {
+describe('parseCurrentLotto – real draw 3983 page', () => {
   const draw = parseCurrentLotto(HTML);
+  const find = (game: string, tier: string) => draw.prizeTiers.find((t) => t.game === game && t.tier === tier);
 
   it('reads number, date, numbers, strong and Extra digits', () => {
     expect(draw.drawNumber).toBe(3983);
     expect(draw.drawDate).toBe('2026-11-10');
-    expect(draw.numbers).toEqual([4, 11, 19, 23, 30, 36]);
-    expect(draw.strong).toBe(5);
-    expect(draw.extraDigits).toEqual([3, 1, 7, 2, 5, 6]);
+    expect(draw.numbers).toEqual([4, 10, 15, 21, 35, 37]);
+    expect(draw.strong).toBe(2);
+    // the empty .loto_info_num.extra before the digits is skipped
+    expect(draw.extraDigits).toEqual([5, 7, 4, 3, 2, 4]);
   });
 
   it('reads all three prize tables', () => {
@@ -29,23 +31,34 @@ describe('parseCurrentLotto – draw 3983 fixture', () => {
     expect(count('lotto')).toBe(8);
     expect(count('double')).toBe(8);
     expect(count('extra')).toBe(5);
+    expect(draw.prizeTiers).toHaveLength(21);
   });
 
-  it('lotto 5+strong: 15 winners at 5,645 ₪; double: 12 winners at 11,290 ₪ (values from the issue)', () => {
-    const find = (game: string, tier: string) => draw.prizeTiers.find((t) => t.game === game && t.tier === tier);
-    expect(find('lotto', '5+s')).toEqual({ game: 'lotto', tier: '5+s', winnersCount: 15, prizeAmount: '5645.00' });
-    expect(find('double', '5+s')).toEqual({ game: 'double', tier: '5+s', winnersCount: 12, prizeAmount: '11290.00' });
+  // tier, lotto winners / ₪, double winners / ₪
+  const LOTTO_DOUBLE: Array<[string, number, string, number, string]> = [
+    ['6+s', 0, '0.00', 0, '0.00'],
+    ['6', 0, '0.00', 0, '0.00'],
+    ['5+s', 15, '5645.00', 12, '11290.00'],
+    ['5', 88, '959.00', 58, '1918.00'],
+    ['4+s', 731, '158.00', 462, '316.00'],
+    ['4', 4233, '55.00', 2675, '110.00'],
+    ['3+s', 9496, '40.00', 6034, '80.00'],
+    ['3', 57052, '10.00', 36057, '20.00'],
+  ];
+  it.each(LOTTO_DOUBLE)('tier %s: lotto %i / %s, double %i / %s', (tier, lw, la, dw, da) => {
+    expect(find('lotto', tier)).toEqual({ game: 'lotto', tier, winnersCount: lw, prizeAmount: la });
+    expect(find('double', tier)).toEqual({ game: 'double', tier, winnersCount: dw, prizeAmount: da });
   });
 
-  it('a tier with no winners and a dash for amount is 0', () => {
-    expect(draw.prizeTiers.find((t) => t.game === 'lotto' && t.tier === '6+s')).toMatchObject({
-      winnersCount: 0,
-      prizeAmount: '0.00',
-    });
-  });
-
-  it('Extra tiers are keyed by matching digits', () => {
-    expect(draw.prizeTiers.filter((t) => t.game === 'extra').map((t) => t.tier)).toEqual(['6', '5', '4', '3', '2']);
+  it('Extra: tiers keyed by matching digits, with winners and fixed prizes', () => {
+    const extra = draw.prizeTiers.filter((t) => t.game === 'extra').map((t) => [t.tier, t.winnersCount, t.prizeAmount]);
+    expect(extra).toEqual([
+      ['6', 2, '60000.00'],
+      ['5', 52, '1000.00'],
+      ['4', 718, '75.00'],
+      ['3', 5847, '15.00'],
+      ['2', 25956, '10.00'],
+    ]);
   });
 });
 
@@ -54,14 +67,16 @@ describe('parseCurrentLotto – bad input', () => {
     expect(() => parseCurrentLotto('<html><body>nothing</body></html>')).toThrow(PaisParseError);
   });
   it('throws when a number is out of range', () => {
-    expect(() => parseCurrentLotto(HTML.replace('<span class="num">36</span>', '<span class="num">38</span>'))).toThrow(
-      PaisParseError,
-    );
+    expect(() =>
+      parseCurrentLotto(HTML.replace('<li class="loto_info_num"><div>37</div></li>', '<li class="loto_info_num"><div>38</div></li>')),
+    ).toThrow(PaisParseError);
   });
   it('throws when a prize table is missing', () => {
-    expect(() => parseCurrentLotto(HTML.replace('<caption>אקסטרה</caption>', '<caption>אחר</caption>'))).toThrow(
-      /extra/,
+    const broken = HTML.replace('class="current_loto_table extra"', 'class="current_loto_table other"').replace(
+      'טבלת זכיות אקסטרא',
+      'טבלת זכיות אחרת',
     );
+    expect(() => parseCurrentLotto(broken)).toThrow(/extra/);
   });
 });
 

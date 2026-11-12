@@ -1,4 +1,4 @@
-import { load } from 'cheerio';
+import { load, type Cheerio } from 'cheerio';
 import { parse as parseDate } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
 import {
@@ -12,9 +12,8 @@ import {
 
 // Pure parsers for the two pais.co.il data sources used by lotto. No network here.
 //
-// TODO verify against the live site: the page structure below was written from the
-// issue description, NOT from a captured live page (the fixture is synthetic, see its
-// header). The selectors are all in SELECTORS so they can be fixed in one place.
+// Selectors were written against a real captured page (draw 3983, see
+// tests/fixtures/pais-current-lotto-3983-real.html). They are all in SELECTORS.
 
 export class PaisParseError extends Error {
   constructor(message: string) {
@@ -45,14 +44,17 @@ export interface ParsedLottoDraw {
 }
 
 const SELECTORS = {
-  drawNumber: '.draw-number',
-  drawDate: '.draw-date',
-  numbers: '.lotto-numbers .num',
-  strong: '.lotto-strong .num',
-  extraDigits: '.extra-digits .digit',
-  prizeTable: 'table.prize-table',
-  /** The heading text that names a prize table (lotto / double / extra). */
-  prizeTableTitle: 'caption',
+  drawNumber: 'h3#lotteryId',
+  drawDate: '.archive_open_dates .cat_archive_txt strong',
+  numbers: '.cat_h_data_group.loto.current ol.cat_data_info li.loto_info_num > div',
+  strong: '.cat_h_data_group.strong_num .loto_info_num.strong > div',
+  // The empty .loto_info_num.extra before the digits is not matched by .extra_num
+  extraDigits: '#extraLottoList .loto_info_num.extra_num > div',
+  prizeTable: 'div.current_loto_table',
+  prizeTableTitle: 'h3.center_title',
+  prizeRow: 'ol > li.archive_list_item',
+  /** The value is the last child div; the first is the mobile label .archive_mod_title. */
+  prizeCell: '.archive_list_block.lotto_current',
 } as const;
 
 const intsFrom = (texts: string[]): number[] => texts.map((t) => parseInt(t.trim(), 10));
@@ -63,11 +65,17 @@ function parseMoney(text: string): string | null {
   return Number(cleaned).toFixed(2);
 }
 
-function gameOfTitle(title: string): PrizeGameKey | null {
-  const t = title.toLowerCase();
-  if (t.includes('כפול') || t.includes('double')) return 'double';
-  if (t.includes('אקסטרה') || t.includes('extra')) return 'extra';
-  if (t.includes('לוטו') || t.includes('lotto')) return 'lotto';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function gameOfTable(el: Cheerio<any>): PrizeGameKey | null {
+  if (el.hasClass('extra')) return 'extra';
+  const id = el.attr('id') ?? '';
+  if (id === 'regularLottoTitle') return 'lotto';
+  if (id === 'doubleLottoTitle') return 'double';
+  // Fallback on the title text. Double is checked first: its title also contains "לוטו".
+  const t = el.find(SELECTORS.prizeTableTitle).first().text();
+  if (t.includes('דאבל')) return 'double';
+  if (t.includes('אקסטרא')) return 'extra';
+  if (t.includes('לוטו')) return 'lotto';
   return null;
 }
 
@@ -84,7 +92,7 @@ export function normalizeTier(game: PrizeGameKey, text: string): string | null {
 export function parseCurrentLotto(html: string): ParsedLottoDraw {
   const $ = load(html);
 
-  const drawNumber = parseInt($(SELECTORS.drawNumber).first().text().trim(), 10);
+  const drawNumber = parseInt(/\d+/.exec($(SELECTORS.drawNumber).first().text())?.[0] ?? '', 10);
   if (!Number.isInteger(drawNumber) || drawNumber <= 0) throw new PaisParseError('draw number not found');
 
   const dateText = $(SELECTORS.drawDate).first().text().trim();
@@ -116,13 +124,16 @@ export function parseCurrentLotto(html: string): ParsedLottoDraw {
   const prizeTiers: ParsedPrizeTier[] = [];
   const seenGames = new Set<PrizeGameKey>();
   $(SELECTORS.prizeTable).each((_i, table) => {
-    const game = gameOfTitle($(table).find(SELECTORS.prizeTableTitle).first().text());
+    const game = gameOfTable($(table));
     if (!game) return;
     seenGames.add(game);
     $(table)
-      .find('tbody tr')
+      .find(SELECTORS.prizeRow)
       .each((_j, row) => {
-        const cells = $(row).find('td').map((_k, td) => $(td).text().trim()).get();
+        const cells = $(row)
+          .find(SELECTORS.prizeCell)
+          .map((_k, c) => $(c).children('div').last().text().trim())
+          .get();
         if (cells.length < 3) return;
         const tier = normalizeTier(game, cells[0]!);
         if (!tier) return;
@@ -156,8 +167,10 @@ export interface NextLotteryInfo {
   drawAt: Date;
 }
 
-// TODO verify at terminal: the draw starts ~15 min after sales close (22:45 close, ~23:00 draw).
+// Sales close 22:45, draw broadcast 23:00. Results usually appear ~1h after the draw
+// (committee approval, Pais FAQ), so polling for results starts at drawAt + 60 min.
 export const DRAW_AFTER_CLOSE_MINUTES = 15;
+export const RESULTS_POLL_AFTER_DRAW_MINUTES = 60;
 
 /**
  * Parses [{nextLottoryDate, displayDate, displayTime, firstPrize, secondPrize, LotteryNumber}].

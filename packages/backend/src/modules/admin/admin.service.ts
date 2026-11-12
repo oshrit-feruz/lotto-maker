@@ -65,6 +65,8 @@ export function listDraws(status?: string) {
       suggestedAt: true,
       confirmedAt: true,
       settledAt: true,
+      needsAttention: true,
+      attentionReason: true,
     },
   });
 }
@@ -83,16 +85,31 @@ export async function editDrawResults(drawId: string, adminId: string, body: Edi
   assertValidResults(body);
 
   await prisma.$transaction(async (tx) => {
-    const { count } = await tx.draw.updateMany({
-      where: { id: drawId, status: { in: ['scheduled', 'results_suggested'] } },
+    // A confirmed draw that settlement flagged (a ticket hit a tier with no prize amount) may be
+    // corrected in place: it stays confirmed and the settlement job retries it.
+    const fixed = await tx.draw.updateMany({
+      where: { id: drawId, status: 'results_confirmed', needsAttention: true },
       data: {
         numbers: body.numbers,
         strong: body.strong,
         extraDigits: body.extraDigits,
-        status: 'results_suggested',
-        suggestedAt: new Date(),
+        needsAttention: false,
+        attentionReason: null,
       },
     });
+    const { count } =
+      fixed.count > 0
+        ? fixed
+        : await tx.draw.updateMany({
+            where: { id: drawId, status: { in: ['scheduled', 'results_suggested'] } },
+            data: {
+              numbers: body.numbers,
+              strong: body.strong,
+              extraDigits: body.extraDigits,
+              status: 'results_suggested',
+              suggestedAt: new Date(),
+            },
+          });
     if (count === 0) throw new AppError(409, 'DRAW_NOT_EDITABLE', 'Results can only be edited before confirmation');
 
     await tx.prizeTier.deleteMany({ where: { drawId } });

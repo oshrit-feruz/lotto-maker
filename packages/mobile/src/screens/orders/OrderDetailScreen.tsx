@@ -40,7 +40,7 @@ interface OrderDetail {
   strongNumber?: number | null;
 }
 
-const GAME_LABELS = { lotto: 'לוטו', double: 'לוטו כפול', extra: 'Extra' } as const;
+const GAME_LABELS = { lotto: 'לוטו', double: 'דאבל לוטו', extra: 'Extra' } as const;
 
 function tierLabel(game: 'lotto' | 'double' | 'extra', tier: string): string {
   if (game === 'extra') return `${tier} ספרות`;

@@ -213,5 +213,4 @@ ALTER TABLE "PendingCardCredit" ADD CONSTRAINT "PendingCardCredit_userId_fkey" F
 -- which makes the API refuse Extra. The fee matches the previous fixed service fee.
 INSERT INTO "PriceList" ("id", "ticketType", "effectiveFrom", "pricePerTable", "extraPricePerTable", "feePerOrder")
 VALUES
-  ('pricelist_regular_2026', 'regular', '2026-01-01 00:00:00', 3.00, NULL, 2.50),
-  ('pricelist_double_2026', 'double', '2026-01-01 00:00:00', 6.00, NULL, 2.50);
+  ('pricelist_regular_2026', 'regular', '2026-01-01 00:00:00', 3.00, NULL, 2.50),  ('pricelist_double_2026', 'double', '2026-01-01 00:00:00', 6.00, NULL, 2.50);

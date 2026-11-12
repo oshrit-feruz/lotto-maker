@@ -87,13 +87,13 @@ export function validateTicket(input: TicketInput): TicketValidationError[] {
     // Plain tables: the count limits apply.
     const limits = TICKET_TYPE_LIMITS[input.type];
     const n = input.tables.length;
-    if (n < limits.minTables || n > limits.maxTables) {
+    if (limits.evenTablesOnly && n % 2 !== 0 && n >= 1 && n <= limits.maxTables) {
+      errors.push({ code: 'ODD_TABLE_COUNT', message: 'table count must be even' });
+    } else if (n < limits.minTables || n > limits.maxTables) {
       errors.push({
         code: 'INVALID_TABLE_COUNT',
         message: `${input.type} lotto takes ${limits.minTables}-${limits.maxTables} tables`,
       });
-    } else if (limits.evenTablesOnly && n % 2 !== 0) {
-      errors.push({ code: 'ODD_TABLE_COUNT', message: 'table count must be even' });
     }
   } else if (input.tables.length !== 1) {
     // TODO verify at terminal: a systematic form carries exactly one table.

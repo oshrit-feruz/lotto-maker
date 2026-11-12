@@ -11,7 +11,8 @@ import type { TicketInput, TicketType } from '@lotto-maker/shared';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { assertGameEnabled } from '../../lib/games.js';
-import { computeOrderPrice, getPriceRow } from '../../lib/pricing.js';
+import { computeOrderPrice } from '../../lib/pricing.js';
+import { getPriceRow } from '../../lib/price-row.js';
 import { cutoffsOf, getOpenDraws } from '../../lib/draws.js';
 
 export const ticketBodySchema = z.object({

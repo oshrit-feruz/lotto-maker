@@ -7,6 +7,7 @@ import {
   parseCurrentLotto,
   parseNextLotteryResponse,
   PaisParseError,
+  RESULTS_POLL_AFTER_DRAW_MINUTES,
 } from '../../services/pais-lotto-parser.js';
 import type { NextLotteryInfo, ParsedLottoDraw } from '../../services/pais-lotto-parser.js';
 import { writeAuditLog } from '../../lib/audit-log.js';
@@ -82,7 +83,8 @@ export async function syncUpcomingDraws(): Promise<void> {
 
 // ─── Results: fetch once the draw is over, store as a SUGGESTION ─────────────
 
-const RESULTS_WAIT_MINUTES = 15;
+// Pais publishes results about an hour after the draw, once the committee approves
+const RESULTS_WAIT_MINUTES = RESULTS_POLL_AFTER_DRAW_MINUTES;
 const MAX_ATTEMPTS = 8;
 const BASE_BACKOFF_MS = 5 * 60_000;
 const MAX_BACKOFF_MS = 2 * 60 * 60_000;
