@@ -7,6 +7,8 @@ import DrawDetailPage from './pages/DrawDetailPage';
 import PrizeClaimsPage from './pages/PrizeClaimsPage';
 import WithdrawalsPage from './pages/WithdrawalsPage';
 import CardCreditsPage from './pages/CardCreditsPage';
+import UsersPage from './pages/UsersPage';
+import UserDetailPage from './pages/UserDetailPage';
 
 const NAV: Array<[string, string]> = [
   ['/draws', 'הגרלות'],
@@ -52,6 +54,8 @@ export default function App() {
         <Route path="/prize-claims" element={<PrizeClaimsPage />} />
         <Route path="/withdrawals" element={<WithdrawalsPage />} />
         <Route path="/card-credits" element={<CardCreditsPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/users/:id" element={<UserDetailPage />} />
         {/* remaining screens are added section by section */}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
