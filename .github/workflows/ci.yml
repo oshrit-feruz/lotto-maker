@@ -1,0 +1,238 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Superseded PR runs are cancelled; every push to main runs to completion
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: 20
+  # Postgres service credentials (CI only)
+  PG_URL: postgresql://lotto:lotto@localhost:5432/lotto
+  PG_SHADOW_URL: postgresql://lotto:lotto@localhost:5432/lotto_shadow
+
+jobs:
+  # ── Backend: types and unit tests ──────────────────────────────────────────────
+  backend:
+    name: Backend (tsc + unit tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install (backend + shared workspaces)
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
+      - name: Build shared
+        run: npm run build -w packages/shared
+      - name: Prisma generate
+        working-directory: packages/backend
+        run: npm exec --no -- prisma generate
+      - name: Type-check
+        working-directory: packages/backend
+        run: npm exec --no -- tsc --noEmit -p .
+      - name: Unit tests
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: postgresql://placeholder@localhost:5432/placeholder
+          JWT_SECRET: ci-unit-jwt-secret-0123456789
+          JWT_REFRESH_SECRET: ci-unit-refresh-secret-0123456789
+          # Runs the real-Redis cases of tests/unit/job-lock.test.ts
+          TEST_REDIS_URL: redis://localhost:6379
+        run: npm exec --no -- vitest run tests/unit src
+
+  # ── Migrations: apply all, then check the schema matches them (drift) ──────────
+  migrations:
+    name: Migrations (deploy + drift check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lotto
+          POSTGRES_PASSWORD: lotto
+          POSTGRES_DB: lotto
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lotto" --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install (backend + shared workspaces)
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
+      - name: Create shadow database
+        run: psql "$PG_URL" -c 'CREATE DATABASE lotto_shadow'
+      - name: prisma migrate deploy (empty database, every migration)
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ env.PG_URL }}
+        run: npm exec --no -- prisma migrate deploy
+      - name: prisma migrate deploy is a no-op the second time
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ env.PG_URL }}
+        run: npm exec --no -- prisma migrate deploy | tee deploy2.log && grep -q "No pending migrations" deploy2.log
+      - name: Drift check (migrations vs schema.prisma)
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ env.PG_URL }}
+        run: |
+          set +e
+          npm exec --no -- prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$PG_SHADOW_URL" \
+            --exit-code
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then echo "No drift."; exit 0; fi
+          if [ "$code" -ne 2 ]; then echo "migrate diff failed (exit $code)"; exit "$code"; fi
+
+          # Exit 2 = a difference. Objects Prisma cannot express (partial unique index, CHECK
+          # constraints) live only in migration SQL and are listed in prisma/sql-only-objects.txt;
+          # a difference that only touches those is expected. Anything else is real drift.
+          npm exec --no -- prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$PG_SHADOW_URL" \
+            --script > drift.sql
+          echo "---- migrate diff --script ----"; cat drift.sql
+          grep -v '^--' drift.sql | grep -v '^[[:space:]]*$' | grep -v -F -f prisma/sql-only-objects.txt > unexpected.sql || true
+          if [ -s unexpected.sql ]; then
+            echo "::error::schema.prisma and prisma/migrations have drifted. Unexpected statements:"
+            cat unexpected.sql
+            exit 1
+          fi
+          echo "Only SQL-only objects differ (see prisma/sql-only-objects.txt): OK."
+
+  # ── Backend e2e: real Postgres + Redis, mock providers ─────────────────────────
+  backend-e2e:
+    name: Backend e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lotto
+          POSTGRES_PASSWORD: lotto
+          POSTGRES_DB: lotto
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lotto" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://lotto:lotto@localhost:5432/lotto
+      TEST_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install (backend + shared workspaces)
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
+      - name: Build shared
+        run: npm run build -w packages/shared
+      - name: Prisma generate
+        working-directory: packages/backend
+        run: npm exec --no -- prisma generate
+      - name: Apply migrations
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: npm exec --no -- prisma migrate deploy
+      # tests/e2e/setup.ts sets every other variable (mock payment / KYC providers, test keys)
+      - name: e2e tests
+        working-directory: packages/backend
+        run: npm run test:e2e
+
+  # ── Backend image: builds, migrates an empty database and answers /ready ───────
+  docker:
+    name: Backend Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lotto
+          POSTGRES_PASSWORD: lotto
+          POSTGRES_DB: lotto
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lotto" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t lotto-backend:ci .
+      - name: Smoke test (migrate on start, /health, /ready, non-root)
+        run: |
+          docker run -d --name api --network host \
+            -e NODE_ENV=development -e PORT=3000 -e RUN_JOBS=false \
+            -e DATABASE_URL="$PG_URL" -e REDIS_URL=redis://localhost:6379 \
+            -e JWT_SECRET=ci-docker-jwt-secret-0123456789 -e JWT_REFRESH_SECRET=ci-docker-refresh-secret-0123456789 \
+            lotto-backend:ci
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/ready; then echo; break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/health
+          curl -fsS http://localhost:3000/ready
+          test "$(docker exec api id -u)" != "0"
+      - name: Container logs
+        if: always()
+        run: docker logs api || true
+
+  # ── Frontends: web (Next.js) and admin dashboard (Vite) ────────────────────────
+  frontends:
+    name: ${{ matrix.package }} (build + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [web, admin-dashboard]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm rebuild prisma @prisma/engines
+      - name: Build shared
+        run: npm run build -w packages/shared
+      - name: Build
+        run: npm run build -w packages/${{ matrix.package }}
+      - name: Tests
+        run: npm test -w packages/${{ matrix.package }}
