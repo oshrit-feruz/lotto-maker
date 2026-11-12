@@ -618,3 +618,25 @@ model KycCheck {
   @@index([status, createdAt])
   @@index([userId, createdAt])
 }
+
+// ─── Phase 6: responsible gaming ─────────────────────────────────────────────
+
+// Deposit limits (rolling day / week / 30 days) and the monthly loss limit, in ILS; null = no limit.
+// Lowering a limit applies at once. Raising or removing one is parked in `pending` as
+// { [limit]: { value: number | null, effectiveAt: ISO date } } and applies once effectiveAt has passed.
+// Self-exclusion lives here too: `selfExcludedUntil`, or `selfExcludedPermanent`.
+model UserLimits {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  depositDaily          Decimal?  @db.Decimal(12, 2)
+  depositWeekly         Decimal?  @db.Decimal(12, 2)
+  depositMonthly        Decimal?  @db.Decimal(12, 2)
+  lossMonthly           Decimal?  @db.Decimal(12, 2)
+  pending               Json      @default("{}")
+  selfExcludedUntil     DateTime?
+  selfExcludedPermanent Boolean   @default(false)
+  // When the current exclusion was set (a permanent one can be lifted by an admin 6 months later).
+  selfExcludedAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}

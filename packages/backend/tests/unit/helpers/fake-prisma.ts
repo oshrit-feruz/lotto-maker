@@ -37,8 +37,11 @@ export function createFakePrisma() {
         return user;
       },
     },
+    // Responsible-gaming checks in createCheckout: no limits, no self-exclusion
+    userLimits: { findUnique: async () => null },
     payment: {
       findUnique: async ({ where }: any) => findPayment(where),
+      findMany: async () => [],
       create: async ({ data }: any) => {
         if (findPayment({ providerTxId: data.providerTxId }) || findPayment({ idempotencyKey: data.idempotencyKey })) {
           throw new Error('unique constraint violation');

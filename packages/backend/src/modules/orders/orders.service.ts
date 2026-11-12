@@ -8,6 +8,7 @@ import { assertGameEnabled } from '../../lib/games.js';
 import { computeOrderPrice } from '../../lib/pricing.js';
 import { getPriceRow } from '../../lib/price-row.js';
 import { cutoffsOf, getOpenDraws } from '../../lib/draws.js';
+import { assertCanPlaceOrder } from '../limits/limits.service.js';
 import { assertValidTicket } from '../tickets/tickets.service.js';
 import type { TicketBody } from '../tickets/tickets.service.js';
 import { r2Service, DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../storage/r2.service.js';
@@ -82,6 +83,9 @@ export async function createOrder(params: CreateOrderParams) {
   const orderFee = new Decimal(breakdown.fee);
   const orderTotal = new Decimal(breakdown.total);
   const grandTotal = orderTotal.times(draws.length);
+
+  // Self-exclusion (403 SELF_EXCLUDED) and the monthly loss limit (422 LOSS_LIMIT)
+  await assertCanPlaceOrder(userId, grandTotal);
 
   const created = await prisma.$transaction(
     async (tx: Tx) => {

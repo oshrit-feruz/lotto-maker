@@ -7,6 +7,7 @@ import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
 import { assertWithinBalanceCap, depositTx, reverseDepositTx, type Tx } from '../wallet/wallet.service.js';
 import { saveCardTx } from './cards.service.js';
+import { assertDepositAllowed } from '../limits/limits.service.js';
 import type { PaymentProvider } from './payment-provider.js';
 import { MockPaymentProvider } from './mock-payment-provider.js';
 
@@ -63,6 +64,8 @@ export async function createCheckout(
   // Early rejection so the user is not charged for a deposit we would refuse.
   // The authoritative check runs again, under a row lock, when the webhook lands.
   assertWithinBalanceCap(user.walletBalance.toString(), amount);
+  // Self-exclusion (403 SELF_EXCLUDED) and deposit limits (422 DEPOSIT_LIMIT)
+  await assertDepositAllowed(userId, amount);
 
   const paymentProvider = getPaymentProvider();
   const session = await paymentProvider.createCheckout(userId, amount);

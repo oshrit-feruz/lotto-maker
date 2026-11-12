@@ -19,6 +19,8 @@ import ticketsRoutes from './modules/tickets/tickets.routes.js';
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes.js';
 import operatorsRoutes from './modules/operators/operators.routes.js';
 import adminKycRoutes from './modules/admin/admin-kyc.routes.js';
+import limitsRoutes from './modules/limits/limits.routes.js';
+import adminLimitsRoutes from './modules/admin/admin-limits.routes.js';
 import { MAX_SCAN_BYTES } from './lib/scan-file.js';
 import resultsRoutes from './modules/results/results.routes.js';
 
@@ -47,6 +49,8 @@ export async function buildApp() {
   await app.register(operatorsRoutes);
   await app.register(resultsRoutes);
   await app.register(adminKycRoutes);
+  await app.register(limitsRoutes);
+  await app.register(adminLimitsRoutes);
 
   // Health check
   app.get('/health', async () => ({ status: 'ok' }));
