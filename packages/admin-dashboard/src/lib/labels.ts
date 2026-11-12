@@ -3,10 +3,18 @@
 import type { CardCreditStatus, ClaimStatus, DrawStatus } from '../api/types';
 import { WITHDRAWAL_STATUS_LABEL } from './withdrawals';
 
+/**
+ * `map[key]` only when the map itself has that key, so `constructor`, `__proto__` and the like never
+ * return an inherited Object.prototype value.
+ */
+function own<T>(map: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 /** `map[value]`, or the raw value when it has no label. */
 export function labelOf(map: Record<string, string>, value: string | null | undefined): string {
   if (value == null || value === '') return '—';
-  return Object.prototype.hasOwnProperty.call(map, value) ? (map[value] ?? value) : value;
+  return own(map, value) ?? value;
 }
 
 export const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -166,15 +174,15 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
  * "משיכה: ממתינה לאישור ← אושרה"; `prefix:status` reads "prefix: status". Anything else is raw.
  */
 export function auditActionLabel(action: string): string {
-  const fixed = Object.prototype.hasOwnProperty.call(AUDIT_ACTION_LABEL, action) ? AUDIT_ACTION_LABEL[action] : undefined;
+  const fixed = own(AUDIT_ACTION_LABEL, action);
   if (fixed !== undefined) return fixed;
   const sep = action.indexOf(':');
   if (sep < 0) return action;
   const prefix = action.slice(0, sep);
   const rest = action.slice(sep + 1);
-  const entity = ACTION_PREFIX_LABEL[prefix];
+  const entity = own(ACTION_PREFIX_LABEL, prefix);
   if (!entity) return action;
-  const statuses = STATUS_BY_PREFIX[prefix] ?? {};
+  const statuses = own(STATUS_BY_PREFIX, prefix) ?? {};
   const st = (s: string) => labelOf(statuses, s);
   const arrow = rest.indexOf('->');
   if (arrow >= 0) {
@@ -182,6 +190,6 @@ export function auditActionLabel(action: string): string {
     const to = rest.slice(arrow + 2);
     return from ? `${entity}: ${st(from)} ← ${st(to)}` : `${entity}: ${st(to)}`;
   }
-  const status = Object.prototype.hasOwnProperty.call(statuses, rest) ? statuses[rest] : undefined;
+  const status = own(statuses, rest);
   return status !== undefined ? `${entity}: ${status}` : action;
 }

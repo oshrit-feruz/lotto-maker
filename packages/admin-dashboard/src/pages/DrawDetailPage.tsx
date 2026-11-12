@@ -10,7 +10,7 @@ import { Badge, QueryState } from '../components/ui';
 import { isDrawReadOnly, tierId, toBody, toForm, type DrawForm } from '../lib/drawForm';
 import { formatDate } from '../lib/format';
 import { GAMES, GAME_LABEL, TIER_KEYS } from '../lib/payout';
-import { DRAW_STATUS_LABEL } from './DrawsPage';
+import { DRAW_STATUS_LABEL, labelOf } from '../lib/labels';
 
 export default function DrawDetailPage() {
   const { id = '' } = useParams();
@@ -96,7 +96,7 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
   return (
     <>
       <h1>
-        הגרלה {draw.drawNumber} <Badge>{DRAW_STATUS_LABEL[draw.status]}</Badge>{' '}
+        הגרלה {draw.drawNumber} <Badge>{labelOf(DRAW_STATUS_LABEL, draw.status)}</Badge>{' '}
         {draw.needsAttention && <Badge tone="red">דורש טיפול</Badge>}
       </h1>
       <p className="muted">

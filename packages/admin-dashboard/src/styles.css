@@ -35,7 +35,7 @@ th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid #e5e7eb;
 .layout nav .nav-inner { position: sticky; top: 16px; height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
 .date-field { display: flex; align-items: center; gap: 8px; }
 .date-field output { font-size: 13px; color: #6b7280; min-width: 76px; direction: ltr; unicode-bidi: isolate; }
-.prize-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.prize-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
 .prize-grid .card { min-width: 0; }
 .prize-grid table { table-layout: fixed; }
 .prize-grid th:first-child, .prize-grid td:first-child { width: 56px; }

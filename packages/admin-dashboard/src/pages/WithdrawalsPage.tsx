@@ -20,6 +20,7 @@ import {
   WITHDRAWAL_STATUS_LABEL,
   WITHDRAWAL_STATUS_TONE,
 } from '../lib/withdrawals';
+import { labelOf } from '../lib/labels';
 
 type Action = { kind: 'approve' | 'reject' | 'pay'; w: Withdrawal };
 
@@ -125,12 +126,12 @@ export default function WithdrawalsPage() {
                       <td>{formatNis(w.fee)}</td>
                       <td>{formatNis(w.payout)}</td>
                       <td>
-                        {WITHDRAWAL_METHOD_LABEL[w.method] ?? w.method}
+                        {labelOf(WITHDRAWAL_METHOD_LABEL, w.method)}
                         {w.bankAccountLast4 && <span className="ltr"> ••{w.bankAccountLast4}</span>}
                       </td>
                       <td>
-                        <Badge tone={WITHDRAWAL_STATUS_TONE[w.status] ?? 'gray'}>
-                          {WITHDRAWAL_STATUS_LABEL[w.status] ?? w.status}
+                        <Badge tone={Object.hasOwn(WITHDRAWAL_STATUS_TONE, w.status) ? WITHDRAWAL_STATUS_TONE[w.status] : 'gray'}>
+                          {labelOf(WITHDRAWAL_STATUS_LABEL, w.status)}
                         </Badge>
                       </td>
                       <td>{notes(w)}</td>
@@ -168,7 +169,7 @@ export default function WithdrawalsPage() {
         >
           <p>
             משיכה של <strong>{formatNis(action.w.amount)}</strong> (
-            {WITHDRAWAL_METHOD_LABEL[action.w.method] ?? action.w.method}) · לתשלום ללקוח:{' '}
+            {labelOf(WITHDRAWAL_METHOD_LABEL, action.w.method)}) · לתשלום ללקוח:{' '}
             <strong>{formatNis(action.w.payout)}</strong>
           </p>
           {action.kind === 'approve' && action.w.method === 'card' && (

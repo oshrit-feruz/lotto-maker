@@ -76,3 +76,17 @@ describe('DrawsPage pagination', () => {
     );
   });
 });
+
+describe('DrawsPage status badge', () => {
+  it('shows the raw status when it has no Hebrew label', async () => {
+    vi.mocked(draws.listDraws).mockReset();
+    vi.mocked(draws.listDraws).mockResolvedValue({
+      items: [{ ...draw(4100), status: 'brand_new_status' as DrawSummary['status'] }],
+      total: 1,
+      page: 1,
+      pageSize: DRAWS_PAGE_SIZE,
+    });
+    renderPage();
+    expect(await screen.findByText('brand_new_status')).toBeInTheDocument();
+  });
+});

@@ -10,7 +10,7 @@ import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate, formatNis, jerusalemLocalToIso, toJerusalemLocalInput } from '../lib/format';
 import { formatPhoneLocal } from '../lib/phone';
 
-import { CLAIM_STATUS_LABEL } from '../lib/labels';
+import { CLAIM_STATUS_LABEL, labelOf } from '../lib/labels';
 export { CLAIM_STATUS_LABEL };
 
 /** Errors after which the claim's state on the server differs from the list: reload it. */
@@ -115,7 +115,7 @@ export default function PrizeClaimsPage() {
                       <td>{formatDate(c.expiresAt)}</td>
                       <td>
                         <Badge tone={c.status === 'collected' ? 'green' : c.status === 'expired' ? 'red' : 'amber'}>
-                          {CLAIM_STATUS_LABEL[c.status]}
+                          {labelOf(CLAIM_STATUS_LABEL, c.status)}
                         </Badge>
                       </td>
                       <td>

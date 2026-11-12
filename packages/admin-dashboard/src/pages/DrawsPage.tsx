@@ -6,7 +6,7 @@ import type { DrawStatus } from '../api/types';
 import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate } from '../lib/format';
 
-import { DRAW_STATUS_LABEL } from '../lib/labels';
+import { DRAW_STATUS_LABEL, labelOf } from '../lib/labels';
 export { DRAW_STATUS_LABEL };
 
 export const DRAWS_PAGE_SIZE = 25;
@@ -73,7 +73,7 @@ export default function DrawsPage() {
                       <td>{formatDate(d.drawAt)}</td>
                       <td>
                         <Badge tone={d.status === 'results_suggested' ? 'amber' : d.status === 'settled' ? 'green' : 'blue'}>
-                          {DRAW_STATUS_LABEL[d.status]}
+                          {labelOf(DRAW_STATUS_LABEL, d.status)}
                         </Badge>
                       </td>
                       <td>{d.needsAttention && <Badge tone="red">דורש טיפול</Badge>}</td>

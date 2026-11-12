@@ -114,6 +114,15 @@ describe('audit labels', () => {
     expect(auditActionLabel('user:suspended')).toBe('השעיית משתמש');
   });
 
+  it('never returns inherited Object.prototype values', () => {
+    for (const a of ['constructor', '__proto__', 'toString', 'constructor:x', '__proto__:x', 'hasOwnProperty:a->b']) {
+      expect(auditActionLabel(a), a).toBe(a);
+    }
+    expect(auditActionLabel('draw:constructor')).toBe('draw:constructor');
+    expect(auditActionLabel('withdrawal:__proto__->approved')).toBe('משיכה: __proto__ ← אושרה');
+    expect(auditActionLabel('withdrawal:requested->constructor')).toBe('משיכה: ממתינה לאישור ← constructor');
+  });
+
   it('falls back to the raw action', () => {
     expect(auditActionLabel('something_new')).toBe('something_new');
     expect(auditActionLabel('draw:brand_new_thing')).toBe('draw:brand_new_thing');
@@ -126,6 +135,8 @@ describe('labelOf', () => {
     expect(labelOf(TX_TYPE_LABEL, 'withdrawal_hold')).toBe('משיכה (הקפאה)');
     expect(labelOf(TX_TYPE_LABEL, 'brand_new')).toBe('brand_new');
     expect(labelOf(TX_TYPE_LABEL, 'constructor')).toBe('constructor');
+    expect(labelOf(TX_TYPE_LABEL, '__proto__')).toBe('__proto__');
+    expect(labelOf(DRAW_STATUS_LABEL, 'toString')).toBe('toString');
     expect(labelOf(ACTOR_TYPE_LABEL, null)).toBe('—');
   });
 });
