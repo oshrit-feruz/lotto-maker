@@ -11,8 +11,7 @@ import { ErrorNotice, Loading, NotAvailable } from './Notice';
 
 /**
  * Big prizes are collected with the original ticket and the winner's ID.
- * GET /me/prize-claims, POST /me/prize-claims/:id/schedule {scheduledAt}.
- * Neither endpoint exists in the backend yet (contract assumed by this page).
+ * GET /me/prize-claims, POST /me/prize-claims/:id/schedule {scheduledAt: ISO}.
  */
 export function PrizeClaims() {
   const claims = useApi<PrizeClaimView[]>('me/prize-claims');
@@ -27,8 +26,9 @@ export function PrizeClaims() {
       return;
     }
     const at = new Date(value);
-    if (Number.isNaN(at.getTime()) || at <= new Date()) {
-      setError('בחרו מועד עתידי.');
+    const claim = claims.data?.find((c) => c.id === id);
+    if (Number.isNaN(at.getTime()) || at <= new Date() || (claim && at >= new Date(claim.expiresAt))) {
+      setError('בחרו מועד עתידי, לפני תום תקופת האיסוף.');
       return;
     }
     setBusyId(id);
@@ -64,6 +64,7 @@ export function PrizeClaims() {
           <p className="small">
             <Link href={`/account/orders/${c.orderId}`}>להזמנה</Link>
             {c.scheduledAt ? ` · מועד איסוף: ${formatDateTime(c.scheduledAt)}` : ''}
+            {c.status === 'awaiting_pickup' || c.status === 'scheduled' ? ` · לאסוף עד ${formatDateTime(c.expiresAt)}` : ''}
           </p>
           {c.status === 'awaiting_pickup' || c.status === 'scheduled' ? (
             <div className="row">

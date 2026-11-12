@@ -148,12 +148,14 @@ export interface SavedCardView {
   isDefault: boolean;
 }
 
-/** Contract assumed by this site (endpoint missing in the backend). */
+/** GET /me/prize-claims (modules/prize-claims). */
 export interface PrizeClaimView {
   id: string;
   orderId: string;
   amount: string;
-  status: 'awaiting_pickup' | 'scheduled' | 'collected' | string;
-  scheduledAt?: string | null;
+  status: 'awaiting_pickup' | 'scheduled' | 'collected' | 'expired';
+  scheduledAt: string | null;
+  collectedAt: string | null;
+  expiresAt: string;
   createdAt: string;
 }

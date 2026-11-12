@@ -35,6 +35,7 @@ export const PRIZE_CLAIM_STATUS_LABELS: Record<string, string> = {
   awaiting_pickup: 'ממתינה לתיאום איסוף',
   scheduled: 'נקבע מועד איסוף',
   collected: 'נאסף',
+  expired: 'פג תוקף',
 };
 
 export const PRIZE_TIER_GAME_LABELS: Record<string, string> = {
