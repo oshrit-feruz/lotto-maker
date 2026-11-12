@@ -12,6 +12,8 @@ const createOrderSchema = z.object({
   subscriptionId: z.string().optional(),
 });
 
+const idempotencyKeySchema = z.string().min(8).max(128).regex(/^[\x21-\x7e]+$/, 'Printable ASCII only').optional();
+
 const listOrdersSchema = z.object({
   status: z.enum(['pending', 'in_queue', 'keyed', 'scanned', 'won', 'lost', 'refunded']).optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -22,11 +24,14 @@ export default async function ordersRoutes(app: FastifyInstance) {
   app.post('/orders', { preHandler: [app.authenticate] }, async (request, reply) => {
     const body = createOrderSchema.parse(request.body);
     assertGameEnabled(body.gameType);
+    // Optional. Unique per user: a repeat returns the original order (201 again) and charges nothing.
+    const idempotencyKey = idempotencyKeySchema.parse(request.headers['idempotency-key']);
     const result = await createOrder({
       userId: request.user.sub,
       ticket: body.ticket,
       type: body.type,
       subscriptionId: body.subscriptionId,
+      idempotencyKey,
     });
     return reply.status(201).send(result);
   });

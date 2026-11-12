@@ -63,20 +63,28 @@ export async function fetchLottoDraw(drawNumber: number): Promise<ParsedLottoDra
 export async function syncUpcomingDraws(): Promise<void> {
   const info = await fetchNextLotteryInfo();
   const existing = await prisma.draw.findUnique({ where: { drawNumber: info.drawNumber } });
+  const prizes = {
+    announcedFirstPrize: info.firstPrize,
+    announcedDoublePrize: info.doublePrize,
+  };
   if (!existing) {
     await prisma.draw.create({
-      data: { drawNumber: info.drawNumber, drawAt: info.drawAt, salesCloseAt: info.salesCloseAt },
+      data: { drawNumber: info.drawNumber, drawAt: info.drawAt, salesCloseAt: info.salesCloseAt, ...prizes },
     });
     return;
   }
+  const samePrize = (stored: { toFixed(n: number): string } | null, announced: string | null) =>
+    (stored === null ? null : stored.toFixed(2)) === announced;
   if (
     existing.status === 'scheduled' &&
     (existing.salesCloseAt.getTime() !== info.salesCloseAt.getTime() ||
-      existing.drawAt.getTime() !== info.drawAt.getTime())
+      existing.drawAt.getTime() !== info.drawAt.getTime() ||
+      !samePrize(existing.announcedFirstPrize, info.firstPrize) ||
+      !samePrize(existing.announcedDoublePrize, info.doublePrize))
   ) {
     await prisma.draw.update({
       where: { id: existing.id },
-      data: { drawAt: info.drawAt, salesCloseAt: info.salesCloseAt },
+      data: { drawAt: info.drawAt, salesCloseAt: info.salesCloseAt, ...prizes },
     });
   }
 }

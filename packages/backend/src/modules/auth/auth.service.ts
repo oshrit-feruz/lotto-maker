@@ -61,7 +61,7 @@ export async function verifyOtpAndIssueTokens(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const refreshToken = (app.jwt.sign as any)(
       { sub: adminUser.id, tokenId, type: 'admin' },
-      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+      { expiresIn: '30d', key: config.JWT_REFRESH_SECRET },
     ) as string;
     await redis.setex(refreshKey(adminUser.id, tokenId), REFRESH_TTL_SECONDS, '1');
     return { accessToken, refreshToken, isNewUser };
@@ -78,7 +78,7 @@ export async function verifyOtpAndIssueTokens(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const refreshToken = (app.jwt.sign as any)(
       { sub: operator.id, tokenId, type: 'operator' },
-      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+      { expiresIn: '30d', key: config.JWT_REFRESH_SECRET },
     ) as string;
     await redis.setex(refreshKey(operator.id, tokenId), REFRESH_TTL_SECONDS, '1');
     return { accessToken, refreshToken, isNewUser };
@@ -93,7 +93,7 @@ export async function verifyOtpAndIssueTokens(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const refreshToken = (app.jwt.sign as any)(
     { sub: user.id, tokenId, type: 'user' },
-    { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+    { expiresIn: '30d', key: config.JWT_REFRESH_SECRET },
   ) as string;
 
   await redis.setex(refreshKey(user.id, tokenId), REFRESH_TTL_SECONDS, '1');
@@ -108,7 +108,7 @@ export async function refreshAccessToken(
   let payload: { sub: string; tokenId: string; type: 'user' | 'operator' | 'admin' };
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    payload = (app.jwt.verify as any)(refreshToken, { secret: config.JWT_REFRESH_SECRET }) as typeof payload;
+    payload = (app.jwt.verify as any)(refreshToken, { key: config.JWT_REFRESH_SECRET }) as typeof payload;
   } catch {
     throw new AppError(401, 'INVALID_REFRESH_TOKEN');
   }
@@ -130,7 +130,7 @@ export async function refreshAccessToken(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const newRefreshToken = (app.jwt.sign as any)(
       { sub: adminUser.id, tokenId: newTokenId, type: 'admin' },
-      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+      { expiresIn: '30d', key: config.JWT_REFRESH_SECRET },
     ) as string;
     await redis.setex(refreshKey(adminUser.id, newTokenId), REFRESH_TTL_SECONDS, '1');
     return { accessToken, refreshToken: newRefreshToken };
@@ -145,7 +145,7 @@ export async function refreshAccessToken(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const newRefreshToken = (app.jwt.sign as any)(
       { sub: operator.id, tokenId: newTokenId, type: 'operator' },
-      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+      { expiresIn: '30d', key: config.JWT_REFRESH_SECRET },
     ) as string;
     await redis.setex(refreshKey(operator.id, newTokenId), REFRESH_TTL_SECONDS, '1');
     return { accessToken, refreshToken: newRefreshToken };
@@ -161,7 +161,7 @@ export async function refreshAccessToken(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const newRefreshToken = (app.jwt.sign as any)(
     { sub: user.id, tokenId: newTokenId, type: 'user' },
-    { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+    { expiresIn: '30d', key: config.JWT_REFRESH_SECRET },
   ) as string;
 
   await redis.setex(refreshKey(user.id, newTokenId), REFRESH_TTL_SECONDS, '1');
@@ -169,10 +169,14 @@ export async function refreshAccessToken(
   return { accessToken, refreshToken: newRefreshToken };
 }
 
-export async function logout(userId: string, refreshToken: string, app: FastifyInstance): Promise<void> {
+/**
+ * Revokes one refresh token. The token itself says whose it is (user, operator or admin), so no
+ * access token is needed. An invalid or already revoked token is a no-op.
+ */
+export async function logout(refreshToken: string, app: FastifyInstance): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const payload = (app.jwt.verify as any)(refreshToken, { secret: config.JWT_REFRESH_SECRET }) as { sub: string; tokenId: string };
+    const payload = (app.jwt.verify as any)(refreshToken, { key: config.JWT_REFRESH_SECRET }) as { sub: string; tokenId: string };
     await redis.del(refreshKey(payload.sub, payload.tokenId));
   } catch {
     // token already invalid, nothing to do

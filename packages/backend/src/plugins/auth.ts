@@ -25,6 +25,15 @@ declare module 'fastify' {
   }
 }
 
+/**
+ * Refresh tokens carry a tokenId and are never accepted as access tokens. Until this check, refresh
+ * tokens were signed with JWT_SECRET (the `secret` sign option is ignored by @fastify/jwt), so a
+ * refresh token issued before the fix would otherwise still pass jwtVerify for up to 30 days.
+ */
+function assertAccessToken(request: FastifyRequest): void {
+  if ('tokenId' in (request.user as object)) throw new AppError(401, 'UNAUTHORIZED');
+}
+
 export default fp(async function authPlugin(app: FastifyInstance) {
   await app.register(import('@fastify/jwt'), {
     secret: config.JWT_SECRET,
@@ -33,6 +42,7 @@ export default fp(async function authPlugin(app: FastifyInstance) {
   app.decorate('authenticate', async (request: FastifyRequest) => {
     try {
       await request.jwtVerify();
+      assertAccessToken(request);
       if (request.user.type !== 'user') {
         throw new AppError(403, 'FORBIDDEN');
       }
@@ -46,6 +56,7 @@ export default fp(async function authPlugin(app: FastifyInstance) {
   app.decorate('authenticateAdmin', async (request: FastifyRequest) => {
     try {
       await request.jwtVerify();
+      assertAccessToken(request);
       if (request.user.type !== 'admin') {
         throw new AppError(403, 'FORBIDDEN');
       }
@@ -63,6 +74,7 @@ export default fp(async function authPlugin(app: FastifyInstance) {
         request.headers['authorization'] = `Bearer ${query.token}`; // NOSONAR: EventSource API has no header support; token is short-lived operator JWT
       }
       await request.jwtVerify();
+      assertAccessToken(request);
       if (request.user.type !== 'operator') {
         throw new AppError(403, 'FORBIDDEN');
       }

@@ -87,4 +87,10 @@ describe('Israeli ID validation', () => {
     }
     expect(normalizeIsraeliId('1234567890')).toBeNull();
   });
+
+  it('is the validator from packages/shared, re-exported unchanged', async () => {
+    const shared = await import('@lotto-maker/shared');
+    expect(isValidIsraeliId).toBe(shared.isValidIsraeliId);
+    expect(normalizeIsraeliId).toBe(shared.normalizeIsraeliId);
+  });
 });
