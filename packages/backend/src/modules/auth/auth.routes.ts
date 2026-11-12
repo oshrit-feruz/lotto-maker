@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { sendOtp, verifyOtpAndIssueTokens, refreshAccessToken, logout } from './auth.service.js';
 import { checkOtpRateLimit } from './otp.store.js';
@@ -17,7 +17,7 @@ const refreshSchema = z.object({
 });
 
 const logoutSchema = z.object({
-  refreshToken: z.string(),
+  refreshToken: z.string().min(1).max(4096),
 });
 
 export default async function authRoutes(app: FastifyInstance) {
@@ -49,9 +49,14 @@ export default async function authRoutes(app: FastifyInstance) {
     return reply.send(tokens);
   });
 
-  app.delete('/auth/logout', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const { refreshToken } = logoutSchema.parse(request.body);
-    await logout(request.user.sub, refreshToken, app);
+  // Revokes the refresh token in the body, for any role (user, operator, admin). No access token is
+  // needed: holding a refresh token is enough to revoke it, and an expired access token must not
+  // stop a logout. POST is the same, for clients that cannot send a DELETE body.
+  const logoutHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { refreshToken } = logoutSchema.parse(request.body ?? {});
+    await logout(refreshToken, app);
     return reply.status(204).send();
-  });
+  };
+  app.delete('/auth/logout', logoutHandler);
+  app.post('/auth/logout', logoutHandler);
 }
