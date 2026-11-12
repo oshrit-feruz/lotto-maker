@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { createCheckout, getPayment, getPaymentProvider, processWebhook } from './payments.service.js';
+import { deactivateCard, listCards } from './cards.service.js';
 import { MockPaymentProvider, MOCK_SIGNATURE_HEADER } from './mock-payment-provider.js';
 
 declare module 'fastify' {
@@ -46,6 +47,16 @@ export default async function paymentsRoutes(app: FastifyInstance) {
   app.get('/payments/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     return reply.send(await getPayment(id, request.user.sub));
+  });
+
+  // Last4 and brand only: the card token never leaves the server.
+  app.get('/me/cards', { preHandler: [app.authenticate] }, async (request, reply) => {
+    return reply.send(await listCards(request.user.sub));
+  });
+
+  app.delete('/me/cards/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    return reply.send(await deactivateCard(request.user.sub, id));
   });
 
   // Called by the payment provider, not by our clients: authenticated by the
@@ -98,7 +109,7 @@ function registerMockCheckoutPages(app: FastifyInstance) {
         providerTxId,
         status: result,
         amount: payment.amount.toNumber(),
-        ...(result === 'approved' ? { cardLast4: '4242', cardToken: `mock_tok_${providerTxId}` } : {}),
+        ...(result === 'approved' ? { cardLast4: '4242', cardBrand: 'visa', cardToken: `mock_tok_${providerTxId}` } : {}),
       }),
     );
     const { outcome } = await processWebhook(rawBody, { [MOCK_SIGNATURE_HEADER]: provider.sign(rawBody) });
