@@ -82,15 +82,46 @@ export const usersApi = {
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
+export interface TicketPayload {
+  type: 'regular' | 'double';
+  systematicType: string | null;
+  extra: boolean;
+  drawCount: number;
+  tables: Array<{ numbers: number[]; strongNumbers: number[] }>;
+}
+
+export interface TicketPrice {
+  combinations: number;
+  drawCount: number;
+  perOrder: { paisPrice: string; extraPrice: string; fee: string; total: string };
+  total: string;
+  draws: Array<{ drawNumber: number; drawAt: string; salesCloseAt: string; orderCutoff: string }>;
+  enoughDraws: boolean;
+}
+
+export const ticketsApi = {
+  // Price breakdown before payment: Pais price, our fee, total
+  calculate: (ticket: TicketPayload) =>
+    request<TicketPrice>('tickets/calculate', { method: 'POST', body: JSON.stringify(ticket) }),
+
+  // A warning only: the user already has this combination in the same draw
+  checkDuplicate: (ticket: TicketPayload) =>
+    request<{ duplicate: boolean; drawNumbers: number[] }>(
+      'tickets/check-duplicate', { method: 'POST', body: JSON.stringify(ticket) },
+    ),
+
+  // Lottomat: the server picks the numbers
+  lottomat: (type: 'regular' | 'double', tableCount: number) =>
+    request<{ tables: Array<{ numbers: number[]; strongNumbers: number[] }> }>(
+      'tickets/lottomat', { method: 'POST', body: JSON.stringify({ type, tableCount }) },
+    ),
+};
+
 export const ordersApi = {
-  create: (params: {
-    gameType: string;
-    numbers: number[];
-    strongNumber?: number;
-    type: 'one_time' | 'subscription';
-  }) => request<{ orderId: string; status: string; totalCharged: string; drawTime: string }>(
-    'orders', { method: 'POST', body: JSON.stringify(params) }
-  ),
+  create: (params: { gameType?: string; ticket: TicketPayload; type: 'one_time' | 'subscription' }) =>
+    request<{ orderId: string; ticketId: string; status: string; totalCharged: string; drawTime: string }>(
+      'orders', { method: 'POST', body: JSON.stringify(params) },
+    ),
 
   list: (params?: { status?: string; page?: number }) => {
     const qs = new URLSearchParams();
@@ -148,6 +179,8 @@ export interface DrawResultResponse {
 
 export interface UpcomingDraw {
   gameType: string;
+  drawNumber?: number;
+  salesCloseAt?: string;
   drawTime: string;
   hardCutoff: string;
 }

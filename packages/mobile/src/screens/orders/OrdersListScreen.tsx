@@ -10,7 +10,10 @@ import type { OrderStatus, GameType } from '@lotto-maker/shared';
 interface OrderRow {
   id: string;
   gameType: GameType;
-  numbers: number[];
+  /** Legacy orders from before tickets. */
+  numbers?: number[] | null;
+  ticket?: { tables: unknown[] } | null;
+  draw?: { drawNumber: number } | null;
   status: OrderStatus;
   drawDate: string;
   totalCharged: string;
@@ -52,7 +55,11 @@ export function OrdersListScreen({ onSelectOrder }: Props) {
             <Text style={styles.gameName}>{GAME_DISPLAY_NAMES[item.gameType]}</Text>
             <OrderStatusBadge status={item.status} />
           </View>
-          <Text style={styles.numbers}>{item.numbers?.join(', ')}</Text>
+          <Text style={styles.numbers}>
+            {item.ticket
+              ? `${item.ticket.tables.length} טבלאות${item.draw ? ` · הגרלה ${item.draw.drawNumber}` : ''}`
+              : item.numbers?.join(', ')}
+          </Text>
           <View style={styles.cardBottom}>
             <Text style={styles.date}>{new Date(item.drawDate).toLocaleDateString('he-IL')}</Text>
             <Text style={styles.price}>₪{item.totalCharged}</Text>
