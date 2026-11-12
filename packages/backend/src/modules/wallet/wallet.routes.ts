@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import * as walletService from './wallet.service.js';
-import { cancelWithdrawal, createWithdrawal, listUserWithdrawals } from './withdrawals.service.js';
+import { cancelWithdrawal, createWithdrawal, listUserWithdrawals, quoteWithdrawal } from './withdrawals.service.js';
 
 const withdrawalSchema = z.object({
   amount: z
@@ -19,6 +19,15 @@ const withdrawalSchema = z.object({
       accountNumber: z.string().regex(/^\d{4,12}$/),
     })
     .optional(),
+});
+
+const quoteSchema = z.object({
+  amount: z.coerce
+    .number()
+    .positive()
+    .max(100000)
+    .refine((a) => Math.abs(a * 100 - Math.round(a * 100)) < 1e-6, 'At most 2 decimal places'),
+  method: z.enum(['card', 'bank']),
 });
 
 const paginationSchema = z.object({
@@ -39,6 +48,12 @@ export default async function walletRoutes(app: FastifyInstance) {
     const body = withdrawalSchema.parse(request.body);
     const result = await createWithdrawal(request.user.sub, body);
     return reply.status(201).send(result);
+  });
+
+  // Fee, net amount and minimum for a withdrawal, before requesting it. Nothing is stored.
+  app.get('/wallet/withdrawals/quote', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { amount, method } = quoteSchema.parse(request.query);
+    return reply.send(quoteWithdrawal(amount, method));
   });
 
   app.get('/wallet/withdrawals', { preHandler: [app.authenticate] }, async (request, reply) => {
