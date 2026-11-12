@@ -10,7 +10,7 @@ interface AuditEntry {
   orderId?: string;
   action: string;
   actorId?: string;
-  actorType?: 'user' | 'operator' | 'system';
+  actorType?: 'user' | 'operator' | 'admin' | 'system';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata?: Record<string, any>;
 }

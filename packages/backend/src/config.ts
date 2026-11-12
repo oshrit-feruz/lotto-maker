@@ -30,6 +30,8 @@ const envSchema = z.object({
     ),
   CORS_ORIGINS: z.string().optional(),
   DEFAULT_OPERATOR_PHONE: z.string().optional(),
+  // Creates this admin (E.164 phone, logs in by OTP) at startup if it does not exist yet.
+  DEFAULT_ADMIN_PHONE: z.string().optional(),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),

@@ -207,39 +207,47 @@ export function assertWithinBalanceCap(balance: string | number, amount: number)
   }
 }
 
-export async function creditWinning(
+/**
+ * Credits a prize to the wallet inside the caller's transaction, respecting the wallet cap.
+ * Whatever does not fit under WALLET_BALANCE_CAP is returned as `excess`; the caller records
+ * it as a PendingCardCredit (TODO: pay it out to the user's card).
+ */
+export async function creditPrizeTx(
+  tx: Tx,
   userId: string,
-  amount: number,
+  amount: Decimal,
   orderId: string,
-): Promise<ChargeResult> {
-  if (amount <= 0) throw new AppError(400, 'INVALID_AMOUNT', 'Winning amount must be positive');
-  return prisma.$transaction(
-    async (tx: Tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+): Promise<{ credited: Decimal; excess: Decimal }> {
+  if (amount.lte(0)) throw new AppError(400, 'INVALID_AMOUNT', 'Winning amount must be positive');
 
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: { walletBalance: { increment: amount } },
-        select: { walletBalance: true },
-      });
+  const rows = await tx.$queryRaw<Array<{ walletBalance: string }>>`
+    SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) throw new AppError(404, 'USER_NOT_FOUND');
 
-      const walletTx = await tx.walletTransaction.create({
-        data: { userId, type: 'winning', amount, orderId, description: 'זכייה' },
-      });
+  const room = Decimal.max(new Decimal(config.WALLET_BALANCE_CAP).minus(row.walletBalance), 0);
+  const credited = Decimal.min(amount, room);
+  const excess = amount.minus(credited);
 
-      await writeAuditLogTx(tx, {
-        entityType: 'wallet',
-        entityId: userId,
-        action: 'wallet:winning',
-        actorId: 'system',
-        actorType: 'system',
-        metadata: { amount: String(amount), orderId, transactionId: walletTx.id },
-      });
-
-      return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
-    },
-    { isolationLevel: 'Serializable' },
-  );
+  if (credited.gt(0)) {
+    await tx.user.update({
+      where: { id: userId },
+      data: { walletBalance: { increment: credited.toFixed(2) } },
+    });
+    const walletTx = await tx.walletTransaction.create({
+      data: { userId, type: 'winning', amount: credited.toFixed(2), orderId, description: 'זכייה' },
+    });
+    await writeAuditLogTx(tx, {
+      entityType: 'wallet',
+      entityId: userId,
+      action: 'wallet:winning',
+      actorId: 'system',
+      actorType: 'system',
+      metadata: { amount: credited.toFixed(2), orderId, transactionId: walletTx.id },
+    });
+  }
+  return { credited, excess };
 }
 
 export async function getBalance(userId: string): Promise<number> {

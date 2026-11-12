@@ -50,6 +50,23 @@ export async function verifyOtpAndIssueTokens(
   const isNewUser = !existing;
   const user = existing ?? await prisma.user.create({ data: { phone } });
 
+  // If this phone belongs to an admin, issue an admin-scoped token (checked before operators)
+  const adminUser = await prisma.admin.findUnique({ where: { phone } });
+  if (adminUser?.active) {
+    const accessToken = app.jwt.sign(
+      { sub: adminUser.id, phone, type: 'admin' },
+      { expiresIn: '15m' },
+    );
+    const tokenId = nanoid();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const refreshToken = (app.jwt.sign as any)(
+      { sub: adminUser.id, tokenId, type: 'admin' },
+      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+    ) as string;
+    await redis.setex(refreshKey(adminUser.id, tokenId), REFRESH_TTL_SECONDS, '1');
+    return { accessToken, refreshToken, isNewUser };
+  }
+
   // If this phone belongs to an operator, issue an operator-scoped token
   const operator = await prisma.operator.findUnique({ where: { phone } });
   if (operator) {
@@ -88,7 +105,7 @@ export async function refreshAccessToken(
   refreshToken: string,
   app: FastifyInstance,
 ): Promise<{ accessToken: string; refreshToken: string }> {
-  let payload: { sub: string; tokenId: string; type: 'user' | 'operator' };
+  let payload: { sub: string; tokenId: string; type: 'user' | 'operator' | 'admin' };
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     payload = (app.jwt.verify as any)(refreshToken, { secret: config.JWT_REFRESH_SECRET }) as typeof payload;
@@ -102,6 +119,22 @@ export async function refreshAccessToken(
   if (deleted === 0) throw new AppError(401, 'REFRESH_TOKEN_REVOKED');
 
   const newTokenId = nanoid();
+
+  if (payload.type === 'admin') {
+    const adminUser = await prisma.admin.findUniqueOrThrow({ where: { id: payload.sub } });
+    if (!adminUser.active) throw new AppError(403, 'ADMIN_INACTIVE');
+    const accessToken = app.jwt.sign(
+      { sub: adminUser.id, phone: adminUser.phone, type: 'admin' },
+      { expiresIn: '15m' },
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newRefreshToken = (app.jwt.sign as any)(
+      { sub: adminUser.id, tokenId: newTokenId, type: 'admin' },
+      { expiresIn: '30d', secret: config.JWT_REFRESH_SECRET },
+    ) as string;
+    await redis.setex(refreshKey(adminUser.id, newTokenId), REFRESH_TTL_SECONDS, '1');
+    return { accessToken, refreshToken: newRefreshToken };
+  }
 
   if (payload.type === 'operator') {
     const operator = await prisma.operator.findUniqueOrThrow({ where: { id: payload.sub } });

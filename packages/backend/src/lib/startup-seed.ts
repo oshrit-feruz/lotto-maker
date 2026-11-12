@@ -39,6 +39,15 @@ export async function ensureDefaultSeedData(): Promise<void> {
         console.log('[seed] created default operator', created.id, config.DEFAULT_OPERATOR_PHONE);
       }
     }
+    if (config.DEFAULT_ADMIN_PHONE) {
+      const adminUser = await prisma.admin.findUnique({ where: { phone: config.DEFAULT_ADMIN_PHONE } });
+      if (!adminUser) {
+        const created = await prisma.admin.create({
+          data: { name: 'מנהל ברירת מחדל', phone: config.DEFAULT_ADMIN_PHONE },
+        });
+        console.log('[seed] created default admin', created.id);
+      }
+    }
   } catch (err) {
     console.error('[seed] startup seed error:', err);
   }
