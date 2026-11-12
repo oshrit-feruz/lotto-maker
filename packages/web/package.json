@@ -1,0 +1,27 @@
+{
+  "name": "@lotto-maker/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "prebuild": "npm run build -w @lotto-maker/shared",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "pretest": "npm run build -w @lotto-maker/shared",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lotto-maker/shared": "*",
+    "next": "14.2.15",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}
