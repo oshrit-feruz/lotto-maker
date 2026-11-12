@@ -7,7 +7,7 @@ import {
 } from '@lotto-maker/shared';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
-import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
+import { writeAuditLogTx } from '../../lib/audit-log.js';
 import { settleDraw } from '../results/settlement.service.js';
 
 const TIER_KEYS = {
@@ -165,29 +165,4 @@ export async function confirmDraw(drawId: string, adminId: string) {
   // Pay right away; the settlement job would also pick it up within a minute
   void settleDraw(drawId).catch((e) => console.error('[admin] settlement after confirm failed:', e));
   return getDraw(drawId);
-}
-
-export function listPrizeClaims(status?: string) {
-  return prisma.prizeClaim.findMany({
-    where: status ? { status: status as never } : {},
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    include: { order: { select: { id: true, draw: { select: { drawNumber: true } } } } },
-  });
-}
-
-export async function markClaimCollected(claimId: string, adminId: string) {
-  const { count } = await prisma.prizeClaim.updateMany({
-    where: { id: claimId, status: 'awaiting_pickup' },
-    data: { status: 'collected' },
-  });
-  if (count === 0) throw new AppError(409, 'CLAIM_NOT_AWAITING_PICKUP');
-  await writeAuditLog({
-    entityType: 'prize_claim',
-    entityId: claimId,
-    action: 'prize_claim:collected',
-    actorId: adminId,
-    actorType: 'admin',
-  });
-  return { collected: true };
 }

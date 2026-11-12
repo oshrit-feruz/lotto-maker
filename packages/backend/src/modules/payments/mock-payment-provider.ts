@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { AppError } from '../../plugins/error-handler.js';
-import type { CheckoutSession, PaymentProvider, WebhookEvent } from './payment-provider.js';
+import type { CardCreditResult, CheckoutSession, PaymentProvider, WebhookEvent } from './payment-provider.js';
 
 export const MOCK_SIGNATURE_HEADER = 'x-mock-signature';
 
@@ -13,6 +13,7 @@ const eventSchema = z.object({
   amount: z.number().positive(),
   cardLast4: z.string().regex(/^\d{4}$/).optional(),
   cardToken: z.string().min(1).optional(),
+  cardBrand: z.string().min(1).max(30).optional(),
 });
 
 /** Dev/test provider. Webhooks are signed with HMAC-SHA256 over the raw body. */
@@ -55,5 +56,25 @@ export class MockPaymentProvider implements PaymentProvider {
 
   async refund(providerTxId: string, amount: number): Promise<void> {
     this.refunds.push({ providerTxId, amount });
+  }
+
+  /** Every creditCard call, including repeats. Tests assert on it. */
+  readonly credits: Array<{ cardToken: string; amount: number; idempotencyKey: string }> = [];
+  private readonly creditResults = new Map<string, CardCreditResult>();
+  /** Test switch: `decline` returns status failed, `throw` simulates a network error. */
+  creditFailure: 'none' | 'decline' | 'throw' = 'none';
+
+  async creditCard(cardToken: string, amount: number, idempotencyKey: string): Promise<CardCreditResult> {
+    this.credits.push({ cardToken, amount, idempotencyKey });
+    const previous = this.creditResults.get(idempotencyKey);
+    if (previous) return previous;
+    if (this.creditFailure === 'throw') throw new Error('mock provider unavailable');
+    const result: CardCreditResult =
+      this.creditFailure === 'decline'
+        ? { providerTxId: `mock_credit_${nanoid(16)}`, status: 'failed' }
+        : { providerTxId: `mock_credit_${nanoid(16)}`, status: 'paid' };
+    // Only a successful payout is remembered, so a later retry of a declined one can succeed
+    if (result.status === 'paid') this.creditResults.set(idempotencyKey, result);
+    return result;
   }
 }

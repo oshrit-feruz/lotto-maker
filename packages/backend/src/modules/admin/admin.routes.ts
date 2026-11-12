@@ -6,14 +6,11 @@ import {
   editResultsSchema,
   getDraw,
   listDraws,
-  listPrizeClaims,
-  markClaimCollected,
 } from './admin.service.js';
 
 const listQuerySchema = z.object({
   status: z.enum(['scheduled', 'results_suggested', 'results_confirmed', 'settled']).optional(),
 });
-const claimsQuerySchema = z.object({ status: z.enum(['awaiting_pickup', 'collected']).optional() });
 
 export default async function adminRoutes(app: FastifyInstance) {
   const pre = { preHandler: [app.authenticateAdmin] };
@@ -40,13 +37,5 @@ export default async function adminRoutes(app: FastifyInstance) {
     return reply.send(await confirmDraw(id, request.user.sub));
   });
 
-  app.get('/admin/prize-claims', pre, async (request, reply) => {
-    const { status } = claimsQuerySchema.parse(request.query);
-    return reply.send(await listPrizeClaims(status));
-  });
-
-  app.post('/admin/prize-claims/:id/collected', pre, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    return reply.send(await markClaimCollected(id, request.user.sub));
-  });
+  // Prize claims (list, schedule, collect) are in admin-money.routes.ts
 }

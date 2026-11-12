@@ -6,6 +6,7 @@ import { config } from '../../config.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
 import { assertWithinBalanceCap, depositTx, reverseDepositTx, type Tx } from '../wallet/wallet.service.js';
+import { saveCardTx } from './cards.service.js';
 import type { PaymentProvider } from './payment-provider.js';
 import { MockPaymentProvider } from './mock-payment-provider.js';
 
@@ -187,6 +188,12 @@ export async function processWebhook(
       });
       return { ...base, outcome: 'cap_exceeded' as const, refundAmount: amount.toNumber() };
     }
+
+    await saveCardTx(tx, payment.userId, {
+      token: event.cardToken,
+      last4: event.cardLast4,
+      brand: event.cardBrand,
+    });
 
     await writeAuditLogTx(tx, {
       entityType: 'payment',

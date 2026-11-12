@@ -11,6 +11,7 @@ export function createFakePrisma() {
   const users = new Map<string, any>();
   const payments = new Map<string, any>();
   const walletTxs: any[] = [];
+  const savedCards: any[] = [];
   const auditLogs: any[] = [];
   let seq = 0;
   const nextId = (prefix: string) => `${prefix}_${++seq}`;
@@ -65,6 +66,29 @@ export function createFakePrisma() {
         return { count: 1 };
       },
     },
+    savedCard: {
+      findFirst: async ({ where, orderBy }: any) => {
+        const rows = savedCards.filter((c) => Object.entries(where).every(([k, v]) => c[k] === v));
+        if (orderBy?.createdAt === 'desc') rows.sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq);
+        return rows[0] ?? null;
+      },
+      findUnique: async ({ where }: any) => savedCards.find((c) => c.id === where.id) ?? null,
+      findMany: async ({ where, orderBy }: any) => {
+        const rows = savedCards.filter((c) => Object.entries(where).every(([k, v]) => c[k] === v));
+        if (orderBy?.createdAt === 'desc') rows.sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq);
+        return rows;
+      },
+      create: async ({ data }: any) => {
+        const card = { id: nextId('card'), active: true, brand: null, createdAt: Date.now(), seq: ++seq, ...data };
+        savedCards.push(card);
+        return card;
+      },
+      update: async ({ where, data }: any) => {
+        const card = savedCards.find((c) => c.id === where.id);
+        Object.assign(card, data);
+        return card;
+      },
+    },
     walletTransaction: {
       create: async ({ data }: any) => {
         if (data.paymentId && walletTxs.some((t) => t.paymentId === data.paymentId && t.type === data.type)) {
@@ -94,6 +118,7 @@ export function createFakePrisma() {
     users,
     payments,
     walletTxs,
+    savedCards,
     auditLogs,
     addUser(id: string, walletBalance = 0) {
       users.set(id, { id, status: 'active', walletBalance: new Decimal(walletBalance) });
