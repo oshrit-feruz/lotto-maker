@@ -13,6 +13,7 @@ import walletRoutes from './modules/wallet/wallet.routes.js';
 import paymentsRoutes from './modules/payments/payments.routes.js';
 import ordersRoutes from './modules/orders/orders.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
+import prizeClaimsRoutes from './modules/prize-claims/prize-claims.routes.js';
 import adminMoneyRoutes from './modules/admin/admin-money.routes.js';
 import ticketsRoutes from './modules/tickets/tickets.routes.js';
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes.js';
@@ -40,6 +41,7 @@ export async function buildApp() {
   await app.register(ticketsRoutes);
   await app.register(adminRoutes);
   await app.register(adminMoneyRoutes);
+  await app.register(prizeClaimsRoutes);
   await app.register(subscriptionsRoutes);
   await app.register(operatorsRoutes);
   await app.register(resultsRoutes);

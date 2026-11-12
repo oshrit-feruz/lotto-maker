@@ -3,9 +3,11 @@ import { startDrawsScheduler } from '../modules/draws/draws.sync.js';
 import { startSubscriptionScheduler } from '../services/subscription-scheduler.js';
 
 import { startWalletScheduler } from '../modules/wallet/wallet.scheduler.js';
+import { startPrizeClaimScheduler } from '../modules/prize-claims/prize-claims.scheduler.js';
 
 export function startAllSchedulers(): void {
   startWalletScheduler();
+  startPrizeClaimScheduler();
   startResultsScheduler();
   startDrawsScheduler();
   startSubscriptionScheduler();

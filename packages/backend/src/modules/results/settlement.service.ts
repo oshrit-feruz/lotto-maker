@@ -6,6 +6,7 @@ import { config } from '../../config.js';
 import { orderStatusChange, orderStatusChangeTx, writeAuditLog } from '../../lib/audit-log.js';
 import { notificationService, PAYLOADS } from '../../services/notifications.js';
 import { creditPrizeTx } from '../wallet/wallet.service.js';
+import { claimExpiry } from '../../lib/prize-claim.js';
 import { scoreOrder, totalOf } from '../../lib/settlement-math.js';
 import type { PrizeTable, WinLine } from '../../lib/settlement-math.js';
 
@@ -27,6 +28,8 @@ export interface SettlementOrder {
 
 export interface SettlementDraw {
   id: string;
+  /** Start of the claim retention period for a big prize. Defaults to now when absent. */
+  drawAt?: Date;
   numbers: number[];
   strong: number | null;
   extraDigits: number[];
@@ -113,7 +116,13 @@ export async function settleOrderTx(
 
   // Above the limit: nothing is credited; the user collects it with the original ticket and ID
   await tx.prizeClaim.create({
-    data: { orderId: order.id, userId: order.userId, amount: total.toFixed(2), status: 'awaiting_pickup' },
+    data: {
+      orderId: order.id,
+      userId: order.userId,
+      amount: total.toFixed(2),
+      status: 'awaiting_pickup',
+      expiresAt: claimExpiry(draw.drawAt ?? new Date()),
+    },
   });
   return { kind: 'won_claim', total };
 }

@@ -95,7 +95,9 @@ enum PrizeGame {
 
 enum PrizeClaimStatus {
   awaiting_pickup
+  scheduled
   collected
+  expired
 }
 
 enum PendingCardCreditStatus {
@@ -463,12 +465,23 @@ model PrizeClaim {
   userId    String
   amount    Decimal          @db.Decimal(12, 2)
   status    PrizeClaimStatus @default(awaiting_pickup)
+  // The time slot the user (or an admin) picked for handing the ticket over.
+  scheduledAt DateTime?
+  collectedAt DateTime?
+  collectedByAdminId String?
+  // The ID digits the admin checked against User.idLast4 at hand-over.
+  idCheckedLast4 String?
+  // Draw date + PRIZE_CLAIM_RETENTION_DAYS. After this an unclaimed prize is marked expired (never deleted).
+  expiresAt DateTime
+  // Set when the "expires in 7 days" notification went out.
+  reminderSentAt DateTime?
   createdAt DateTime         @default(now())
 
   order     Order            @relation(fields: [orderId], references: [id])
   user      User             @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([status, expiresAt])
 }
 
 // Part of a small prize that did not fit under the wallet cap. A job pays it to the user's

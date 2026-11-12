@@ -25,6 +25,12 @@ export const PAYLOADS = {
     data: { type: 'PRIZE_CLAIM' },
   }),
 
+  prizeClaimExpiring: (winAmount: string, expiresOn: string): NotificationPayload => ({
+    title: 'הפרס שלך עדיין ממתין ⏰',
+    body: `הפרס בסך ₪${winAmount} ניתן לאיסוף עד ${expiresOn}. קבעו מועד איסוף באפליקציה.`,
+    data: { type: 'PRIZE_CLAIM_EXPIRING' },
+  }),
+
   orderLost: (): NotificationPayload => ({
     title: 'תוצאות הגרלה',
     body: 'לא הייתה זכייה הפעם. בהצלחה בפעם הבאה!',
