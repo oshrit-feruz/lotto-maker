@@ -1,11 +1,42 @@
 import type { ReactNode } from 'react';
+import { errorText } from '../api/errors';
 
 export function Loading() {
   return <p className="muted">טוען…</p>;
 }
 
+/** Previous / next controls for a `{ total, page, pageSize }` response. */
+export function Pager({
+  page,
+  pageSize,
+  total,
+  onPage,
+  disabled = false,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (page: number) => void;
+  disabled?: boolean;
+}) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  return (
+    <div className="row" style={{ marginTop: 12 }}>
+      <button className="secondary" disabled={disabled || page <= 1} onClick={() => onPage(page - 1)}>
+        הקודם
+      </button>
+      <span>
+        עמוד {page} מתוך {pages}
+      </span>
+      <button className="secondary" disabled={disabled || page >= pages} onClick={() => onPage(page + 1)}>
+        הבא
+      </button>
+    </div>
+  );
+}
+
 export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  const msg = error instanceof Error ? error.message : 'שגיאה לא צפויה';
+  const msg = errorText(error);
   return (
     <div className="error" role="alert">
       {msg}{' '}
