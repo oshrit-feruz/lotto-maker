@@ -11,8 +11,10 @@ describe('isIdLast4Valid', () => {
     expect(isIdLast4Valid('123', '1234')).toBe(false);
     expect(isIdLast4Valid('12a4', null)).toBe(false);
   });
-  it('accepts any 4 digits when the expected value is unknown', () => {
-    expect(isIdLast4Valid('9999', null)).toBe(true);
+  it('never accepts anything when the expected value is unknown', () => {
+    expect(isIdLast4Valid('9999', null)).toBe(false);
+    expect(isIdLast4Valid('9999', undefined)).toBe(false);
+    expect(isIdLast4Valid('9999', '')).toBe(false);
   });
 });
 
@@ -36,5 +38,12 @@ describe('CollectClaimDialog', () => {
     expect(button).toBeEnabled();
     await userEvent.click(button);
     expect(onConfirm).toHaveBeenCalledWith('4321');
+  });
+
+  it('explains and keeps Collect disabled when the claimant ID is unknown', () => {
+    render(<CollectClaimDialog claim={{ ...claim, claimantIdLast4: null }} onConfirm={() => {}} onCancel={() => {}} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('תעודת הזהות של הזוכה אינה זמינה');
+    expect(screen.getByRole('button', { name: 'סמן כנאסף' })).toBeDisabled();
+    expect(screen.getByLabelText('4 ספרות אחרונות של תעודת הזהות')).toBeDisabled();
   });
 });

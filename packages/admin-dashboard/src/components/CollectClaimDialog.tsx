@@ -19,8 +19,9 @@ export default function CollectClaimDialog({
   onCancel: () => void;
 }) {
   const [typed, setTyped] = useState('');
+  const idKnown = !!claim.claimantIdLast4;
   const valid = isIdLast4Valid(typed, claim.claimantIdLast4);
-  const mismatch = typed.length === 4 && !valid;
+  const mismatch = idKnown && typed.length === 4 && !valid;
   return (
     <ConfirmDialog
       title="מסירת זכייה"
@@ -35,6 +36,11 @@ export default function CollectClaimDialog({
         סכום למסירה: <strong>{formatNis(claim.amount)}</strong>
         {claim.claimantPhone && <span className="ltr"> · {claim.claimantPhone}</span>}
       </p>
+      {!idKnown && (
+        <p className="error" role="alert">
+          תעודת הזהות של הזוכה אינה זמינה במערכת – לא ניתן לאמת ולמסור את הזכייה.
+        </p>
+      )}
       <label>
         4 ספרות אחרונות של תעודת הזהות
         <input
@@ -43,6 +49,7 @@ export default function CollectClaimDialog({
           inputMode="numeric"
           maxLength={4}
           dir="ltr"
+          disabled={!idKnown}
           autoFocus
         />
       </label>
