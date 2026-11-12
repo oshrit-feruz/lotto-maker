@@ -38,8 +38,8 @@ const TABLES_B = [
   { numbers: [1, 3, 5, 7, 9, 11], strongNumbers: [2] },
 ];
 
-const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
-const skip = !TEST_DB_URL;
+// setup.ts sets E2E_DATABASE when TEST_DATABASE_URL (or DATABASE_URL) points at a real database
+const skip = process.env.E2E_DATABASE !== '1';
 
 describe.skipIf(skip)('Full e2e flow', () => {
   let app: FastifyInstance;
@@ -66,17 +66,27 @@ describe.skipIf(skip)('Full e2e flow', () => {
     await app.ready();
 
     // Clean slate
+    // Children before parents (foreign keys); the Phase 5/6 tables too, so a re-run starts clean
     await prisma.auditLog.deleteMany();
     await prisma.walletTransaction.deleteMany();
     await prisma.payment.deleteMany();
+    await prisma.withdrawal.deleteMany();
+    await prisma.savedCard.deleteMany();
     await prisma.queueSlot.deleteMany();
     await prisma.orderWin.deleteMany();
     await prisma.prizeClaim.deleteMany();
     await prisma.pendingCardCredit.deleteMany();
+    await prisma.receipt.deleteMany();
+    await prisma.subscriptionEvent.deleteMany();
     await prisma.order.deleteMany();
     await prisma.ticket.deleteMany(); // tables cascade
     await prisma.draw.deleteMany(); // prize tiers cascade
     await prisma.subscription.deleteMany();
+    await prisma.deviceToken.deleteMany();
+    await prisma.kycCheck.deleteMany();
+    await prisma.userLimits.deleteMany();
+    await prisma.notification.deleteMany();
+    await prisma.notificationPreference.deleteMany();
     await prisma.user.deleteMany();
     await prisma.operator.deleteMany();
     await prisma.location.deleteMany();
