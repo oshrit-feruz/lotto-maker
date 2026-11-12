@@ -19,6 +19,8 @@ const db = vi.hoisted(() => ({
   drawFindUnique: vi.fn(),
   drawUpdateMany: vi.fn(),
   claimFindMany: vi.fn(),
+  claimFindUnique: vi.fn(),
+  claimUpdateMany: vi.fn(),
 }));
 
 vi.mock('../../src/prisma.js', () => {
@@ -29,7 +31,7 @@ vi.mock('../../src/prisma.js', () => {
     auditLog: { findMany: db.auditFindMany, count: db.auditCount, create: db.auditCreate },
     admin: { findMany: db.adminFindMany },
     draw: { findMany: db.drawFindMany, count: db.drawCount, findUnique: db.drawFindUnique, updateMany: db.drawUpdateMany },
-    prizeClaim: { findMany: db.claimFindMany },
+    prizeClaim: { findMany: db.claimFindMany, findUnique: db.claimFindUnique, updateMany: db.claimUpdateMany },
   };
   prisma.$transaction = (fn: (tx: any) => Promise<unknown>) => fn(prisma);
   return { prisma };
@@ -118,19 +120,18 @@ describe('GET /admin/users?phone=', () => {
     expect(Object.keys(q.select).sort()).toEqual(
       ['createdAt', 'fullName', 'id', 'idLast4', 'phone', 'status', 'verifiedAdult', 'walletBalance'],
     );
-    expect(res.json()).toEqual({
-      query: '+97250123',
-      items: [{
-        id: 'user-1',
-        phone: '+972501234567',
-        fullName: 'Dana Levi',
-        walletBalance: '120.50',
-        status: 'active',
-        verifiedAdult: true,
-        idLast4: '2782',
-        createdAt: '2026-10-01T10:00:00.000Z',
-      }],
-    });
+    // A plain array, as the admin dashboard reads it; `balance` is the dashboard's name for walletBalance
+    expect(res.json()).toEqual([{
+      id: 'user-1',
+      phone: '+972501234567',
+      fullName: 'Dana Levi',
+      walletBalance: '120.50',
+      balance: '120.50',
+      status: 'active',
+      verifiedAdult: true,
+      idLast4: '2782',
+      createdAt: '2026-10-01T10:00:00.000Z',
+    }]);
     expect(res.body).not.toContain('123456782');
     expect(res.body).not.toContain('v1:secret');
   });
@@ -208,8 +209,15 @@ describe('suspend / unsuspend', () => {
     expect(auditActions()).toEqual(['user:unsuspended']);
   });
 
-  it('suspend requires a reason; unknown user is 404', async () => {
-    expect((await post('/admin/users/user-1/suspend', {})).statusCode).toBe(400);
+  it('suspend works without a body (as the dashboard sends it); a too-short reason is 400; unknown user is 404', async () => {
+    db.userUpdateMany.mockResolvedValueOnce({ count: 1 });
+    db.userFindUnique.mockResolvedValueOnce(userRow({ status: 'suspended' }));
+    const res = await post('/admin/users/user-1/suspend');
+    expect(res.statusCode).toBe(200);
+    expect(db.auditCreate.mock.calls[0][0].data).toMatchObject({ action: 'user:suspended', metadata: undefined });
+    db.auditCreate.mockClear();
+
+    expect((await post('/admin/users/user-1/suspend', { reason: 'x' })).statusCode).toBe(400);
     db.userUpdateMany.mockResolvedValue({ count: 0 });
     db.userFindUnique.mockResolvedValue(null);
     expect((await post('/admin/users/nope/suspend', { reason: 'test reason' })).statusCode).toBe(404);
@@ -287,6 +295,7 @@ describe('GET /admin/prize-claims', () => {
       claimantIdLast4: '2782',
       drawNumber: 3980,
       scheduledAt: '2026-12-01T09:00:00.000Z',
+      scheduledFor: '2026-12-01T09:00:00.000Z',
       expiresAt: '2027-05-01T00:00:00.000Z',
       user: { fullName: 'Dana Levi', phone: '+972501234567' },
       order: { id: 'o1', draw: { drawNumber: 3980 } },
@@ -302,6 +311,17 @@ describe('GET /admin/prize-claims', () => {
 
   it('rejects an unknown status', async () => {
     expect((await get('/admin/prize-claims?status=paid')).statusCode).toBe(400);
+  });
+
+  it.each(['scheduledAt', 'scheduledFor'])('schedule accepts the slot as %s', async (field) => {
+    const slot = new Date(Date.now() + 3 * 24 * 3_600_000).toISOString();
+    const claim = { ...claimRow('awaiting_pickup'), expiresAt: new Date(Date.now() + 100 * 24 * 3_600_000) };
+    db.claimFindUnique.mockResolvedValue(claim);
+    db.claimUpdateMany.mockResolvedValue({ count: 1 });
+    const res = await post(`/admin/prize-claims/${claim.id}/schedule`, { [field]: slot });
+    expect(res.statusCode).toBe(200);
+    expect(db.claimUpdateMany.mock.calls[0][0].data).toEqual({ status: 'scheduled', scheduledAt: new Date(slot) });
+    expect(auditActions()).toEqual(['prize_claim:awaiting_pickup->scheduled']);
   });
 });
 

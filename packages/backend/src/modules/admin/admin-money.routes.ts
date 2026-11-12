@@ -56,7 +56,9 @@ export default async function adminMoneyRoutes(app: FastifyInstance) {
 
   app.post('/admin/prize-claims/:id/schedule', pre, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { scheduledAt } = scheduleSchema.parse(request.body);
+    // The admin dashboard sends `scheduledFor`; accept it as another name for `scheduledAt`
+    const body = (request.body ?? {}) as { scheduledAt?: unknown; scheduledFor?: unknown };
+    const { scheduledAt } = scheduleSchema.parse({ scheduledAt: body.scheduledAt ?? body.scheduledFor });
     return reply.send(await scheduleClaimAsAdmin(id, request.user.sub, new Date(scheduledAt)));
   });
 

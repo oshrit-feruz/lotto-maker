@@ -87,6 +87,9 @@ export default async function resultsRoutes(app: FastifyInstance) {
             drawTime: draw.drawAt.toISOString(),
             salesCloseAt: draw.salesCloseAt.toISOString(),
             hardCutoff: cutoffsOf(draw).hardCutoff.toISOString(),
+            // Announced prizes in ILS (null if not announced), as on GET /draws/next
+            firstPrize: draw.announcedFirstPrize?.toFixed(2) ?? null,
+            doublePrize: draw.announcedDoublePrize?.toFixed(2) ?? null,
           });
         }
         continue;

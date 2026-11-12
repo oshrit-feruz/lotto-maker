@@ -10,8 +10,8 @@ import {
 } from './admin-users.service.js';
 
 const searchSchema = z.object({ phone: z.string().min(1).max(30) });
-const suspendSchema = z.object({ reason: z.string().trim().min(2).max(500) });
-const unsuspendSchema = z.object({ reason: z.string().trim().min(2).max(500).optional() });
+// The reason goes into the audit entry. Optional because the admin dashboard does not send one yet.
+const statusChangeSchema = z.object({ reason: z.string().trim().min(2).max(500).optional() });
 const dateParam = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2}))?$/, 'Use an ISO date (YYYY-MM-DD) or date-time with offset')
@@ -40,13 +40,13 @@ export default async function adminUsersRoutes(app: FastifyInstance) {
 
   app.post('/admin/users/:id/suspend', pre, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { reason } = suspendSchema.parse(request.body ?? {});
+    const { reason } = statusChangeSchema.parse(request.body ?? {});
     return reply.send(await setUserStatus(id, request.user.sub, 'suspended', reason));
   });
 
   app.post('/admin/users/:id/unsuspend', pre, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { reason } = unsuspendSchema.parse(request.body ?? {});
+    const { reason } = statusChangeSchema.parse(request.body ?? {});
     return reply.send(await setUserStatus(id, request.user.sub, 'active', reason));
   });
 

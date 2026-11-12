@@ -35,6 +35,8 @@ function toAdminUser(u: AdminUserRow) {
     phone: u.phone,
     fullName: u.fullName,
     walletBalance: u.walletBalance.toFixed(2),
+    /** Same as walletBalance; the name the admin dashboard reads. */
+    balance: u.walletBalance.toFixed(2),
     status: u.status,
     verifiedAdult: u.verifiedAdult,
     idLast4: u.idLast4,
@@ -62,7 +64,7 @@ export function normalizePhoneQuery(raw: string): string | null {
   return `+972${national}`;
 }
 
-/** Exact or prefix match on the normalised phone, newest customers first, at most 20. */
+/** Exact or prefix match on the normalised phone, newest customers first, at most 20. A plain array. */
 export async function searchUsersByPhone(rawPhone: string) {
   const phone = normalizePhoneQuery(rawPhone);
   if (!phone) {
@@ -74,7 +76,7 @@ export async function searchUsersByPhone(rawPhone: string) {
     take: USER_SEARCH_LIMIT,
     select: adminUserSelect,
   });
-  return { query: phone, items: rows.map(toAdminUser) };
+  return rows.map(toAdminUser);
 }
 
 export async function getUserForAdmin(userId: string) {

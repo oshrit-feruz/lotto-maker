@@ -113,7 +113,7 @@ describe('GET /draws/next', () => {
     db.drawFindMany.mockResolvedValue([scheduledDraw()]);
     const res = await app.inject({ method: 'GET', url: '/draws/upcoming' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()[0]).toMatchObject({ gameType: 'lotto', drawNumber: 3984 });
+    expect(res.json()[0]).toMatchObject({ gameType: 'lotto', drawNumber: 3984, firstPrize: '5000000.00', doublePrize: '10000000.00' });
   });
 });
 

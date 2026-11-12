@@ -76,6 +76,8 @@ export async function listClaims(status?: PrizeClaimStatus) {
     claimantName: c.user.fullName,
     claimantPhone: c.user.phone,
     claimantIdLast4: c.user.idLast4,
+    /** Same as scheduledAt; the name the admin dashboard reads. */
+    scheduledFor: c.scheduledAt,
     drawNumber: c.order.draw?.drawNumber ?? null,
     user: { fullName: c.user.fullName, phone: c.user.phone },
     order: c.order,
