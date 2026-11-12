@@ -21,13 +21,13 @@ COPY packages/operator-dashboard/package.json packages/operator-dashboard/
 COPY packages/mobile/package.json packages/mobile/
 
 # Reproducible install from the lockfile, limited to the two workspaces the backend needs
-RUN npm ci --no-audit --no-fund -w packages/backend -w packages/shared
+RUN npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
 
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 
 # Prisma client (with the linux-musl engine from schema.prisma binaryTargets), then shared -> backend
-RUN cd packages/backend && npx prisma generate
+RUN cd packages/backend && npm exec --no -- prisma generate
 RUN npm run build -w packages/shared
 RUN npm run build -w packages/backend
 

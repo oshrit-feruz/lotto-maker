@@ -38,15 +38,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - name: Install (backend + shared workspaces)
-        run: npm ci --no-audit --no-fund -w packages/backend -w packages/shared
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
       - name: Build shared
         run: npm run build -w packages/shared
       - name: Prisma generate
         working-directory: packages/backend
-        run: npx prisma generate
+        run: npm exec --no -- prisma generate
       - name: Type-check
         working-directory: packages/backend
-        run: npx tsc --noEmit -p .
+        run: npm exec --no -- tsc --noEmit -p .
       - name: Unit tests
         working-directory: packages/backend
         env:
@@ -55,7 +55,7 @@ jobs:
           JWT_REFRESH_SECRET: ci-unit-refresh-secret-0123456789
           # Runs the real-Redis cases of tests/unit/job-lock.test.ts
           TEST_REDIS_URL: redis://localhost:6379
-        run: npx vitest run tests/unit src
+        run: npm exec --no -- vitest run tests/unit src
 
   # ── Migrations: apply all, then check the schema matches them (drift) ──────────
   migrations:
@@ -79,26 +79,26 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - name: Install (backend + shared workspaces)
-        run: npm ci --no-audit --no-fund -w packages/backend -w packages/shared
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
       - name: Create shadow database
         run: psql "$PG_URL" -c 'CREATE DATABASE lotto_shadow'
       - name: prisma migrate deploy (empty database, every migration)
         working-directory: packages/backend
         env:
           DATABASE_URL: ${{ env.PG_URL }}
-        run: npx prisma migrate deploy
+        run: npm exec --no -- prisma migrate deploy
       - name: prisma migrate deploy is a no-op the second time
         working-directory: packages/backend
         env:
           DATABASE_URL: ${{ env.PG_URL }}
-        run: npx prisma migrate deploy | tee deploy2.log && grep -q "No pending migrations" deploy2.log
+        run: npm exec --no -- prisma migrate deploy | tee deploy2.log && grep -q "No pending migrations" deploy2.log
       - name: Drift check (migrations vs schema.prisma)
         working-directory: packages/backend
         env:
           DATABASE_URL: ${{ env.PG_URL }}
         run: |
           set +e
-          npx prisma migrate diff \
+          npm exec --no -- prisma migrate diff \
             --from-migrations prisma/migrations \
             --to-schema-datamodel prisma/schema.prisma \
             --shadow-database-url "$PG_SHADOW_URL" \
@@ -111,7 +111,7 @@ jobs:
           # Exit 2 = a difference. Objects Prisma cannot express (partial unique index, CHECK
           # constraints) live only in migration SQL and are listed in prisma/sql-only-objects.txt;
           # a difference that only touches those is expected. Anything else is real drift.
-          npx prisma migrate diff \
+          npm exec --no -- prisma migrate diff \
             --from-migrations prisma/migrations \
             --to-schema-datamodel prisma/schema.prisma \
             --shadow-database-url "$PG_SHADOW_URL" \
@@ -155,17 +155,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - name: Install (backend + shared workspaces)
-        run: npm ci --no-audit --no-fund -w packages/backend -w packages/shared
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines
       - name: Build shared
         run: npm run build -w packages/shared
       - name: Prisma generate
         working-directory: packages/backend
-        run: npx prisma generate
+        run: npm exec --no -- prisma generate
       - name: Apply migrations
         working-directory: packages/backend
         env:
           DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
-        run: npx prisma migrate deploy
+        run: npm exec --no -- prisma migrate deploy
       # tests/e2e/setup.ts sets every other variable (mock payment / KYC providers, test keys)
       - name: e2e tests
         working-directory: packages/backend
@@ -229,7 +229,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - name: Install
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm rebuild prisma @prisma/engines
       - name: Build shared
         run: npm run build -w packages/shared
       - name: Build
