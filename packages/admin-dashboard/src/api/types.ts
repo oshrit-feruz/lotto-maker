@@ -47,7 +47,12 @@ export interface EditResultsBody {
   numbers: number[];
   strong: number;
   extraDigits: number[];
-  prizeTiers: Array<{ game: PrizeGame; tier: string; winnersCount: number; prizeAmount: number }>;
+  prizeTiers: Array<{
+    game: PrizeGame;
+    tier: string;
+    winnersCount: number;
+    prizeAmount: number;
+  }>;
 }
 
 // ─── Prize claims ────────────────────────────────────────────────────────────
@@ -66,15 +71,13 @@ export interface PrizeClaimView {
   createdAt: string;
 }
 
-/** An item of GET /admin/prize-claims. */
+/**
+ * An item of GET /admin/prize-claims. It carries no ID data: the admin types the last 4 digits from
+ * the claimant's physical ID card and the server checks them on collect.
+ */
 export interface PrizeClaim extends PrizeClaimView {
   claimantName: string | null;
   claimantPhone: string;
-  /**
-   * Never shown and never used to prefill the collect input: the admin types the digits from the
-   * physical ID card. The dashboard only uses it to enable the button; the server checks again.
-   */
-  claimantIdLast4: string | null;
   /** Same as scheduledAt. */
   scheduledFor: string | null;
   drawNumber: number | null;
@@ -84,6 +87,12 @@ export interface PrizeClaim extends PrizeClaimView {
 
 export type WithdrawalStatus = 'requested' | 'approved' | 'rejected' | 'paid' | 'failed' | 'cancelled';
 export type WithdrawalMethod = 'card' | 'bank';
+
+/** Who asked for a withdrawal or is owed a card credit. Phone and name only, never ID data. */
+export interface Requester {
+  phone: string;
+  fullName: string | null;
+}
 
 export interface Withdrawal {
   id: string;
@@ -106,6 +115,11 @@ export interface Withdrawal {
   providerTxId: string | null;
 }
 
+/** An item of GET /admin/withdrawals. */
+export interface WithdrawalListItem extends Withdrawal {
+  user: Requester;
+}
+
 export interface BankDetails {
   holderName: string;
   bankCode: string;
@@ -120,16 +134,23 @@ export interface WithdrawalWithBank extends Withdrawal {
 
 // ─── Card credits ────────────────────────────────────────────────────────────
 
-export type CardCreditStatus = 'pending' | 'paid' | 'failed';
+/** `processing`: the system is paying it to the card right now; it cannot be marked paid by hand. */
+export type CardCreditStatus = 'pending' | 'processing' | 'paid' | 'failed';
 
+/** An item of GET /admin/card-credits. Exactly one of orderId (a prize) and withdrawalId is set. */
 export interface CardCredit {
   id: string;
-  orderId: string;
+  /** Prize money above the wallet cap. */
+  orderId: string | null;
+  /** A released withdrawal hold that no longer fit under the wallet cap. */
+  withdrawalId: string | null;
   userId: string;
+  user: Requester;
   amount: string;
   status: CardCreditStatus;
   attempts: number;
   nextAttemptAt: string;
+  claimedAt: string | null;
   lastError: string | null;
   providerTxId: string | null;
   paidAt: string | null;

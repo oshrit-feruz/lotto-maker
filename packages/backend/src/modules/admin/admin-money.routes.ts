@@ -11,16 +11,20 @@ import { collectClaim, listClaims, scheduleClaimAsAdmin } from '../prize-claims/
 import { scheduleSchema } from '../prize-claims/prize-claims.routes.js';
 import { listCardCredits, markCardCreditPaid } from '../wallet/card-credits.service.js';
 import { reviewReasonSchema } from './review-reason.js';
+import { pagingQuerySchema } from './paging.js';
 
-const withdrawalsQuerySchema = z.object({
+// The three lists answer { items, total, page, pageSize }; page from 1, pageSize 1–200 (default 50)
+const withdrawalsQuerySchema = pagingQuerySchema.extend({
   status: z.enum(['requested', 'approved', 'rejected', 'paid', 'failed', 'cancelled']).optional(),
 });
 const rejectSchema = z.object({ reason: reviewReasonSchema });
-const claimsQuerySchema = z.object({
+const claimsQuerySchema = pagingQuerySchema.extend({
   status: z.enum(['awaiting_pickup', 'scheduled', 'collected', 'expired']).optional(),
 });
 const collectSchema = z.object({ idLast4: z.string().regex(/^\d{4}$/) });
-const cardCreditsQuerySchema = z.object({ status: z.enum(['pending', 'paid', 'failed']).optional() });
+const cardCreditsQuerySchema = pagingQuerySchema.extend({
+  status: z.enum(['pending', 'processing', 'paid', 'failed']).optional(),
+});
 const cardCreditMarkPaidSchema = z.object({ reference: z.string().min(1).max(100) });
 const markPaidSchema = z.object({ bankReference: z.string().min(1).max(100) });
 
@@ -29,8 +33,8 @@ export default async function adminMoneyRoutes(app: FastifyInstance) {
   const pre = { preHandler: [app.authenticateAdmin] };
 
   app.get('/admin/withdrawals', pre, async (request, reply) => {
-    const { status } = withdrawalsQuerySchema.parse(request.query);
-    return reply.send(await listWithdrawals(status));
+    const { status, page, pageSize } = withdrawalsQuerySchema.parse(request.query);
+    return reply.send(await listWithdrawals(status, { page, pageSize }));
   });
 
   // Decrypted bank details, for making the transfer. Audited.
@@ -51,8 +55,8 @@ export default async function adminMoneyRoutes(app: FastifyInstance) {
   });
 
   app.get('/admin/prize-claims', pre, async (request, reply) => {
-    const { status } = claimsQuerySchema.parse(request.query);
-    return reply.send(await listClaims(status));
+    const { status, page, pageSize } = claimsQuerySchema.parse(request.query);
+    return reply.send(await listClaims(status, { page, pageSize }));
   });
 
   app.post('/admin/prize-claims/:id/schedule', pre, async (request, reply) => {
@@ -72,8 +76,8 @@ export default async function adminMoneyRoutes(app: FastifyInstance) {
 
   // Prize money above the wallet cap that could not be paid to a card yet
   app.get('/admin/card-credits', pre, async (request, reply) => {
-    const { status } = cardCreditsQuerySchema.parse(request.query);
-    return reply.send(await listCardCredits(status));
+    const { status, page, pageSize } = cardCreditsQuerySchema.parse(request.query);
+    return reply.send(await listCardCredits(status, { page, pageSize }));
   });
 
   app.post('/admin/card-credits/:id/mark-paid', pre, async (request, reply) => {

@@ -102,6 +102,9 @@ enum PrizeClaimStatus {
 
 enum PendingCardCreditStatus {
   pending
+  // The card-credit job has claimed it and is calling the provider (see claimedAt). An admin
+  // cannot mark it paid by hand meanwhile; a claim left behind by a crash is reclaimed later.
+  processing
   paid
   // Reserved. Nothing sets it today: a credit that cannot be paid stays `pending` and is retried.
   failed
@@ -428,6 +431,9 @@ model Draw {
   // Null when pais did not announce them or they could not be parsed.
   announcedFirstPrize  Decimal? @db.Decimal(14, 2)
   announcedDoublePrize Decimal? @db.Decimal(14, 2)
+  // The values exactly as pais sent them, kept because the unit (shekels or millions) is inferred
+  announcedFirstPrizeRaw  String?
+  announcedDoublePrizeRaw String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -496,9 +502,13 @@ model PrizeClaim {
 // Part of a small prize that did not fit under the wallet cap. A job pays it to the user's
 // default saved card; without a card, or on failure, it stays pending and is retried with
 // backoff (nextAttemptAt). An admin can also mark it paid by hand.
+// Money owed to the user that is paid to their default card: prize money above the wallet cap
+// (orderId), or a released withdrawal hold that no longer fits under the cap (withdrawalId).
+// Exactly one of the two is set (CHECK constraint in the migration).
 model PendingCardCredit {
   id        String                  @id @default(cuid())
-  orderId   String                  @unique
+  orderId   String?                 @unique
+  withdrawalId String?              @unique
   userId    String
   amount    Decimal                 @db.Decimal(12, 2)
   status    PendingCardCreditStatus @default(pending)
@@ -510,9 +520,12 @@ model PendingCardCredit {
   // Set when an admin paid it outside the system.
   paidByAdminId String?
   manualReference String?
+  // When the job claimed it (status processing). A claim older than the stale limit is reclaimed.
+  claimedAt DateTime?
   createdAt DateTime                @default(now())
 
-  order     Order                   @relation(fields: [orderId], references: [id])
+  order     Order?                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  withdrawal Withdrawal?            @relation(fields: [withdrawalId], references: [id], onDelete: Restrict)
   user      User                    @relation(fields: [userId], references: [id])
 
   @@index([userId, status])
@@ -577,6 +590,8 @@ model Withdrawal {
   user              User                @relation(fields: [userId], references: [id])
   savedCard         SavedCard?          @relation(fields: [savedCardId], references: [id])
   walletTxs         WalletTransaction[]
+  // The part of a released hold that did not fit under the wallet cap
+  cardCredit        PendingCardCredit?
 
   @@index([userId, createdAt])
   @@index([status, createdAt])

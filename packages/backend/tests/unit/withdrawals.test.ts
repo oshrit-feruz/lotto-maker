@@ -13,12 +13,16 @@ import {
   cancelWithdrawal,
   createWithdrawal,
   getBankDetails,
+  listWithdrawals,
   markWithdrawalPaid,
   namesMatch,
   rejectWithdrawal,
   retryStuckCardPayouts,
+  splitRelease,
   withdrawalAmounts,
 } from '../../src/modules/wallet/withdrawals.service.js';
+import { payCardCredit } from '../../src/modules/wallet/card-credits.service.js';
+import { Decimal } from 'decimal.js';
 import { getPaymentProvider } from '../../src/modules/payments/payments.service.js';
 import type { MockPaymentProvider } from '../../src/modules/payments/mock-payment-provider.js';
 import { config } from '../../src/config.js';
@@ -275,6 +279,104 @@ describe('failed payout', () => {
     const result = await approveWithdrawal(w.id, { id: ADMIN, type: 'admin' });
     expect(result).toMatchObject({ status: 'failed', failureReason: 'CARD_NOT_AVAILABLE' });
     expect(fake.db.balanceOf(USER)).toBe(2000);
+  });
+});
+
+describe('wallet cap on release', () => {
+  const CAP = config.WALLET_BALANCE_CAP;
+  const credits = () => fake.db.pendingCardCredit;
+  /** A prize credited while the withdrawal waited: the wallet now holds `balance`. */
+  const prizeArrives = (balance: number) => {
+    fake.db.users.get(USER).walletBalance = new Decimal(balance);
+  };
+
+  it('splitRelease: up to the cap to the wallet, the rest to the card', () => {
+    expect(splitRelease(CAP - 100, 900)).toEqual({ toWallet: new Decimal(100), toCard: new Decimal(800) });
+    expect(splitRelease(CAP, 900)).toEqual({ toWallet: new Decimal(0), toCard: new Decimal(900) });
+    expect(splitRelease(CAP + 50, 900)).toEqual({ toWallet: new Decimal(0), toCard: new Decimal(900) });
+    expect(splitRelease(100, 900)).toEqual({ toWallet: new Decimal(900), toCard: new Decimal(0) });
+  });
+
+  it('reject: credits up to the cap and sends the excess to the card, once', async () => {
+    const w = await createWithdrawal(USER, { amount: 900, method: 'bank', bank });
+    prizeArrives(CAP - 100);
+
+    await rejectWithdrawal(w.id, ADMIN, 'not allowed');
+    expect(fake.db.balanceOf(USER)).toBe(CAP);
+    expect(release()).toHaveLength(1);
+    expect(release()[0]).toMatchObject({ amount: '100.00', withdrawalId: w.id });
+    expect(credits()).toHaveLength(1);
+    expect(credits()[0]).toMatchObject({ withdrawalId: w.id, orderId: null, userId: USER, amount: '800.00', status: 'pending' });
+    const audit = fake.db.auditLog.find((a) => a.action === 'wallet:withdrawal_release');
+    expect(audit.metadata).toMatchObject({ amount: '900.00', toWallet: '100.00', toCard: '800.00', cardCreditId: credits()[0].id });
+
+    // Repeating changes nothing
+    await rejectWithdrawal(w.id, ADMIN, 'not allowed');
+    expect(credits()).toHaveLength(1);
+    expect(release()).toHaveLength(1);
+    expect(fake.db.balanceOf(USER)).toBe(CAP);
+  });
+
+  it('a wallet already at the cap gets nothing; the whole amount goes to the card', async () => {
+    const w = await createWithdrawal(USER, { amount: 900, method: 'card' });
+    prizeArrives(CAP);
+    await cancelWithdrawal(USER, w.id);
+    expect(fake.db.balanceOf(USER)).toBe(CAP);
+    expect(release()).toHaveLength(0);
+    expect(credits()).toHaveLength(1);
+    expect(credits()[0]).toMatchObject({ amount: '900.00', withdrawalId: w.id });
+
+    // A second cancel, or two at once, still release once
+    await cancelWithdrawal(USER, w.id);
+    expect(credits()).toHaveLength(1);
+  });
+
+  it('two concurrent cancels release once', async () => {
+    const w = await createWithdrawal(USER, { amount: 900, method: 'card' });
+    prizeArrives(CAP - 300);
+    await Promise.allSettled([cancelWithdrawal(USER, w.id), cancelWithdrawal(USER, w.id)]);
+    expect(fake.db.balanceOf(USER)).toBe(CAP);
+    expect(release()).toHaveLength(1);
+    expect(credits()).toHaveLength(1);
+    expect(credits()[0].amount).toBe('600.00');
+  });
+
+  it('a declined card payout releases under the cap too, and the job then pays the excess to the card', async () => {
+    const w = await createWithdrawal(USER, { amount: 900, method: 'card' });
+    prizeArrives(CAP - 200);
+    provider.creditFailure = 'decline';
+    await approveWithdrawal(w.id, { id: ADMIN, type: 'admin' });
+    expect(fake.db.withdrawal[0].status).toBe('failed');
+    expect(fake.db.balanceOf(USER)).toBe(CAP);
+    expect(credits()[0]).toMatchObject({ amount: '700.00', withdrawalId: w.id });
+
+    provider.creditFailure = 'none';
+    await expect(payCardCredit(credits()[0].id)).resolves.toBe('paid');
+    expect(credits()[0].status).toBe('paid');
+    expect(provider.credits.at(-1)).toMatchObject({ amount: 700 });
+  });
+
+  it('under the cap nothing changes: the whole hold returns to the wallet', async () => {
+    const w = await createWithdrawal(USER, { amount: 900, method: 'card' });
+    await cancelWithdrawal(USER, w.id);
+    expect(fake.db.balanceOf(USER)).toBe(2000);
+    expect(release()[0].amount).toBe('900.00');
+    expect(credits()).toHaveLength(0);
+  });
+});
+
+describe('admin list', () => {
+  it('pages newest first and names the requester by phone and name only', async () => {
+    Object.assign(fake.db.users.get(USER), { phone: '+972501234567', idLast4: '2782' });
+    const a = await createWithdrawal(USER, { amount: 300, method: 'bank', bank });
+    const b = await createWithdrawal(USER, { amount: 400, method: 'bank', bank });
+    const page1 = await listWithdrawals('requested', { page: 1, pageSize: 1 });
+    expect(page1).toMatchObject({ total: 2, page: 1, pageSize: 1 });
+    expect(page1.items.map((w) => w.id)).toEqual([b.id]);
+    expect(page1.items[0]!.user).toEqual({ phone: '+972501234567', fullName: 'ישראל ישראלי' });
+    expect((await listWithdrawals('requested', { page: 2, pageSize: 1 })).items.map((w) => w.id)).toEqual([a.id]);
+    expect(JSON.stringify(page1)).not.toContain('2782');
+    expect(JSON.stringify(page1)).not.toContain('bankDetailsEnc');
   });
 });
 

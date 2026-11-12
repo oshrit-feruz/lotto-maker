@@ -38,6 +38,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   // Card credits
   CARD_CREDIT_NOT_FOUND: 'הזיכוי לא נמצא',
   CARD_CREDIT_NOT_PENDING: 'הזיכוי אינו ממתין לתשלום',
+  CREDIT_IN_PROGRESS: 'המערכת מבצעת כעת את הזיכוי לכרטיס – לא ניתן לסמן כשולם. נסה שוב בעוד כמה דקות.',
 };
 
 /** The Hebrew message for a backend error code, or undefined when the code is unknown. */
