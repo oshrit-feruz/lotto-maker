@@ -3,6 +3,7 @@ import { AppError } from '../../plugins/error-handler.js';
 import type { PrismaClient } from '@prisma/client';
 import { orderStatusChangeTx, writeAuditLogTx } from '../../lib/audit-log.js';
 import { redis } from '../../redis.js';
+import { config } from '../../config.js';
 import { notificationService, PAYLOADS } from '../../services/notifications.js';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
@@ -97,6 +98,14 @@ export async function startSlot(slotId: string, operatorId: string) {
   // Already started by this operator: nothing changes, nothing to log
   if (slot.status === 'in_progress' && slot.operatorId === operatorId) return current;
 
+  // Another operator is working on it: only a stale claim can be taken over
+  if (slot.status === 'in_progress' && slot.operatorId && slot.operatorId !== operatorId) {
+    const claimAgeMs = slot.assignedAt ? Date.now() - slot.assignedAt.getTime() : Infinity;
+    if (claimAgeMs < config.SLOT_CLAIM_TIMEOUT_MINUTES * 60_000) {
+      throw new AppError(409, 'SLOT_TAKEN', 'Slot is being handled by another operator');
+    }
+  }
+
   const updated = await prisma.$transaction(async (tx: Tx) => {
     const { count } = await tx.queueSlot.updateMany({
       where: { id: slotId, status: slot.status, operatorId: slot.operatorId },
@@ -126,15 +135,16 @@ export async function completeSlot(slotId: string, operatorId: string) {
   const { slot } = await loadSlotForOperator(slotId, operatorId);
 
   if (slot.status !== 'in_progress') throw new AppError(409, 'SLOT_NOT_IN_PROGRESS');
+  if (slot.operatorId !== operatorId) throw new AppError(409, 'SLOT_TAKEN', 'Slot is being handled by another operator');
   if (slot.order.status !== 'in_queue') throw new AppError(409, 'ORDER_NOT_IN_QUEUE');
 
   const now = new Date();
   const updatedSlot = await prisma.$transaction(async (tx: Tx) => {
     const slotUpdate = await tx.queueSlot.updateMany({
-      where: { id: slotId, status: 'in_progress' },
+      where: { id: slotId, status: 'in_progress', operatorId },
       data: { status: 'done', completedAt: now },
     });
-    if (slotUpdate.count === 0) throw new AppError(409, 'SLOT_NOT_IN_PROGRESS');
+    if (slotUpdate.count === 0) throw new AppError(409, 'SLOT_TAKEN', 'Slot is being handled by another operator');
 
     const orderUpdate = await tx.order.updateMany({
       where: { id: slot.orderId, status: 'in_queue' },

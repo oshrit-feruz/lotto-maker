@@ -48,6 +48,7 @@ import {
   getQueue,
   startSlot,
 } from '../../src/modules/operators/operators.service.js';
+import { config } from '../../src/config.js';
 import errorHandler from '../../src/plugins/error-handler.js';
 import authPlugin from '../../src/plugins/auth.js';
 import operatorsRoutes from '../../src/modules/operators/operators.routes.js';
@@ -147,6 +148,35 @@ describe('startSlot', () => {
     expectNothingWritten();
   });
 
+  describe('a slot another operator is working on', () => {
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
+
+    it('is rejected with 409 SLOT_TAKEN while the claim is fresh', async () => {
+      db.slotFindUnique.mockResolvedValue(
+        slot({ status: 'in_progress', operatorId: 'op-2', assignedAt: minutesAgo(2) }),
+      );
+      await expect(startSlot('slot-1', 'op-1')).rejects.toMatchObject({ statusCode: 409, code: 'SLOT_TAKEN' });
+      expectNothingWritten();
+    });
+
+    it('can be taken over once the claim is older than SLOT_CLAIM_TIMEOUT_MINUTES, and logs the previous operator', async () => {
+      db.slotFindUnique.mockResolvedValue(
+        slot({ status: 'in_progress', operatorId: 'op-2', assignedAt: minutesAgo(config.SLOT_CLAIM_TIMEOUT_MINUTES + 1) }),
+      );
+      await startSlot('slot-1', 'op-1');
+
+      expect(db.slotUpdateMany.mock.calls[0]![0]).toMatchObject({
+        where: { id: 'slot-1', status: 'in_progress', operatorId: 'op-2' },
+        data: { status: 'in_progress', operatorId: 'op-1' },
+      });
+      expect(db.auditCreate.mock.calls[0]![0].data).toMatchObject({
+        action: 'slot_status_change:in_progress->in_progress',
+        actorId: 'op-1',
+        metadata: { previousOperatorId: 'op-2' },
+      });
+    });
+  });
+
   it('rejects when the slot changed underneath (lost race)', async () => {
     db.slotFindUnique.mockResolvedValue(slot());
     db.slotUpdateMany.mockResolvedValue({ count: 0 });
@@ -161,7 +191,7 @@ describe('completeSlot', () => {
     await completeSlot('slot-1', 'op-1');
 
     expect(db.slotUpdateMany.mock.calls[0]![0]).toMatchObject({
-      where: { id: 'slot-1', status: 'in_progress' },
+      where: { id: 'slot-1', status: 'in_progress', operatorId: 'op-1' },
       data: { status: 'done' },
     });
     expect(db.orderUpdateMany.mock.calls[0]![0]).toMatchObject({
@@ -171,6 +201,19 @@ describe('completeSlot', () => {
     expect(auditActions()).toEqual(['slot_status_change:in_progress->done', 'status_change:in_queue->keyed']);
   });
 
+  it('rejects with 409 SLOT_TAKEN when another operator holds the slot', async () => {
+    db.slotFindUnique.mockResolvedValue(slot({ status: 'in_progress', operatorId: 'op-2' }));
+    await expect(completeSlot('slot-1', 'op-1')).rejects.toMatchObject({ statusCode: 409, code: 'SLOT_TAKEN' });
+    expectNothingWritten();
+  });
+
+  it('rejects with 409 SLOT_TAKEN when the claim changed between the read and the update', async () => {
+    db.slotFindUnique.mockResolvedValue(slot({ status: 'in_progress', operatorId: 'op-1' }));
+    db.slotUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(completeSlot('slot-1', 'op-1')).rejects.toMatchObject({ statusCode: 409, code: 'SLOT_TAKEN' });
+    expect(db.orderUpdateMany).not.toHaveBeenCalled();
+  });
+
   it.each(['waiting', 'done', 'failed'])('rejects a %s slot', async (status) => {
     db.slotFindUnique.mockResolvedValue(slot({ status }));
     await expect(completeSlot('slot-1', 'op-1')).rejects.toMatchObject({ statusCode: 409, code: 'SLOT_NOT_IN_PROGRESS' });
@@ -178,7 +221,7 @@ describe('completeSlot', () => {
   });
 
   it('rejects when the order is not in the queue (e.g. refunded)', async () => {
-    db.slotFindUnique.mockResolvedValue(slot({ status: 'in_progress' }, 'refunded'));
+    db.slotFindUnique.mockResolvedValue(slot({ status: 'in_progress', operatorId: 'op-1' }, 'refunded'));
     await expect(completeSlot('slot-1', 'op-1')).rejects.toMatchObject({ statusCode: 409, code: 'ORDER_NOT_IN_QUEUE' });
     expectNothingWritten();
   });
