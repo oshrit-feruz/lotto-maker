@@ -2,6 +2,8 @@ import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Loading } from './components/ui';
 import LoginPage from './pages/LoginPage';
+import DrawsPage from './pages/DrawsPage';
+import DrawDetailPage from './pages/DrawDetailPage';
 
 const NAV: Array<[string, string]> = [
   ['/draws', 'הגרלות'],
@@ -42,7 +44,9 @@ export default function App() {
       <Route path="/login" element={status === 'in' ? <Navigate to="/draws" replace /> : <LoginPage />} />
       <Route element={<Shell />}>
         <Route path="/" element={<Navigate to="/draws" replace />} />
-        {/* screens are added section by section */}
+        <Route path="/draws" element={<DrawsPage />} />
+        <Route path="/draws/:id" element={<DrawDetailPage />} />
+        {/* remaining screens are added section by section */}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
