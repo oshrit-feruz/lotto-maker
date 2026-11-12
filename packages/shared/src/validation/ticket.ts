@@ -132,5 +132,5 @@ export function ticketFingerprint(tables: TableInput[], systematicType: string |
     (t) =>
       `${[...t.numbers].sort((a, b) => a - b).join(',')}|${[...t.strongNumbers].sort((a, b) => a - b).join(',')}`,
   );
-  return `${systematicType ?? 'plain'}#${parts.sort().join(';')}`;
+  return `${systematicType ?? 'plain'}#${parts.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).join(';')}`;
 }
