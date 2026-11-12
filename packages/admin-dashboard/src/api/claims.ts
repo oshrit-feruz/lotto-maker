@@ -1,7 +1,15 @@
 import { api } from './client';
-import type { ClaimStatus, PrizeClaim, PrizeClaimView } from './types';
+import type { ClaimStatus, Page, PrizeClaim, PrizeClaimView } from './types';
 
-export const listClaims = (status?: ClaimStatus) => api.get<PrizeClaim[]>('/admin/prize-claims', { status });
+/** Rows per page of the admin money lists (the backend allows up to 200). */
+export const LIST_PAGE_SIZE = 50;
+
+export const listClaims = (status?: ClaimStatus, page = 1) =>
+  api.get<Page<PrizeClaim>>('/admin/prize-claims', {
+    status,
+    page,
+    pageSize: LIST_PAGE_SIZE,
+  });
 
 /**
  * Hand-over against ID. `idLast4` is what the admin typed from the physical ID card; the backend
@@ -12,4 +20,6 @@ export const collectClaim = (id: string, idLast4: string) =>
 
 /** `scheduledFor` is an ISO date-time; it must be in the future and before the claim expires. */
 export const scheduleClaim = (id: string, scheduledFor: string) =>
-  api.post<PrizeClaimView>(`/admin/prize-claims/${id}/schedule`, { scheduledFor });
+  api.post<PrizeClaimView>(`/admin/prize-claims/${id}/schedule`, {
+    scheduledFor,
+  });

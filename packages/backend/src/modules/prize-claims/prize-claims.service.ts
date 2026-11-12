@@ -3,6 +3,7 @@ import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog } from '../../lib/audit-log.js';
 import { notifyInBackground } from '../notifications/notify.service.js';
 import { TIMEZONE } from '@lotto-maker/shared';
+import { pageWindow, DEFAULT_PAGING, type Paged, type Paging } from '../admin/paging.js';
 
 export type PrizeClaimStatus = 'awaiting_pickup' | 'scheduled' | 'collected' | 'expired';
 
@@ -54,34 +55,41 @@ export async function scheduleClaimAsUser(userId: string, claimId: string, slot:
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
 
-export async function listClaims(status?: PrizeClaimStatus) {
-  const rows = await prisma.prizeClaim.findMany({
-    where: status ? { status } : {},
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    include: {
-      user: { select: { fullName: true, phone: true, idLast4: true } },
-      order: { select: { id: true, draw: { select: { drawNumber: true } } } },
-    },
-  });
+/**
+ * Newest first, a page at a time. No ID data leaves the server: the claimant's ID last 4 is not
+ * even read here. The admin types the digits from the physical ID card and collectClaim checks
+ * them (422 ID_MISMATCH / ID_NOT_ON_FILE).
+ */
+export async function listClaims(status?: PrizeClaimStatus, paging: Paging = DEFAULT_PAGING) {
+  const where = status ? { status } : {};
+  const [rows, total] = await Promise.all([
+    prisma.prizeClaim.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      ...pageWindow(paging),
+      include: {
+        user: { select: { fullName: true, phone: true } },
+        order: { select: { id: true, draw: { select: { drawNumber: true } } } },
+      },
+    }),
+    prisma.prizeClaim.count({ where }),
+  ]);
   type Row = ClaimRow & {
-    user: { fullName: string | null; phone: string; idLast4: string | null };
+    user: { fullName: string | null; phone: string };
     order: { id: string; draw: { drawNumber: number } | null };
   };
-  return rows.map((c: Row) => ({
+  const items = (rows as Row[]).map((c) => ({
     ...toView(c),
-    // Flat claimant fields for the admin dashboard. The ID last 4 is shown because the dashboard
-    // asks for it. The hand-over check (collectClaim) still compares the digits the admin types
-    // from the physical ID card, so the dashboard should not prefill that input from this value.
+    // Flat claimant fields for the admin dashboard
     claimantName: c.user.fullName,
     claimantPhone: c.user.phone,
-    claimantIdLast4: c.user.idLast4,
     /** Same as scheduledAt; the name the admin dashboard reads. */
     scheduledFor: c.scheduledAt,
     drawNumber: c.order.draw?.drawNumber ?? null,
     user: { fullName: c.user.fullName, phone: c.user.phone },
-    order: c.order,
+    order: { id: c.order.id, draw: c.order.draw ? { drawNumber: c.order.draw.drawNumber } : null },
   }));
+  return { items, total, ...paging } satisfies Paged<(typeof items)[number]>;
 }
 
 export async function scheduleClaimAsAdmin(claimId: string, adminId: string, slot: Date, now = new Date()) {

@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import type { Withdrawal, WithdrawalStatus } from '../api/types';
+import type { Page, WithdrawalListItem as Withdrawal, WithdrawalStatus } from '../api/types';
 import { canApprove, canMarkPaid, canReject, WITHDRAWAL_STATUSES, WITHDRAWAL_STATUS_LABEL } from '../lib/withdrawals';
 import WithdrawalsPage from './WithdrawalsPage';
 import * as payouts from '../api/payouts';
@@ -35,6 +35,15 @@ const w = (over: Partial<Withdrawal> = {}): Withdrawal => ({
   adminId: null,
   bankReference: null,
   providerTxId: null,
+  user: { phone: '+972501234567', fullName: 'ישראל ישראלי' },
+  ...over,
+});
+
+const pageOf = (items: Withdrawal[], over: Partial<Page<Withdrawal>> = {}): Page<Withdrawal> => ({
+  items,
+  total: items.length,
+  page: 1,
+  pageSize: 50,
   ...over,
 });
 
@@ -63,7 +72,10 @@ describe('withdrawal status labels', () => {
   });
 
   it('allows the actions the backend allows', () => {
-    const s = (status: WithdrawalStatus, method: 'bank' | 'card' = 'bank') => ({ status, method });
+    const s = (status: WithdrawalStatus, method: 'bank' | 'card' = 'bank') => ({
+      status,
+      method,
+    });
     expect(canApprove(s('requested'))).toBe(true);
     expect(canApprove(s('approved'))).toBe(false);
     expect(canReject(s('requested', 'card'))).toBe(true);
@@ -75,14 +87,46 @@ describe('withdrawal status labels', () => {
   });
 
   it('filters by "requested" by default and lists every status in the filter', async () => {
-    vi.mocked(payouts.listWithdrawals).mockReset().mockResolvedValue([w()]);
+    vi.mocked(payouts.listWithdrawals)
+      .mockReset()
+      .mockResolvedValue(pageOf([w()]));
     renderPage();
     expect(await screen.findByText('₪495.00')).toBeInTheDocument();
-    expect(payouts.listWithdrawals).toHaveBeenCalledWith('requested');
+    expect(payouts.listWithdrawals).toHaveBeenCalledWith('requested', 1);
     const options = within(screen.getByLabelText('סטטוס')).getAllByRole('option');
     expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(WITHDRAWAL_STATUSES);
     const row = screen.getAllByRole('row')[1]!;
     expect(within(row).getByText('ממתינה לאישור')).toBeInTheDocument();
+  });
+
+  it('shows who requested it, linking to the user page', async () => {
+    vi.mocked(payouts.listWithdrawals)
+      .mockReset()
+      .mockResolvedValue(pageOf([w()]));
+    renderPage();
+    const link = (await screen.findByText('ישראל ישראלי')).closest('a')!;
+    expect(link).toHaveAttribute('href', '/users/user-000000001');
+    expect(within(link).getByText('+972501234567')).toBeInTheDocument();
+  });
+
+  it('pages with next and previous', async () => {
+    vi.mocked(payouts.listWithdrawals)
+      .mockReset()
+      .mockImplementation(async (_s, page = 1) =>
+        pageOf([w({ id: `w${page}`, payout: `${page}00.00` })], {
+          total: 75,
+          page,
+        }),
+      );
+    renderPage();
+    await screen.findByText('₪100.00');
+    expect(screen.getByText('עמוד 1 מתוך 2')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'הבא' }));
+    await screen.findByText('₪200.00');
+    expect(payouts.listWithdrawals).toHaveBeenLastCalledWith('requested', 2);
+    expect(screen.getByRole('button', { name: 'הבא' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'הקודם' }));
+    await screen.findByText('₪100.00');
   });
 });
 
@@ -96,12 +140,21 @@ describe('withdrawal actions', () => {
 
   it('fetches bank details only on an explicit click, then marks paid with the reference', async () => {
     const approved = w({ status: 'approved' });
-    vi.mocked(payouts.listWithdrawals).mockResolvedValue([approved]);
+    vi.mocked(payouts.listWithdrawals).mockResolvedValue(pageOf([approved]));
     vi.mocked(payouts.getWithdrawalBankDetails).mockResolvedValueOnce({
       ...approved,
-      bank: { holderName: 'ישראל ישראלי', bankCode: '12', branchCode: '345', accountNumber: '123456789' },
+      bank: {
+        holderName: 'ישראל ישראלי',
+        bankCode: '12',
+        branchCode: '345',
+        accountNumber: '123456789',
+      },
     });
-    vi.mocked(payouts.markWithdrawalPaid).mockResolvedValueOnce({ ...approved, status: 'paid', bankReference: 'TX-1' });
+    vi.mocked(payouts.markWithdrawalPaid).mockResolvedValueOnce({
+      ...approved,
+      status: 'paid',
+      bankReference: 'TX-1',
+    });
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'סמן כשולמה' }));
     const dialog = screen.getByRole('dialog');
@@ -113,7 +166,9 @@ describe('withdrawal actions', () => {
     expect(payouts.getWithdrawalBankDetails).toHaveBeenCalledTimes(1);
     expect(payouts.getWithdrawalBankDetails).toHaveBeenCalledWith('w1');
 
-    const confirm = within(dialog).getByRole('button', { name: 'סימון כשולמה' });
+    const confirm = within(dialog).getByRole('button', {
+      name: 'סימון כשולמה',
+    });
     expect(confirm).toBeDisabled();
     await userEvent.type(within(dialog).getByLabelText('אסמכתת ההעברה הבנקאית'), ' TX-1 ');
     await userEvent.click(confirm);
@@ -122,7 +177,7 @@ describe('withdrawal actions', () => {
   });
 
   it('requires a reject reason of at least 2 characters', async () => {
-    vi.mocked(payouts.listWithdrawals).mockResolvedValue([w({ method: 'card', bankAccountLast4: null })]);
+    vi.mocked(payouts.listWithdrawals).mockResolvedValue(pageOf([w({ method: 'card', bankAccountLast4: null })]));
     vi.mocked(payouts.rejectWithdrawal).mockResolvedValueOnce(w({ status: 'rejected' }));
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'דחה' }));

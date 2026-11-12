@@ -8,6 +8,7 @@ import { getPaymentProvider } from '../payments/payments.service.js';
 import { getDefaultCard } from '../payments/cards.service.js';
 import { notifyInBackground } from '../notifications/notify.service.js';
 import type { Tx } from './wallet.service.js';
+import { pageWindow, DEFAULT_PAGING, type Paged, type Paging } from '../admin/paging.js';
 
 export type WithdrawalStatus = 'requested' | 'approved' | 'rejected' | 'paid' | 'failed' | 'cancelled';
 
@@ -121,28 +122,66 @@ async function reload(id: string): Promise<WithdrawalRow> {
   return w as WithdrawalRow;
 }
 
-/** Gives the held money back. Runs in the caller's transaction; at most once per withdrawal (unique index). */
+/** How a released hold of `amount` splits, given the balance now: what fits under the cap, and the rest. */
+export function splitRelease(balance: Decimal.Value, amount: Decimal.Value) {
+  const total = new Decimal(amount);
+  const room = Decimal.max(new Decimal(config.WALLET_BALANCE_CAP).minus(balance), 0);
+  const toWallet = Decimal.min(total, room);
+  return { toWallet, toCard: total.minus(toWallet) };
+}
+
+/**
+ * Gives the held money back, in the caller's transaction. It goes to the wallet up to
+ * WALLET_BALANCE_CAP (prizes may have filled the wallet since the hold); the rest becomes a
+ * PendingCardCredit that the card-credit job pays to the user's card, as settlement does with
+ * prize money above the cap. At most once per withdrawal: the callers release only after winning
+ * the status change, and the unique (withdrawalId, type) wallet transaction and the unique
+ * PendingCardCredit.withdrawalId make a repeat fail.
+ */
 async function releaseHoldTx(tx: Tx, w: { id: string; userId: string; amount: { toString(): string } }): Promise<void> {
   const amount = new Decimal(w.amount.toString());
-  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${w.userId} FOR UPDATE`;
-  // Not capped: it is the user's own money coming back.
-  await tx.user.update({ where: { id: w.userId }, data: { walletBalance: { increment: amount.toFixed(2) } } });
-  const walletTx = await tx.walletTransaction.create({
-    data: {
-      userId: w.userId,
-      type: 'withdrawal_release',
-      amount: amount.toFixed(2),
-      withdrawalId: w.id,
-      description: RELEASE_DESCRIPTION,
-    },
-  });
+  const rows = await tx.$queryRaw<Array<{ walletBalance: string }>>`
+    SELECT "walletBalance"::text FROM "User" WHERE id = ${w.userId} FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) throw new AppError(404, 'USER_NOT_FOUND');
+  const { toWallet, toCard } = splitRelease(row.walletBalance, amount);
+
+  let transactionId: string | null = null;
+  if (toWallet.gt(0)) {
+    await tx.user.update({ where: { id: w.userId }, data: { walletBalance: { increment: toWallet.toFixed(2) } } });
+    const walletTx = await tx.walletTransaction.create({
+      data: {
+        userId: w.userId,
+        type: 'withdrawal_release',
+        amount: toWallet.toFixed(2),
+        withdrawalId: w.id,
+        description: RELEASE_DESCRIPTION,
+      },
+    });
+    transactionId = walletTx.id;
+  }
+  let cardCreditId: string | null = null;
+  if (toCard.gt(0)) {
+    const credit = await tx.pendingCardCredit.create({
+      data: { withdrawalId: w.id, userId: w.userId, amount: toCard.toFixed(2) },
+    });
+    cardCreditId = credit.id;
+  }
   await writeAuditLogTx(tx, {
     entityType: 'wallet',
     entityId: w.userId,
     action: 'wallet:withdrawal_release',
     actorId: 'system',
     actorType: 'system',
-    metadata: { amount: amount.toFixed(2), withdrawalId: w.id, transactionId: walletTx.id },
+    metadata: {
+      amount: amount.toFixed(2),
+      toWallet: toWallet.toFixed(2),
+      toCard: toCard.toFixed(2),
+      withdrawalId: w.id,
+      transactionId,
+      cardCreditId,
+    },
   });
 }
 
@@ -410,13 +449,23 @@ export async function retryStuckCardPayouts(now = new Date()): Promise<number> {
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
 
-export async function listWithdrawals(status?: WithdrawalStatus) {
-  const rows = await prisma.withdrawal.findMany({
-    where: status ? { status } : {},
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-  });
-  return rows.map((w: WithdrawalRow) => toView(w, true));
+/** Newest first, a page at a time. Each item names the user (phone and name only, no ID data). */
+export async function listWithdrawals(status?: WithdrawalStatus, paging: Paging = DEFAULT_PAGING) {
+  const where = status ? { status } : {};
+  const [rows, total] = await Promise.all([
+    prisma.withdrawal.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      ...pageWindow(paging),
+      include: { user: { select: { phone: true, fullName: true } } },
+    }),
+    prisma.withdrawal.count({ where }),
+  ]);
+  const items = (rows as Array<WithdrawalRow & { user: { phone: string; fullName: string | null } }>).map((w) => ({
+    ...toView(w, true),
+    user: { phone: w.user.phone, fullName: w.user.fullName },
+  }));
+  return { items, total, ...paging } satisfies Paged<(typeof items)[number]>;
 }
 
 /** Rejects a withdrawal that is waiting (or a bank one approved but not yet paid) and releases the hold. */
