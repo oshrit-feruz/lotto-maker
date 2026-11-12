@@ -73,6 +73,34 @@ enum SubscriptionEventStatus {
   skipped
 }
 
+enum TicketType {
+  regular
+  double
+}
+
+enum DrawStatus {
+  scheduled
+  results_suggested
+  results_confirmed
+  settled
+}
+
+enum PrizeGame {
+  lotto
+  double
+  extra
+}
+
+enum PrizeClaimStatus {
+  awaiting_pickup
+  collected
+}
+
+enum PendingCardCreditStatus {
+  pending
+  paid
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -101,6 +129,9 @@ model User {
   walletTxs     WalletTransaction[]
   deviceTokens  DeviceToken[]
   payments      Payment[]
+  tickets       Ticket[]
+  prizeClaims   PrizeClaim[]
+  pendingCardCredits PendingCardCredit[]
 
   @@index([phone])
 }
@@ -138,7 +169,12 @@ model Order {
   status         OrderStatus @default(pending)
   // Object key in the private scan bucket. Never a URL; read via a signed URL.
   ticketScanKey  String?
-  price          Decimal     @db.Decimal(8, 2)
+  // Lotto: the ticket and the draw this order plays. Null only on pre-Phase-2 rows.
+  ticketId       String?
+  drawId         String?
+  // Extra digits the terminal printed for this form (6 digits, 1-7); empty if no Extra.
+  extraDigits    Int[]
+  price         Decimal     @db.Decimal(8, 2)
   fee            Decimal     @db.Decimal(8, 2)
   totalCharged   Decimal     @db.Decimal(8, 2)
   createdAt      DateTime    @default(now())
@@ -148,10 +184,17 @@ model Order {
 
   user           User          @relation(fields: [userId], references: [id])
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  ticket         Ticket?       @relation(fields: [ticketId], references: [id])
+  draw           Draw?         @relation(fields: [drawId], references: [id])
   queueSlot      QueueSlot?
   walletTxs      WalletTransaction[]
   auditLogs      AuditLog[]
+  wins           OrderWin[]
+  prizeClaim     PrizeClaim?
+  pendingCardCredits PendingCardCredit[]
 
+  @@index([drawId, status])
+  @@index([ticketId])
   @@index([userId, status])
   @@index([drawDate, status])
 }
@@ -295,4 +338,147 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([orderId])
   @@index([createdAt])
+}
+
+// ─── Lotto tickets, draws and prizes ─────────────────────────────────────────
+
+model Ticket {
+  id             String     @id @default(cuid())
+  userId         String
+  type           TicketType
+  // Key into SYSTEMATIC_RULES (packages/shared); null for plain tables.
+  systematicType String?
+  extra          Boolean    @default(false)
+  drawCount      Int        @default(1)
+  createdAt      DateTime   @default(now())
+
+  user           User          @relation(fields: [userId], references: [id])
+  tables         TicketTable[]
+  orders         Order[]
+
+  @@index([userId, createdAt])
+}
+
+model TicketTable {
+  id            String @id @default(cuid())
+  ticketId      String
+  position      Int
+  // 6 numbers (6-12 for a systematic table), 1-37.
+  numbers       Int[]
+  // 1 strong number (up to 7 for a strong-systematic table), 1-7.
+  strongNumbers Int[]
+
+  ticket        Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, position])
+}
+
+// Prices live here, never in code. The row with the latest effectiveFrom <= now applies.
+model PriceList {
+  id                 String     @id @default(cuid())
+  ticketType         TicketType
+  effectiveFrom      DateTime
+  // Pais price of one table, not including Extra.
+  pricePerTable      Decimal    @db.Decimal(8, 2)
+  // Pais price of Extra per table. Null = not known, Extra is refused.
+  extraPricePerTable Decimal?   @db.Decimal(8, 2)
+  // Our fee per order (one ticket for one draw).
+  feePerOrder        Decimal    @db.Decimal(8, 2)
+  createdAt          DateTime   @default(now())
+
+  @@unique([ticketType, effectiveFrom])
+}
+
+model Draw {
+  id            String     @id @default(cuid())
+  drawNumber    Int        @unique
+  drawAt        DateTime
+  salesCloseAt  DateTime
+  numbers       Int[]
+  strong        Int?
+  extraDigits   Int[]
+  status        DrawStatus @default(scheduled)
+  suggestedAt   DateTime?
+  confirmedAt   DateTime?
+  confirmedById String?
+  settledAt     DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  confirmedBy   Admin?     @relation(fields: [confirmedById], references: [id])
+  prizeTiers    PrizeTier[]
+  orders        Order[]
+
+  @@index([status, drawAt])
+}
+
+model PrizeTier {
+  id           String    @id @default(cuid())
+  drawId       String
+  game         PrizeGame
+  // lotto/double: 6+s, 6, 5+s, 5, 4+s, 4, 3+s, 3. extra: 6, 5, 4, 3, 2 (matching digits).
+  tier         String
+  winnersCount Int       @default(0)
+  prizeAmount  Decimal   @db.Decimal(12, 2)
+
+  draw         Draw      @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
+  @@unique([drawId, game, tier])
+}
+
+model OrderWin {
+  id      String    @id @default(cuid())
+  orderId String
+  game    PrizeGame
+  tier    String
+  // Number of winning combinations in this tier.
+  count   Int
+  // Total prize for those combinations.
+  amount  Decimal   @db.Decimal(12, 2)
+
+  order   Order     @relation(fields: [orderId], references: [id])
+
+  @@unique([orderId, game, tier])
+}
+
+// A prize above SMALL_PRIZE_LIMIT: the user collects it with the original ticket and ID.
+model PrizeClaim {
+  id        String           @id @default(cuid())
+  orderId   String           @unique
+  userId    String
+  amount    Decimal          @db.Decimal(12, 2)
+  status    PrizeClaimStatus @default(awaiting_pickup)
+  createdAt DateTime         @default(now())
+
+  order     Order            @relation(fields: [orderId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// Part of a small prize that did not fit under the wallet cap.
+// TODO: pay out to the user's card.
+model PendingCardCredit {
+  id        String                  @id @default(cuid())
+  orderId   String                  @unique
+  userId    String
+  amount    Decimal                 @db.Decimal(12, 2)
+  status    PendingCardCreditStatus @default(pending)
+  createdAt DateTime                @default(now())
+
+  order     Order                   @relation(fields: [orderId], references: [id])
+  user      User                    @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+}
+
+// Back-office admin: confirms draw results. Separate from Operator.
+model Admin {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  confirmedDraws Draw[]
 }
