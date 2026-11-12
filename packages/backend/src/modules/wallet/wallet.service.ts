@@ -1,9 +1,11 @@
 import type { PrismaClient } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLogTx } from '../../lib/audit-log.js';
+import { config } from '../../config.js';
 
-type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
+export type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
 interface ChargeResult {
   newBalance: number;
@@ -100,40 +102,109 @@ export async function refund(
   );
 }
 
-export async function deposit(
+/**
+ * Credits a confirmed payment to the wallet. Runs inside the caller's
+ * transaction so the credit commits or rolls back together with the payment's
+ * status change. Enforces WALLET_BALANCE_CAP; the check happens before any
+ * write, so a caller may catch WALLET_CAP_EXCEEDED and keep using the transaction.
+ */
+export async function depositTx(
+  tx: Tx,
   userId: string,
   amount: number,
   description: string,
+  paymentId?: string,
 ): Promise<ChargeResult> {
   if (amount <= 0) throw new AppError(400, 'INVALID_AMOUNT', 'Deposit amount must be positive');
 
-  return prisma.$transaction(
-    async (tx: Tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+  const users = await tx.$queryRaw<Array<{ walletBalance: string }>>`
+    SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
+  `;
+  const user = users[0];
+  if (!user) throw new AppError(404, 'USER_NOT_FOUND');
+  assertWithinBalanceCap(user.walletBalance, amount);
 
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: { walletBalance: { increment: amount } },
-        select: { walletBalance: true },
-      });
+  const updated = await tx.user.update({
+    where: { id: userId },
+    data: { walletBalance: { increment: amount } },
+    select: { walletBalance: true },
+  });
 
-      const walletTx = await tx.walletTransaction.create({
-        data: { userId, type: 'deposit', amount, description },
-      });
+  const walletTx = await tx.walletTransaction.create({
+    data: { userId, type: 'deposit', amount, description, paymentId: paymentId ?? null },
+  });
 
-      await writeAuditLogTx(tx, {
-        entityType: 'wallet',
-        entityId: userId,
-        action: 'wallet:deposit',
-        actorId: userId,
-        actorType: 'user',
-        metadata: { amount: String(amount), transactionId: walletTx.id },
-      });
+  await writeAuditLogTx(tx, {
+    entityType: 'wallet',
+    entityId: userId,
+    action: 'wallet:deposit',
+    actorId: 'system',
+    actorType: 'system',
+    metadata: { amount: String(amount), transactionId: walletTx.id, paymentId: paymentId ?? null },
+  });
 
-      return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
-    },
-    { isolationLevel: 'Serializable' },
-  );
+  return { newBalance: parseFloat(updated.walletBalance.toString()), transactionId: walletTx.id };
+}
+
+export interface ReversalResult {
+  debited: number;
+  shortfall: number;
+}
+
+/**
+ * Takes back a credited payment that the provider refunded or charged back.
+ * Debits at most the current balance, so the wallet never goes negative; any
+ * remainder is returned as `shortfall` for the caller to act on. Runs inside
+ * the caller's transaction. The (paymentId, type) unique constraint makes a
+ * second reversal of the same payment fail at the database.
+ */
+export async function reverseDepositTx(
+  tx: Tx,
+  userId: string,
+  amount: number,
+  description: string,
+  paymentId: string,
+): Promise<ReversalResult> {
+  const users = await tx.$queryRaw<Array<{ walletBalance: string }>>`
+    SELECT "walletBalance"::text FROM "User" WHERE id = ${userId} FOR UPDATE
+  `;
+  const user = users[0];
+  if (!user) throw new AppError(404, 'USER_NOT_FOUND');
+
+  const owed = new Decimal(amount);
+  const debit = Decimal.min(new Decimal(user.walletBalance), owed);
+  const shortfall = owed.minus(debit);
+
+  if (debit.greaterThan(0)) {
+    await tx.user.update({
+      where: { id: userId },
+      data: { walletBalance: { decrement: debit.toNumber() } },
+    });
+    const walletTx = await tx.walletTransaction.create({
+      data: { userId, type: 'refund_reversal', amount: debit.toNumber(), description, paymentId },
+    });
+    await writeAuditLogTx(tx, {
+      entityType: 'wallet',
+      entityId: userId,
+      action: 'wallet:refund_reversal',
+      actorId: 'system',
+      actorType: 'system',
+      metadata: { amount: debit.toFixed(2), transactionId: walletTx.id, paymentId },
+    });
+  }
+
+  return { debited: debit.toNumber(), shortfall: shortfall.toNumber() };
+}
+
+/** Throws 422 WALLET_CAP_EXCEEDED if balance + amount would pass the configured cap. */
+export function assertWithinBalanceCap(balance: string | number, amount: number): void {
+  if (new Decimal(balance).plus(amount).greaterThan(config.WALLET_BALANCE_CAP)) {
+    throw new AppError(
+      422,
+      'WALLET_CAP_EXCEEDED',
+      `Wallet balance cannot exceed ${config.WALLET_BALANCE_CAP}`,
+    );
+  }
 }
 
 export async function creditWinning(

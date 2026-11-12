@@ -4,9 +4,10 @@ import type { FastifyInstance } from 'fastify';
 // Mock external services before any module imports them
 vi.mock('../../src/storage/r2.service.js', () => ({
   r2Service: {
-    upload: vi.fn().mockResolvedValue('https://cdn.example.com/scans/test.jpg'),
-    getSignedUrl: vi.fn().mockResolvedValue('https://cdn.example.com/scans/test.jpg?sig=mock'),
+    upload: vi.fn(async (key: string) => key),
+    getSignedUrl: vi.fn(async (key: string) => `https://r2.example.com/${key}?X-Amz-Expires=300&X-Amz-Signature=mock`),
   },
+  DEFAULT_SIGNED_URL_TTL_SECONDS: 300,
 }));
 
 vi.mock('twilio', () => ({
@@ -19,11 +20,13 @@ vi.mock('firebase-admin', () => ({
   default: { initializeApp: vi.fn(), messaging: vi.fn(() => ({ send: vi.fn() })) },
 }));
 
-// Control fetchDrawResults per test
-const mockFetchDrawResults = vi.fn();
-vi.mock('../../src/modules/results/results.service.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/modules/results/results.service.js')>();
-  return { ...original, fetchDrawResults: mockFetchDrawResults };
+// Control the draw results per test. The mock sits at the scraper boundary:
+// results.service calls its own fetchDrawResults internally, so mocking that
+// export would not be seen and the tests would hit the real Pais site.
+const mockFetchLatestForDate = vi.fn();
+vi.mock('../../src/services/results-scraper.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/services/results-scraper.js')>();
+  return { ...original, fetchLatestForDate: mockFetchLatestForDate };
 });
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -55,6 +58,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
     // Clean slate
     await prisma.auditLog.deleteMany();
     await prisma.walletTransaction.deleteMany();
+    await prisma.payment.deleteMany();
     await prisma.queueSlot.deleteMany();
     await prisma.order.deleteMany();
     await prisma.subscription.deleteMany();
@@ -93,6 +97,32 @@ describe.skipIf(skip)('Full e2e flow', () => {
   afterAll(async () => {
     await app.close();
   });
+
+  /** Starts a checkout and builds the signed "approved" webhook the provider would send. */
+  async function startCheckout(token: string, amount: number) {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/payments/checkout',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { amount },
+    });
+    expect(res.statusCode).toBe(201);
+    const { paymentId } = res.json<{ paymentId: string; checkoutUrl: string }>();
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+
+    const { getPaymentProvider } = await import('../../src/modules/payments/payments.service.js');
+    const provider = getPaymentProvider() as import('../../src/modules/payments/mock-payment-provider.js').MockPaymentProvider;
+    const payload = JSON.stringify({ providerTxId: payment.providerTxId, status: 'approved', amount });
+    return {
+      paymentId,
+      webhook: {
+        method: 'POST' as const,
+        url: '/payments/webhook',
+        headers: { 'content-type': 'application/json', 'x-mock-signature': provider.sign(payload) },
+        payload,
+      },
+    };
+  }
 
   // ─── Step 1: OTP send ────────────────────────────────────────────────────────
 
@@ -181,7 +211,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/me/kyc',
       headers: { authorization: `Bearer ${userAccessToken}` },
-      payload: { fullName: 'Young User', idNumber: '111111111', dateOfBirth: '2015-01-01' },
+      payload: { fullName: 'Young User', idNumber: '111111118', dateOfBirth: '2015-01-01' },
     });
     expect(under.statusCode).toBe(403);
 
@@ -190,31 +220,101 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/me/kyc',
       headers: { authorization: `Bearer ${userAccessToken}` },
-      payload: { fullName: 'Adult User', idNumber: '123456789', dateOfBirth: '1990-05-15' },
+      payload: { fullName: 'Adult User', idNumber: '123456782', dateOfBirth: '1990-05-15' },
     });
     expect(adult.statusCode).toBe(200);
     expect(adult.json().verifiedAdult).toBe(true);
   });
 
-  // ─── Step 5: Wallet deposit ───────────────────────────────────────────────────
+  it('rejects an ID with a bad check digit and stores valid IDs encrypted', async () => {
+    const userId = app.jwt.decode<{ sub: string }>(userAccessToken)!.sub;
 
-  it('deposits funds and writes an audit log entry', async () => {
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/me/kyc',
+      headers: { authorization: `Bearer ${userAccessToken}` },
+      payload: { fullName: 'Adult User', idNumber: '123456789', dateOfBirth: '1990-05-15' },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().error).toBe('INVALID_ID_NUMBER');
+
+    // Nothing in the row (or the API response) contains the plain ID number
+    const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>`SELECT * FROM "User" WHERE id = ${userId}`;
+    expect(JSON.stringify(rows)).not.toContain('123456782');
+    expect(rows[0]).toMatchObject({ idLast4: '6782', birthYear: 1990, idNumberLegacy: null });
+    expect(rows[0]).not.toHaveProperty('dateOfBirth');
+
+    const { decryptField } = await import('../../src/lib/crypto.js');
+    expect(decryptField(rows[0]!.idNumberEnc as string)).toBe('123456782');
+
+    const me = await app.inject({ method: 'GET', url: '/me', headers: { authorization: `Bearer ${userAccessToken}` } });
+    expect(me.json().idLast4).toBe('6782');
+    expect(me.body).not.toContain('idNumberEnc');
+    expect(me.body).not.toContain('idNumberHash');
+
+    // Same ID on another account is refused, also when typed without the check for leading zeros
+    const other = await prisma.user.create({ data: { phone: '+972507777777' } });
+    const dup = await app.inject({
+      method: 'POST',
+      url: '/me/kyc',
+      headers: { authorization: `Bearer ${app.jwt.sign({ sub: other.id, type: 'user' })}` },
+      payload: { fullName: 'Copy Cat', idNumber: '123456782', dateOfBirth: '1980-01-01' },
+    });
+    expect(dup.statusCode).toBe(409);
+  });
+
+  // ─── Step 5: Wallet deposit (checkout + provider webhook) ─────────────────────
+
+  it('has no direct deposit route', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/wallet/deposit',
       headers: { authorization: `Bearer ${userAccessToken}` },
       payload: { amount: 100 },
     });
+    expect(res.statusCode).toBe(404);
+  });
 
-    expect(res.statusCode).toBe(200);
-    expect(parseFloat(res.json().newBalance)).toBeGreaterThanOrEqual(100);
-
-    // Confirm audit log was written inside the transaction
+  it('credits the wallet once per confirmed payment, even under concurrent duplicate webhooks', async () => {
     const userId = app.jwt.decode<{ sub: string }>(userAccessToken)!.sub;
+    const { webhook } = await startCheckout(userAccessToken, 100);
+
+    // Checkout alone credits nothing
+    const before = await prisma.user.findUnique({ where: { id: userId } });
+    expect(before!.walletBalance.toNumber()).toBe(0);
+
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/payments/webhook',
+      headers: { 'content-type': 'application/json', 'x-mock-signature': 'bad' },
+      payload: webhook.payload,
+    });
+    expect(bad.statusCode).toBe(401);
+
+    const responses = await Promise.all([1, 2, 3, 4, 5].map(() => app.inject(webhook)));
+    expect(responses.every((r) => r.statusCode === 200)).toBe(true);
+    expect(responses.filter((r) => r.json().outcome === 'credited')).toHaveLength(1);
+
+    const after = await prisma.user.findUnique({ where: { id: userId } });
+    expect(after!.walletBalance.toNumber()).toBe(100);
+    expect(await prisma.walletTransaction.count({ where: { userId, type: 'deposit' } })).toBe(1);
+
+    // Audit log written inside the same transaction as the credit
     const auditEntries = await prisma.auditLog.findMany({
       where: { entityType: 'wallet', entityId: userId, action: 'wallet:deposit' },
     });
-    expect(auditEntries.length).toBeGreaterThanOrEqual(1);
+    expect(auditEntries).toHaveLength(1);
+  });
+
+  it('rejects a deposit that would exceed the wallet cap', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/payments/checkout',
+      headers: { authorization: `Bearer ${userAccessToken}` },
+      payload: { amount: 2501 },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toBe('WALLET_CAP_EXCEEDED');
   });
 
   // ─── Step 6: Create order (circuit breaker accepts) ─────────────────────────
@@ -234,7 +334,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
       },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(201);
     const body = res.json<{ orderId: string; status: string }>();
     expect(body.status).toBe('in_queue');
     orderId = body.orderId;
@@ -254,12 +354,12 @@ describe.skipIf(skip)('Full e2e flow', () => {
   // ─── Step 7: Circuit breaker rejects 2nd order ───────────────────────────────
 
   it('rejects a second order when circuit breaker capacity is exhausted', async () => {
-    // throughput=2/hr, minutesLeft≈(hard cutoff to draw), 1 slot already in queue
-    // gross=2*(minutesLeft/60) ≈ 2 for ~60min window → available=2-1=1, buffer=ceil(2*0.1)=1 → rejected
-    // Ensure this by setting throughput very low
+    // Capacity = throughput × time left until the cutoff, so any positive
+    // throughput makes this depend on when the test runs. With zero throughput
+    // the capacity is 0 whatever the clock says, and one slot is already queued.
     await prisma.operator.update({
       where: { id: operatorId },
-      data: { throughputPerHour: 1 },
+      data: { throughputPerHour: 0 },
     });
 
     const res = await app.inject({
@@ -275,12 +375,71 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
 
     expect(res.statusCode).toBe(503);
+    expect(res.json().error).toBe('QUEUE_FULL');
+    expect(await prisma.order.count()).toBe(1);
 
     // Restore operator throughput
     await prisma.operator.update({
       where: { id: operatorId },
       data: { throughputPerHour: 50 },
     });
+  });
+
+  // ─── Operators are confined to their own location ────────────────────────────
+
+  it('rejects an operator from another location and hides customer identity in the queue', async () => {
+    const otherLocation = await prisma.location.create({
+      data: { name: 'Other Branch', address: '2 Test St', activeHours: {}, active: false },
+    });
+    const outsider = await prisma.operator.create({
+      data: { name: 'Outsider', locationId: otherLocation.id, active: true },
+    });
+    const outsiderToken = app.jwt.sign({ sub: outsider.id, type: 'operator' });
+
+    for (const action of ['start', 'done']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/operator/queue/${slotId}/${action}`,
+        headers: { authorization: `Bearer ${outsiderToken}` },
+      });
+      expect(res.statusCode, action).toBe(403);
+      expect(res.json().error).toBe('FORBIDDEN_LOCATION');
+    }
+    expect((await prisma.queueSlot.findUnique({ where: { id: slotId } }))?.status).toBe('waiting');
+
+    const theirs = await app.inject({
+      method: 'GET',
+      url: '/operator/queue',
+      headers: { authorization: `Bearer ${outsiderToken}` },
+    });
+    expect(theirs.json().slots).toHaveLength(0);
+
+    const ours = await app.inject({
+      method: 'GET',
+      url: '/operator/queue',
+      headers: { authorization: `Bearer ${operatorToken}` },
+    });
+    const userId = app.jwt.decode<{ sub: string }>(userAccessToken)!.sub;
+    expect(ours.body).not.toContain(userId);
+    expect(ours.body).not.toContain('userId');
+    expect(ours.json().slots[0].order).toEqual({
+      gameType: 'lotto',
+      numbers: [1, 2, 3, 4, 5, 6],
+      strongNumber: 3,
+      type: 'one_time',
+      idLast4: '6782',
+    });
+  });
+
+  it('refuses a scan before the form has been keyed', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/operator/queue/${slotId}/scan`,
+      headers: { authorization: `Bearer ${operatorToken}`, 'content-type': 'multipart/form-data; boundary=x' },
+      payload: '--x--\r\n',
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('SLOT_NOT_KEYED');
   });
 
   // ─── Step 8: Operator picks up slot ──────────────────────────────────────────
@@ -294,6 +453,13 @@ describe.skipIf(skip)('Full e2e flow', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('in_progress');
+
+    // Starting does not key the order, and the audit log says so
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(order?.status).toBe('in_queue');
+    const audit = await prisma.auditLog.findMany({ where: { orderId } });
+    expect(audit.map((a) => a.action)).toContain('slot_status_change:waiting->in_progress');
+    expect(audit.some((a) => a.action.endsWith('->keyed'))).toBe(false);
   });
 
   // ─── Step 9: Operator marks slot done (keyed) ─────────────────────────────────
@@ -315,14 +481,21 @@ describe.skipIf(skip)('Full e2e flow', () => {
 
   it('operator uploads scan → order becomes scanned', async () => {
     const boundary = '----FormBoundary7MA4YWxkTrZu0gW';
-    const body = [
-      `--${boundary}`,
-      'Content-Disposition: form-data; name="file"; filename="scan.jpg"',
-      'Content-Type: image/jpeg',
-      '',
-      'fake-image-bytes',
-      `--${boundary}--`,
-    ].join('\r\n');
+    // The upload is validated by its magic bytes, so it must start like a JPEG
+    const body = Buffer.concat([
+      Buffer.from(
+        [
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="file"; filename="scan.jpg"',
+          'Content-Type: image/jpeg',
+          '',
+          '',
+        ].join('\r\n'),
+      ),
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      Buffer.from('fake-image-bytes'),
+      Buffer.from(`\r\n--${boundary}--`),
+    ]);
 
     const res = await app.inject({
       method: 'POST',
@@ -335,10 +508,42 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().scanUrl).toBeTruthy();
+    expect(JSON.stringify(res.json())).not.toContain('http');
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     expect(order?.status).toBe('scanned');
+    // Only the object key is stored, never a URL
+    expect(order?.ticketScanKey).toMatch(/^scans\//);
+  });
+
+  it('serves the scan to its owner only, through a signed URL', async () => {
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/orders/${orderId}`,
+      headers: { authorization: `Bearer ${userAccessToken}` },
+    });
+    expect(detail.json().hasScan).toBe(true);
+    expect(detail.body).not.toContain('scans/');
+
+    const owner = await app.inject({
+      method: 'GET',
+      url: `/orders/${orderId}/scan`,
+      headers: { authorization: `Bearer ${userAccessToken}` },
+    });
+    expect(owner.statusCode).toBe(200);
+    expect(owner.json().url).toContain('X-Amz-Expires=300');
+
+    const stranger = await prisma.user.create({ data: { phone: '+972508888888' } });
+    const strangerToken = app.jwt.sign({ sub: stranger.id, type: 'user' });
+    const other = await app.inject({
+      method: 'GET',
+      url: `/orders/${orderId}/scan`,
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
+    expect(other.statusCode).toBe(403);
+
+    const anon = await app.inject({ method: 'GET', url: `/orders/${orderId}/scan` });
+    expect(anon.statusCode).toBe(401);
   });
 
   // ─── Step 11: Results processing → won ───────────────────────────────────────
@@ -352,13 +557,15 @@ describe.skipIf(skip)('Full e2e flow', () => {
     });
 
     // Mock results: numbers 1-6 with strong 3 — exact match → win
-    const { fetchDrawResults } = await import('../../src/modules/results/results.service.js');
-    (fetchDrawResults as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      numbers: [1, 2, 3, 4, 5, 6],
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    mockFetchLatestForDate.mockResolvedValueOnce({
+      drawNumber: 1234,
+      gameType: 'lotto',
+      winningNumbers: [1, 2, 3, 4, 5, 6],
       strongNumber: 3,
+      drawDate: order!.drawDate,
     });
 
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
     const { processResultsWithRetry } = await import('../../src/modules/results/results.service.js');
     await processResultsWithRetry('lotto', order!.drawDate);
 
@@ -400,15 +607,11 @@ describe.skipIf(skip)('Full e2e flow', () => {
       method: 'POST',
       url: '/me/kyc',
       headers: { authorization: `Bearer ${t2}` },
-      payload: { fullName: 'User Two', idNumber: '987654321', dateOfBirth: '1985-03-20' },
+      payload: { fullName: 'User Two', idNumber: '987654324', dateOfBirth: '1985-03-20' },
     });
 
-    await app.inject({
-      method: 'POST',
-      url: '/wallet/deposit',
-      headers: { authorization: `Bearer ${t2}` },
-      payload: { amount: 50 },
-    });
+    const { webhook } = await startCheckout(t2, 50);
+    expect((await app.inject(webhook)).json().outcome).toBe('credited');
 
     const orderRes = await app.inject({
       method: 'POST',
@@ -423,7 +626,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
     const order2 = await prisma.order.findUnique({ where: { id: orderId2 } });
 
     // fetchDrawResults always returns null → exhausts retries immediately (attemptsLeft=1)
-    mockFetchDrawResults.mockResolvedValue(null);
+    mockFetchLatestForDate.mockResolvedValue(null);
 
     const { markResultsDelayed } = await import('../../src/modules/results/results.service.js');
     await markResultsDelayed('lotto', order2!.drawDate);

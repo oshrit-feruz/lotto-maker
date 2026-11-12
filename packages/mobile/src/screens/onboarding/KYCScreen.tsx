@@ -38,6 +38,12 @@ export function KYCScreen({ onVerified }: Props) {
       const e = err as { code?: string };
       if (e.code === 'AGE_VERIFICATION_FAILED') {
         Alert.alert('גיל לא מספיק', 'עליך להיות בן 18 ומעלה להשתמש בשירות זה.');
+      } else if (e.code === 'INVALID_ID_NUMBER') {
+        Alert.alert('תעודת זהות שגויה', 'מספר תעודת הזהות אינו תקין. בדוק את המספר ונסה שנית.');
+      } else if (e.code === 'INVALID_DATE_OF_BIRTH') {
+        Alert.alert('תאריך שגוי', 'תאריך הלידה אינו תקין.');
+      } else if (e.code === 'ID_NUMBER_ALREADY_USED') {
+        Alert.alert('תעודת זהות בשימוש', 'מספר תעודת הזהות כבר רשום בחשבון אחר.');
       } else {
         Alert.alert('שגיאה', 'אירעה שגיאה. בדוק את הפרטים ונסה שנית.');
       }

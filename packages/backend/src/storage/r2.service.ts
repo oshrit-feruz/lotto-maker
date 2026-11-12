@@ -1,6 +1,14 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl as presign } from '@aws-sdk/s3-request-presigner';
 import { config } from '../config.js';
 
+export const DEFAULT_SIGNED_URL_TTL_SECONDS = 300;
+
+/**
+ * Ticket-scan storage. The bucket is private: objects are addressed by key and
+ * read only through short-lived signed URLs. A lotto ticket is a bearer
+ * instrument, so a scan must never be reachable through a permanent URL.
+ */
 class R2Service {
   private client: S3Client | null = null;
 
@@ -21,6 +29,7 @@ class R2Service {
     return this.client;
   }
 
+  /** Uploads an object and returns its key (not a URL). */
   async upload(key: string, body: Buffer, contentType: string): Promise<string> {
     const client = this.getClient();
     await client.send(
@@ -31,7 +40,16 @@ class R2Service {
         ContentType: contentType,
       }),
     );
-    return `${config.R2_PUBLIC_URL}/${key}`;
+    return key;
+  }
+
+  /** Returns a URL that can read `key` for `ttlSeconds`, then stops working. */
+  async getSignedUrl(key: string, ttlSeconds = DEFAULT_SIGNED_URL_TTL_SECONDS): Promise<string> {
+    return presign(
+      this.getClient(),
+      new GetObjectCommand({ Bucket: config.R2_BUCKET_NAME, Key: key }),
+      { expiresIn: ttlSeconds },
+    );
   }
 }
 

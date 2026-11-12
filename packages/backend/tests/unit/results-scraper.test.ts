@@ -212,7 +212,7 @@ describe('ResultsScraper', () => {
 
   describe('URL path mapping', () => {
     it('uses /777/ path for seven77', async () => {
-      // seven77 has 7 numbers — build a minimal fixture
+      // 777 draws 17 balls (players pick 7) — build a minimal 17-number fixture
       const html = `
         <li class="archive_list_item">
           <div class="archive_list_block seven_number"><div>1234</div></div>
@@ -222,10 +222,20 @@ describe('ResultsScraper', () => {
               <li class="loto_info_num archive"><div>1</div></li>
               <li class="loto_info_num archive"><div>5</div></li>
               <li class="loto_info_num archive"><div>10</div></li>
+              <li class="loto_info_num archive"><div>14</div></li>
+              <li class="loto_info_num archive"><div>18</div></li>
               <li class="loto_info_num archive"><div>20</div></li>
+              <li class="loto_info_num archive"><div>23</div></li>
+              <li class="loto_info_num archive"><div>27</div></li>
               <li class="loto_info_num archive"><div>30</div></li>
+              <li class="loto_info_num archive"><div>34</div></li>
+              <li class="loto_info_num archive"><div>38</div></li>
               <li class="loto_info_num archive"><div>40</div></li>
+              <li class="loto_info_num archive"><div>45</div></li>
               <li class="loto_info_num archive"><div>50</div></li>
+              <li class="loto_info_num archive"><div>56</div></li>
+              <li class="loto_info_num archive"><div>63</div></li>
+              <li class="loto_info_num archive"><div>70</div></li>
             </ol>
           </div>
         </li>`;

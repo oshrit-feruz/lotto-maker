@@ -54,6 +54,8 @@ export interface QueueSlotWithOrder {
     numbers: number[];
     strongNumber: number | null;
     type: string;
+    /** Last 4 digits of the customer's ID number, for the prize form. Nothing else about the customer is sent. */
+    idLast4: string | null;
   };
 }
 
@@ -69,7 +71,7 @@ export async function doneSlot(slotId: string): Promise<QueueSlotWithOrder> {
   return api.post(`operator/queue/${slotId}/done`).json();
 }
 
-export async function uploadScan(slotId: string, file: File): Promise<{ scanUrl: string }> {
+export async function uploadScan(slotId: string, file: File): Promise<{ scanned: boolean }> {
   const formData = new FormData();
   formData.append('image', file);
   return api.post(`operator/queue/${slotId}/scan`, { body: formData }).json();
