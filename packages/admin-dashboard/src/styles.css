@@ -1,0 +1,32 @@
+:root { font-family: system-ui, "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f3f4f6; }
+body { margin: 0; }
+* { box-sizing: border-box; }
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.layout nav { background: #1e3a8a; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.layout nav a { color: #dbeafe; text-decoration: none; padding: 8px 12px; border-radius: 6px; }
+.layout nav a.active { background: #1d4ed8; color: #fff; }
+.layout main { padding: 24px; overflow-x: auto; }
+.card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 16px; }
+.login { display: grid; place-items: center; min-height: 100vh; }
+.login .card { width: 340px; display: flex; flex-direction: column; gap: 12px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+input, select, textarea { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+button { padding: 8px 14px; border: 0; border-radius: 6px; background: #1d4ed8; color: #fff; cursor: pointer; font: inherit; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.secondary { background: #e5e7eb; color: #111827; }
+button.danger { background: #b91c1c; }
+button.link { background: none; color: #1d4ed8; padding: 0; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+.row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
+.row.end { justify-content: flex-end; margin: 16px 0 0; }
+.muted { color: #6b7280; }
+.error { color: #b91c1c; }
+.badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e5e7eb; }
+.badge.green { background: #d1fae5; } .badge.red { background: #fee2e2; } .badge.amber { background: #fef3c7; } .badge.blue { background: #dbeafe; }
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 10; }
+.dialog { background: #fff; border-radius: 8px; padding: 20px; width: 480px; max-width: 95vw; max-height: 90vh; overflow: auto; }
+.ltr { direction: ltr; unicode-bidi: isolate; }
+.nums { display: flex; gap: 6px; flex-wrap: wrap; }
+.nums input { width: 56px; text-align: center; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }

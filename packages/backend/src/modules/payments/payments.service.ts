@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../prisma.js';
@@ -9,6 +10,7 @@ import { assertWithinBalanceCap, depositTx, reverseDepositTx, type Tx } from '..
 import { saveCardTx } from './cards.service.js';
 import type { PaymentProvider } from './payment-provider.js';
 import { MockPaymentProvider } from './mock-payment-provider.js';
+import { prepareReturnUrls, type ReturnUrls } from './return-urls.js';
 
 const DEV_WEBHOOK_SECRET = 'dev-only-mock-webhook-secret';
 
@@ -42,7 +44,12 @@ export async function createCheckout(
   userId: string,
   amount: number,
   idempotencyKey?: string,
+  returnUrls: ReturnUrls = {},
 ): Promise<CheckoutResult> {
+  // Refuse a return URL off the allowlist before anything else (422 INVALID_RETURN_URL)
+  const wantsReturn = returnUrls.successUrl !== undefined || returnUrls.cancelUrl !== undefined;
+  if (wantsReturn) prepareReturnUrls(returnUrls, 'check');
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { status: true, walletBalance: true },
@@ -65,10 +72,17 @@ export async function createCheckout(
   assertWithinBalanceCap(user.walletBalance.toString(), amount);
 
   const paymentProvider = getPaymentProvider();
-  const session = await paymentProvider.createCheckout(userId, amount);
+  // With return URLs the payment id is chosen here, so it can be put on them before the provider call
+  const presetId = wantsReturn ? `pay${randomUUID().replace(/-/g, '')}` : undefined;
+  const session = await paymentProvider.createCheckout(
+    userId,
+    amount,
+    presetId ? prepareReturnUrls(returnUrls, presetId) : undefined,
+  );
 
   const payment = await prisma.payment.create({
     data: {
+      ...(presetId ? { id: presetId } : {}),
       provider: paymentProvider.name,
       providerTxId: session.paymentId,
       userId,

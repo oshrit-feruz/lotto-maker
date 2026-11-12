@@ -167,6 +167,26 @@ export interface NextLotteryInfo {
   salesCloseAt: Date;
   /** Assumed draw time: sales close plus DRAW_AFTER_CLOSE_MINUTES. */
   drawAt: Date;
+  /** Announced first prize in ILS ("12.00" -> 2 decimals), or null if missing / unparseable. */
+  firstPrize: string | null;
+  /** Announced double-lotto first prize (pais `secondPrize`), same format. */
+  doublePrize: string | null;
+}
+
+/**
+ * Pais sends the announced prize either in shekels ("5,000,000", 5000000) or in millions as the
+ * site shows it ("5", "5.5", "5 מיליון"). A value below 1,000 is read as millions: no lotto
+ * first prize is that small.
+ */
+export function parseAnnouncedPrize(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).replace(/,/g, '').trim();
+  const m = /(\d+(?:\.\d+)?)/.exec(text);
+  if (!m) return null;
+  let value = Number(m[1]);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (value < 1000) value *= 1_000_000;
+  return value.toFixed(2);
 }
 
 // Sales close 22:45, draw broadcast 23:00. Results usually appear ~1h after the draw
@@ -203,5 +223,7 @@ export function parseNextLotteryResponse(json: unknown): NextLotteryInfo {
     drawNumber,
     salesCloseAt,
     drawAt: new Date(salesCloseAt.getTime() + DRAW_AFTER_CLOSE_MINUTES * 60_000),
+    firstPrize: parseAnnouncedPrize(rec['firstPrize']),
+    doublePrize: parseAnnouncedPrize(rec['secondPrize']),
   };
 }

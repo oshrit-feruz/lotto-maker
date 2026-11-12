@@ -352,6 +352,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([orderId])
   @@index([createdAt])
+  @@index([action, createdAt])
 }
 
 // ─── Lotto tickets, draws and prizes ─────────────────────────────────────────
@@ -364,12 +365,16 @@ model Ticket {
   systematicType String?
   extra          Boolean    @default(false)
   drawCount      Int        @default(1)
+  // Idempotency-Key header of the POST /orders that bought this ticket. Unique per user: a repeat
+  // returns the orders of this ticket and charges nothing.
+  idempotencyKey String?
   createdAt      DateTime   @default(now())
 
   user           User          @relation(fields: [userId], references: [id])
   tables         TicketTable[]
   orders         Order[]
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, createdAt])
 }
 
@@ -419,6 +424,10 @@ model Draw {
   // Set when a ticket hit a tier with no prize amount (e.g. an unwon jackpot showing 0 ₪)
   needsAttention  Boolean  @default(false)
   attentionReason String?
+  // Announced prizes for this draw from getNextLotteryDate (firstPrize / secondPrize), in ILS.
+  // Null when pais did not announce them or they could not be parsed.
+  announcedFirstPrize  Decimal? @db.Decimal(14, 2)
+  announcedDoublePrize Decimal? @db.Decimal(14, 2)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 

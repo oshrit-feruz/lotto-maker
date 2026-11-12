@@ -76,6 +76,22 @@ export function withdrawalAmounts(amount: Decimal.Value, method: 'card' | 'bank'
   return { amount: gross, fee, payout: gross.minus(fee) };
 }
 
+/**
+ * What a withdrawal of `amount` would cost, before requesting it: the fee, what the user receives
+ * and the minimum. `belowMinimum` is true when createWithdrawal would refuse it.
+ */
+export function quoteWithdrawal(amount: Decimal.Value, method: 'card' | 'bank') {
+  const { amount: gross, fee, payout } = withdrawalAmounts(amount, method);
+  return {
+    amount: gross.toFixed(2),
+    method,
+    fee: fee.toFixed(2),
+    net: Decimal.max(payout, 0).toFixed(2),
+    min: new Decimal(config.MIN_WITHDRAWAL_AMOUNT).toFixed(2),
+    belowMinimum: gross.lt(config.MIN_WITHDRAWAL_AMOUNT) || payout.lte(0),
+  };
+}
+
 function toView(w: WithdrawalRow, forAdmin = false) {
   const amount = new Decimal(w.amount.toString());
   const fee = new Decimal(w.fee.toString());
