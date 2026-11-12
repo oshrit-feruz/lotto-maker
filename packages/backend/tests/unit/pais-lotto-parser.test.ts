@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseCurrentLotto,
   parseNextLotteryResponse,
+  parseAnnouncedPrize,
   normalizeTier,
   PaisParseError,
 } from '../../src/services/pais-lotto-parser.js';
@@ -101,5 +102,19 @@ describe('parseNextLotteryResponse', () => {
   });
   it('rejects an empty response', () => {
     expect(() => parseNextLotteryResponse([])).toThrow(PaisParseError);
+  });
+  it('reads the announced first and double prizes', () => {
+    const info = parseNextLotteryResponse([
+      { displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: '5,000,000', secondPrize: 10 },
+    ]);
+    expect(info.firstPrize).toBe('5000000.00');
+    expect(info.doublePrize).toBe('10000000.00');
+  });
+  it('leaves the prizes null when missing or unparseable', () => {
+    const info = parseNextLotteryResponse([{ displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: 'n/a' }]);
+    expect(info.firstPrize).toBeNull();
+    expect(info.doublePrize).toBeNull();
+    expect(parseAnnouncedPrize('5.5 מיליון')).toBe('5500000.00');
+    expect(parseAnnouncedPrize(0)).toBeNull();
   });
 });
