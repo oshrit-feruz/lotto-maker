@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Decimal } from 'decimal.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -9,6 +9,8 @@ const h = vi.hoisted(() => {
     receipts: [] as any[],
     counters: new Map<number, number>(),
     seq: 0,
+    /** Runs once before the next receipt.create (to stage a concurrent writer). */
+    beforeCreate: null as null | ((data: any) => void),
   };
   const uniqueError = () => Object.assign(new Error('unique'), { code: 'P2002' });
   const match = (r: any, where: any) => Object.entries(where).every(([k, v]) => r[k] === v);
@@ -22,6 +24,9 @@ const h = vi.hoisted(() => {
       findMany: async ({ where }: any) => s.receipts.filter((r) => match(r, where)),
       count: async ({ where }: any) => s.receipts.filter((r) => match(r, where)).length,
       create: async ({ data }: any) => {
+        const hook = s.beforeCreate;
+        s.beforeCreate = null;
+        hook?.(data);
         if (s.receipts.some((r) => r.number === data.number || (r.orderId === data.orderId && r.kind === data.kind))) {
           throw uniqueError();
         }
@@ -74,10 +79,20 @@ import {
   issueMissingReceipts,
   issueReceiptForOrder,
   receiptYear,
+  MISSING_BUSINESS_DETAIL_PLACEHOLDER,
 } from '../../src/modules/receipts/receipts.service.js';
-import { NOT_TAX_INVOICE_NOTICE, renderReceiptHtml } from '../../src/modules/receipts/receipt-html.js';
+import { formatVatPercent, NOT_TAX_INVOICE_NOTICE, renderReceiptHtml } from '../../src/modules/receipts/receipt-html.js';
+import { config } from '../../src/config.js';
 
 const NOW = new Date('2026-03-01T10:00:00Z');
+const cfg = config as any;
+const ORIGINAL_CONFIG = {
+  NODE_ENV: cfg.NODE_ENV,
+  BUSINESS_NAME: cfg.BUSINESS_NAME,
+  BUSINESS_ID: cfg.BUSINESS_ID,
+  BUSINESS_ADDRESS: cfg.BUSINESS_ADDRESS,
+  VAT_RATE: cfg.VAT_RATE,
+};
 
 function addOrder(id: string, fee: string, status = 'in_queue', userId = 'u1') {
   h.s.orders.set(id, { id, userId, fee: new Decimal(fee), status });
@@ -89,7 +104,18 @@ beforeEach(() => {
   h.s.receipts.length = 0;
   h.s.counters.clear();
   h.s.seq = 0;
+  h.s.beforeCreate = null;
   h.s.users.set('u1', { id: 'u1', fullName: 'דנה לוי', idLast4: '6782' });
+  Object.assign(cfg, ORIGINAL_CONFIG, {
+    BUSINESS_NAME: 'לוטו מייקר בע״מ',
+    BUSINESS_ID: '515123456',
+    BUSINESS_ADDRESS: 'הרצל 1, תל אביב',
+  });
+});
+
+afterEach(() => {
+  Object.assign(cfg, ORIGINAL_CONFIG);
+  vi.restoreAllMocks();
 });
 
 describe('VAT maths', () => {
@@ -291,5 +317,145 @@ describe('receipt page', () => {
     await expect(getReceipt(r!.id, 'someone-else')).rejects.toMatchObject({ statusCode: 403 });
     await expect(getReceipt('missing', 'u1')).rejects.toMatchObject({ statusCode: 404 });
     await expect(getReceipt(r!.id, 'u1')).resolves.toMatchObject({ originalNumber: null });
+  });
+
+  it('shows a fractional VAT rate exactly: 17.5% stays 17.5%, not 18%', async () => {
+    cfg.VAT_RATE = 0.175;
+    addOrder('o1', '11.75');
+    const r = await issueReceiptForOrder('o1', NOW);
+    expect(r!.vatRate.toString()).toBe('0.175');
+    const html = renderReceiptHtml(r as any, business, null);
+    expect(html).toContain('17.5%');
+    expect(html).not.toContain('18%');
+    expect(formatVatPercent(new Decimal('0.1800'))).toBe('18%');
+    expect(formatVatPercent(new Decimal('0.1750'))).toBe('17.5%');
+    expect(formatVatPercent(new Decimal('0'))).toBe('0%');
+  });
+});
+
+describe('issuer details', () => {
+  const other = { name: 'שם אחר', id: '999999999', address: 'כתובת אחרת' };
+
+  it('are stored on the receipt and rendered from it, so a later config change leaves it as issued', async () => {
+    addOrder('o1', '10.00');
+    const r = await issueReceiptForOrder('o1', NOW);
+    expect(r).toMatchObject({ businessName: 'לוטו מייקר בע״מ', businessId: '515123456', businessAddress: 'הרצל 1, תל אביב' });
+
+    // The business details change afterwards: the existing receipt still shows the old ones
+    Object.assign(cfg, { BUSINESS_NAME: other.name, BUSINESS_ID: other.id, BUSINESS_ADDRESS: other.address });
+    const html = renderReceiptHtml(r as any, other, null);
+    expect(html).toContain('515123456');
+    expect(html).toContain('הרצל 1, תל אביב');
+    expect(html).not.toContain(other.id);
+    expect(html).not.toContain(other.address);
+  });
+
+  it('a credit receipt carries the issuer details of the day it is issued', async () => {
+    addOrder('o1', '10.00');
+    await issueReceiptForOrder('o1', NOW);
+    h.s.orders.get('o1').status = 'refunded';
+    Object.assign(cfg, { BUSINESS_NAME: other.name, BUSINESS_ID: other.id, BUSINESS_ADDRESS: other.address });
+    const credit = await issueCreditReceiptForOrder('o1', NOW);
+    expect(credit).toMatchObject({ businessName: other.name, businessId: other.id, businessAddress: other.address });
+  });
+
+  it('a receipt from before snapshots existed falls back to the current config', () => {
+    const legacy = {
+      number: '2026-000009',
+      kind: 'receipt',
+      orderId: 'o9',
+      customerName: null,
+      idLast4: null,
+      feeAmount: new Decimal('10'),
+      vatRate: new Decimal('0.18'),
+      vatAmount: new Decimal('1.53'),
+      netAmount: new Decimal('8.47'),
+      businessName: null,
+      businessId: null,
+      businessAddress: null,
+      issuedAt: NOW,
+    };
+    expect(renderReceiptHtml(legacy as any, other, null)).toContain(other.id);
+  });
+
+  it.each([
+    ['BUSINESS_NAME', { BUSINESS_NAME: '' }],
+    ['BUSINESS_ID', { BUSINESS_ID: '  ' }],
+  ])('production: no receipt is issued while %s is empty, and no number is used', async (_name, patch) => {
+    Object.assign(cfg, { NODE_ENV: 'production' }, patch);
+    addOrder('o1', '10.00');
+    await expect(issueReceiptForOrder('o1', NOW)).rejects.toMatchObject({ statusCode: 503, code: 'BUSINESS_DETAILS_MISSING' });
+    expect(h.s.receipts).toHaveLength(0);
+    expect(h.s.counters.size).toBe(0);
+
+    // The sweep logs it once and leaves the receipt for later…
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await issueMissingReceipts()).toEqual({ receipts: 0, credits: 0 });
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(String(errors.mock.calls[0]![1])).toContain('BUSINESS_NAME');
+
+    // …and issues it once the details are set
+    Object.assign(cfg, { BUSINESS_NAME: 'לוטו מייקר בע״מ', BUSINESS_ID: '515123456' });
+    expect(await issueMissingReceipts()).toEqual({ receipts: 1, credits: 0 });
+  });
+
+  it('outside production a missing detail is issued with a visible placeholder', async () => {
+    Object.assign(cfg, { NODE_ENV: 'development', BUSINESS_NAME: '', BUSINESS_ID: '' });
+    addOrder('o1', '10.00');
+    const r = await issueReceiptForOrder('o1', NOW);
+    expect(r).toMatchObject({
+      businessName: MISSING_BUSINESS_DETAIL_PLACEHOLDER,
+      businessId: MISSING_BUSINESS_DETAIL_PLACEHOLDER,
+    });
+    expect(renderReceiptHtml(r as any, other, null)).toContain(MISSING_BUSINESS_DETAIL_PLACEHOLDER);
+  });
+});
+
+describe('unique conflicts', () => {
+  it('a credit issue that loses the race on the ORIGINAL receipt rethrows instead of reporting success', async () => {
+    addOrder('o1', '10.00', 'refunded');
+    // A background issuer commits the original receipt while the credit transaction is creating it
+    h.s.beforeCreate = (data) => {
+      if (data.kind === 'receipt') {
+        h.s.receipts.push({
+          id: 'rcp_bg',
+          orderId: 'o1',
+          userId: 'u1',
+          kind: 'receipt',
+          number: '2026-000099',
+          customerName: null,
+          idLast4: null,
+          feeAmount: new Decimal('10.00'),
+          vatRate: new Decimal('0.18'),
+          vatAmount: new Decimal('1.53'),
+          netAmount: new Decimal('8.47'),
+        });
+      }
+    };
+    await expect(issueCreditReceiptForOrder('o1', NOW)).rejects.toMatchObject({ code: 'P2002' });
+    expect(h.s.receipts.filter((r) => r.kind === 'credit')).toHaveLength(0);
+
+    // The sweep's next attempt then issues the credit receipt
+    const credit = await issueCreditReceiptForOrder('o1', NOW);
+    expect(credit).toMatchObject({ kind: 'credit', originalReceiptId: 'rcp_bg' });
+  });
+
+  it('a conflict on the credit receipt itself answers with the existing credit', async () => {
+    addOrder('o1', '10.00');
+    await issueReceiptForOrder('o1', NOW);
+    h.s.orders.get('o1').status = 'refunded';
+    h.s.beforeCreate = (data) => {
+      if (data.kind === 'credit') h.s.receipts.push({ id: 'rcp_other', orderId: 'o1', kind: 'credit', number: '2026-000098' });
+    };
+    await expect(issueCreditReceiptForOrder('o1', NOW)).resolves.toMatchObject({ id: 'rcp_other' });
+  });
+
+  it('a receipt conflict that leaves no receipt for the order is rethrown', async () => {
+    addOrder('o1', '10.00');
+    // e.g. a clash on the receipt number, not on (orderId, kind)
+    h.s.beforeCreate = (data) => {
+      h.s.receipts.push({ id: 'rcp_x', orderId: 'other', kind: 'receipt', number: data.number });
+    };
+    await expect(issueReceiptForOrder('o1', NOW)).rejects.toMatchObject({ code: 'P2002' });
   });
 });

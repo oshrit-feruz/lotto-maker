@@ -18,6 +18,8 @@ export default async function receiptsRoutes(app: FastifyInstance) {
   });
 
   // A simple Hebrew RTL page, marked as not a tax invoice. The web app can open it in a new tab.
+  // The issuer is the snapshot stored on the receipt; the current config only fills in for
+  // receipts issued before snapshots existed.
   app.get('/me/receipts/:id', pre, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { receipt, originalNumber } = await getReceipt(id, request.user.sub);

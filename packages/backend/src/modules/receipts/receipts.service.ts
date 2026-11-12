@@ -45,9 +45,42 @@ export async function allocateReceiptNumberTx(tx: Tx, now: Date) {
 
 const isUniqueViolation = (err: unknown) => (err as { code?: string }).code === 'P2002';
 
+/** Shown in place of a missing business detail outside production, so it is obvious on the page. */
+export const MISSING_BUSINESS_DETAIL_PLACEHOLDER = '[חסר בהגדרות – סביבת פיתוח בלבד]';
+
+export interface IssuerSnapshot {
+  businessName: string;
+  businessId: string;
+  businessAddress: string;
+}
+
+/**
+ * The issuer details stored on each new receipt. In production a receipt without the business
+ * name and number is not issued at all: this throws, the caller logs it and the sweep issues
+ * the receipt once the configuration is complete. Elsewhere a visible placeholder stands in.
+ */
+export function currentIssuer(): IssuerSnapshot {
+  const businessName = config.BUSINESS_NAME.trim();
+  const businessId = config.BUSINESS_ID.trim();
+  const businessAddress = config.BUSINESS_ADDRESS.trim();
+  if (!businessName || !businessId) {
+    if (config.NODE_ENV === 'production') {
+      throw new AppError(503, 'BUSINESS_DETAILS_MISSING', 'BUSINESS_NAME and BUSINESS_ID must be set to issue receipts');
+    }
+    return {
+      businessName: businessName || MISSING_BUSINESS_DETAIL_PLACEHOLDER,
+      businessId: businessId || MISSING_BUSINESS_DETAIL_PLACEHOLDER,
+      businessAddress,
+    };
+  }
+  return { businessName, businessId, businessAddress };
+}
+
 async function issueReceiptTx(tx: Tx, orderId: string, now: Date) {
   const existing = await tx.receipt.findFirst({ where: { orderId, kind: 'receipt' } });
   if (existing) return existing;
+
+  const issuer = currentIssuer();
 
   const order = await tx.order.findUnique({
     where: { id: orderId },
@@ -77,6 +110,7 @@ async function issueReceiptTx(tx: Tx, orderId: string, now: Date) {
       vatRate: new Decimal(config.VAT_RATE).toFixed(4),
       vatAmount: vat.toFixed(2),
       netAmount: net.toFixed(2),
+      ...issuer,
       issuedAt: now,
     },
   });
@@ -87,9 +121,12 @@ export async function issueReceiptForOrder(orderId: string, now = new Date()) {
   try {
     return await prisma.$transaction((tx: Tx) => issueReceiptTx(tx, orderId, now));
   } catch (err) {
-    // A concurrent issuer won the unique index; our transaction (and its number) rolled back
+    // A concurrent issuer won the unique index; our transaction (and its number) rolled back.
+    // Only a receipt that now exists answers for it: any other unique conflict is a real error.
     if (!isUniqueViolation(err)) throw err;
-    return prisma.receipt.findFirst({ where: { orderId, kind: 'receipt' } });
+    const existing = await prisma.receipt.findFirst({ where: { orderId, kind: 'receipt' } });
+    if (!existing) throw err;
+    return existing;
   }
 }
 
@@ -108,6 +145,8 @@ export async function issueCreditReceiptForOrder(orderId: string, now = new Date
       if (order.status !== 'refunded') throw new AppError(409, 'ORDER_NOT_REFUNDED');
 
       const original = await issueReceiptTx(tx, orderId, now);
+      // The credit receipt is a new document: it carries the issuer details of today
+      const issuer = currentIssuer();
       const { year, seq, number } = await allocateReceiptNumberTx(tx, now);
       const neg = (v: { toString(): string }) => new Decimal(v.toString()).negated().toFixed(2);
 
@@ -126,13 +165,19 @@ export async function issueCreditReceiptForOrder(orderId: string, now = new Date
           vatRate: original.vatRate.toString(),
           vatAmount: neg(original.vatAmount),
           netAmount: neg(original.netAmount),
+          ...issuer,
           issuedAt: now,
         },
       });
     });
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
-    return prisma.receipt.findFirst({ where: { orderId, kind: 'credit' } });
+    // "Already exists" only if the conflict was a concurrent credit receipt. A conflict on the
+    // original receipt (a background issuer created it first) leaves no credit: rethrow, and the
+    // sweep retries it.
+    const credit = await prisma.receipt.findFirst({ where: { orderId, kind: 'credit' } });
+    if (!credit) throw err;
+    return credit;
   }
 }
 
@@ -159,6 +204,13 @@ let sweeping = false;
 export async function issueMissingReceipts(limit = 200): Promise<{ receipts: number; credits: number }> {
   const tally = { receipts: 0, credits: 0 };
   if (sweeping) return tally;
+  try {
+    currentIssuer();
+  } catch (err) {
+    // One line per sweep rather than one per order; the receipts wait until the config is set
+    console.error('[receipts] not issuing receipts:', err instanceof Error ? err.message : err);
+    return tally;
+  }
   sweeping = true;
   try {
     const missing = await prisma.$queryRaw<Array<{ id: string }>>`

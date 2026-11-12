@@ -1,3 +1,4 @@
+import { Decimal } from 'decimal.js';
 import { TIMEZONE } from '@lotto-maker/shared';
 
 export const NOT_TAX_INVOICE_NOTICE =
@@ -13,6 +14,10 @@ export interface ReceiptView {
   vatRate: { toString(): string };
   vatAmount: { toString(): string };
   netAmount: { toString(): string };
+  /** Issuer snapshot taken when the receipt was issued (null on receipts from before it existed). */
+  businessName?: string | null;
+  businessId?: string | null;
+  businessAddress?: string | null;
   issuedAt: Date;
 }
 
@@ -33,17 +38,38 @@ export function escapeHtml(value: string): string {
 
 const money = (v: { toString(): string }) => `₪${Number(v.toString()).toFixed(2)}`;
 
+/** The stored rate as a percentage, exactly: 0.1750 -> "17.5%", 0.18 -> "18%". */
+export function formatVatPercent(rate: { toString(): string }): string {
+  return `${new Decimal(rate.toString()).times(100).toDecimalPlaces(4).toString()}%`;
+}
+
+/**
+ * The issuer printed on the receipt: the snapshot stored on it. `fallback` (the current
+ * configuration) is used only for receipts issued before snapshots were stored.
+ */
+export function issuerOf(receipt: ReceiptView, fallback: BusinessDetails): BusinessDetails {
+  if (receipt.businessName == null && receipt.businessId == null && receipt.businessAddress == null) {
+    return fallback;
+  }
+  return {
+    name: receipt.businessName ?? '',
+    id: receipt.businessId ?? '',
+    address: receipt.businessAddress ?? '',
+  };
+}
+
 /** A simple Hebrew, right-to-left receipt page. Every dynamic value is HTML-escaped. */
 export function renderReceiptHtml(
   receipt: ReceiptView,
-  business: BusinessDetails,
+  fallbackBusiness: BusinessDetails,
   originalNumber: string | null,
 ): string {
   const e = escapeHtml;
+  const business = issuerOf(receipt, fallbackBusiness);
   const isCredit = receipt.kind === 'credit';
   const title = isCredit ? 'קבלת זיכוי על דמי שירות' : 'קבלה על דמי שירות';
   const date = receipt.issuedAt.toLocaleDateString('he-IL', { timeZone: TIMEZONE });
-  const vatPercent = `${(Number(receipt.vatRate.toString()) * 100).toFixed(0)}%`;
+  const vatPercent = formatVatPercent(receipt.vatRate);
 
   const row = (label: string, value: string) =>
     `<tr><th style="text-align:right;padding:6px 0;font-weight:normal;color:#6b7280">${e(label)}</th>` +
