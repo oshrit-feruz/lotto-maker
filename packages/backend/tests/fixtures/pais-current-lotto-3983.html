@@ -1,0 +1,73 @@
+<!--
+  SYNTHETIC FIXTURE for draw 3983. NOT captured from pais.co.il.
+
+  The only real values are the two given in the GitHub issue: lotto 5+strong = 15 winners at
+  5,645 ₪, and double lotto 5+strong = 12 winners at 11,290 ₪. The winning numbers, the
+  Extra digits, every other prize row and the HTML structure itself are made up, because the
+  live page could not be fetched when this was written.
+
+  TODO: replace this file with the saved HTML of
+  https://www.pais.co.il/Lotto/CurrentLotto.aspx?lotteryId=3983 and fix SELECTORS in
+  src/services/pais-lotto-parser.ts to match. Expected numbers in
+  tests/unit/pais-lotto-parser.test.ts are the made-up ones below.
+-->
+<html>
+<body>
+  <div class="draw-header">
+    <span class="draw-number">3983</span>
+    <span class="draw-date">10/11/2026</span>
+  </div>
+
+  <div class="lotto-numbers">
+    <span class="num">4</span><span class="num">11</span><span class="num">19</span>
+    <span class="num">23</span><span class="num">30</span><span class="num">36</span>
+  </div>
+  <div class="lotto-strong"><span class="num">5</span></div>
+  <div class="extra-digits">
+    <span class="digit">3</span><span class="digit">1</span><span class="digit">7</span>
+    <span class="digit">2</span><span class="digit">5</span><span class="digit">6</span>
+  </div>
+
+  <table class="prize-table">
+    <caption>לוטו</caption>
+    <thead><tr><th>דרגה</th><th>זוכים</th><th>סכום הזכייה</th></tr></thead>
+    <tbody>
+      <tr><td>6 + חזק</td><td>0</td><td>—</td></tr>
+      <tr><td>6</td><td>2</td><td>112,300 ₪</td></tr>
+      <tr><td>5 + חזק</td><td>15</td><td>5,645 ₪</td></tr>
+      <tr><td>5</td><td>180</td><td>245 ₪</td></tr>
+      <tr><td>4 + חזק</td><td>700</td><td>85 ₪</td></tr>
+      <tr><td>4</td><td>8,400</td><td>25 ₪</td></tr>
+      <tr><td>3 + חזק</td><td>9,100</td><td>15 ₪</td></tr>
+      <tr><td>3</td><td>80,000</td><td>6 ₪</td></tr>
+    </tbody>
+  </table>
+
+  <table class="prize-table">
+    <caption>לוטו כפול</caption>
+    <thead><tr><th>דרגה</th><th>זוכים</th><th>סכום הזכייה</th></tr></thead>
+    <tbody>
+      <tr><td>6 + חזק</td><td>0</td><td>—</td></tr>
+      <tr><td>6</td><td>1</td><td>224,600 ₪</td></tr>
+      <tr><td>5 + חזק</td><td>12</td><td>11,290 ₪</td></tr>
+      <tr><td>5</td><td>150</td><td>490 ₪</td></tr>
+      <tr><td>4 + חזק</td><td>600</td><td>170 ₪</td></tr>
+      <tr><td>4</td><td>7,000</td><td>50 ₪</td></tr>
+      <tr><td>3 + חזק</td><td>8,000</td><td>30 ₪</td></tr>
+      <tr><td>3</td><td>70,000</td><td>12 ₪</td></tr>
+    </tbody>
+  </table>
+
+  <table class="prize-table">
+    <caption>אקסטרה</caption>
+    <thead><tr><th>דרגה</th><th>זוכים</th><th>סכום הזכייה</th></tr></thead>
+    <tbody>
+      <tr><td>6 ספרות</td><td>0</td><td>—</td></tr>
+      <tr><td>5 ספרות</td><td>1</td><td>50,000 ₪</td></tr>
+      <tr><td>4 ספרות</td><td>20</td><td>1,000 ₪</td></tr>
+      <tr><td>3 ספרות</td><td>300</td><td>100 ₪</td></tr>
+      <tr><td>2 ספרות</td><td>4,000</td><td>10 ₪</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

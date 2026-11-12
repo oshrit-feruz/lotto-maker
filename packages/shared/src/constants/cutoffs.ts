@@ -9,9 +9,11 @@ export interface DrawScheduleEntry {
 }
 
 export const DRAW_SCHEDULE: Record<GameType, DrawScheduleEntry> = {
+  // Lotto: only a fallback. The real draws and cutoffs come from the Draw table, which is
+  // synced from pais.co.il (including announced Thursday draws), so `thu` is not a fixed day.
   lotto: {
-    days: ['tue', 'thu', 'sat'],
-    drawHour: 21,
+    days: ['tue', 'sat'],
+    drawHour: 23,
     drawMinute: 0,
     visibleCutoffMinutesBefore: 75,
     hardCutoffMinutesBefore: 60,

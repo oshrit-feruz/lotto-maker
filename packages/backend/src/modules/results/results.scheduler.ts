@@ -4,10 +4,8 @@ import { processResultsWithRetry } from './results.service.js';
 const JERUSALEM_TZ = 'Asia/Jerusalem';
 
 export function startResultsScheduler() {
-  // Lotto: Tue/Thu/Sat draw at 21:00 IL — check results at 22:00
-  cron.schedule('0 22 * * 2,4,6', () => {
-    void processResultsWithRetry('lotto', new Date());
-  }, { timezone: JERUSALEM_TZ });
+  // Lotto is handled by the draws scheduler (modules/draws/draws.sync.ts): results are scraped as a
+  // suggestion, an admin confirms them, then the settlement job pays. Not here.
 
   // Chance settlement not yet supported end-to-end — disabled until verified
   // cron.schedule('30 22 * * 2,4,6', () => {
