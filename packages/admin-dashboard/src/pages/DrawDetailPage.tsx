@@ -5,58 +5,10 @@ import { confirmDraw, editDrawResults, getDraw } from '../api/draws';
 import type { DrawDetail, EditResultsBody } from '../api/types';
 import ConfirmDrawDialog from '../components/ConfirmDrawDialog';
 import { Badge, QueryState } from '../components/ui';
+import { isDrawReadOnly, tierId, toBody, toForm, type DrawForm } from '../lib/drawForm';
 import { formatDate } from '../lib/format';
 import { GAMES, GAME_LABEL, TIER_KEYS } from '../lib/payout';
 import { DRAW_STATUS_LABEL } from './DrawsPage';
-
-interface Form {
-  numbers: string[];
-  strong: string;
-  extraDigits: string[];
-  tiers: Record<string, { winners: string; amount: string }>;
-}
-
-const tierId = (game: string, tier: string) => `${game}:${tier}`;
-
-function toForm(d: DrawDetail): Form {
-  const pad = (a: number[], n: number) => Array.from({ length: n }, (_, i) => (a[i] !== undefined ? String(a[i]) : ''));
-  const tiers: Form['tiers'] = {};
-  for (const g of GAMES) {
-    for (const t of TIER_KEYS[g]) {
-      const found = d.prizeTiers.find((p) => p.game === g && p.tier === t);
-      tiers[tierId(g, t)] = found
-        ? { winners: String(found.winnersCount), amount: String(Number(found.prizeAmount)) }
-        : { winners: '', amount: '' };
-    }
-  }
-  return { numbers: pad(d.numbers, 6), strong: d.strong === null ? '' : String(d.strong), extraDigits: pad(d.extraDigits, 6), tiers };
-}
-
-function toBody(f: Form): EditResultsBody | string {
-  const nums = f.numbers.map(Number);
-  const extra = f.extraDigits.map(Number);
-  if (f.numbers.some((n) => n === '') || nums.some((n) => !Number.isInteger(n) || n < 1 || n > 37))
-    return 'המספרים חייבים להיות 1–37';
-  if (new Set(nums).size !== nums.length) return 'המספרים חייבים להיות שונים';
-  const strong = Number(f.strong);
-  if (f.strong === '' || !Number.isInteger(strong) || strong < 1 || strong > 7) return 'המספר החזק חייב להיות 1–7';
-  if (f.extraDigits.some((n) => n === '') || extra.some((n) => !Number.isInteger(n) || n < 1 || n > 7))
-    return 'ספרות אקסטרה חייבות להיות 1–7';
-  const prizeTiers: EditResultsBody['prizeTiers'] = [];
-  for (const g of GAMES) {
-    for (const t of TIER_KEYS[g]) {
-      const row = f.tiers[tierId(g, t)];
-      if (!row || row.amount === '') continue; // an empty amount means "not set"
-      const winnersCount = Number(row.winners || 0);
-      const prizeAmount = Number(row.amount);
-      if (!Number.isInteger(winnersCount) || winnersCount < 0 || !Number.isFinite(prizeAmount) || prizeAmount < 0)
-        return `ערך לא תקין בטבלת ${GAME_LABEL[g]} (${t})`;
-      prizeTiers.push({ game: g, tier: t, winnersCount, prizeAmount });
-    }
-  }
-  if (prizeTiers.length === 0) return 'יש להזין לפחות דרגת פרס אחת';
-  return { numbers: nums, strong, extraDigits: extra, prizeTiers };
-}
 
 export default function DrawDetailPage() {
   const { id = '' } = useParams();
@@ -71,10 +23,10 @@ export default function DrawDetailPage() {
   );
 }
 
-function DrawEditor({ draw }: { draw: DrawDetail }) {
+export function DrawEditor({ draw }: { draw: DrawDetail }) {
   const qc = useQueryClient();
-  const readOnly = draw.status === 'results_confirmed' || draw.status === 'settled';
-  const [form, setForm] = useState<Form>(() => toForm(draw));
+  const readOnly = isDrawReadOnly(draw);
+  const [form, setForm] = useState<DrawForm>(() => toForm(draw));
   const [dirty, setDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -96,12 +48,15 @@ function DrawEditor({ draw }: { draw: DrawDetail }) {
       done(d);
     },
   });
+  const inputsDisabled = readOnly || save.isPending;
 
-  const set = (fn: (f: Form) => Form) => {
+  const set = (fn: (f: DrawForm) => DrawForm) => {
     setForm(fn);
     setDirty(true);
+    setFormError(null);
   };
   const onSave = () => {
+    save.reset();
     const body = toBody(form);
     if (typeof body === 'string') return setFormError(body);
     setFormError(null);
@@ -109,7 +64,14 @@ function DrawEditor({ draw }: { draw: DrawDetail }) {
   };
 
   const numInput = (value: string, onChange: (v: string) => void, label: string) => (
-    <input aria-label={label} value={value} disabled={readOnly} inputMode="numeric" onChange={(e) => onChange(e.target.value)} />
+    <input
+      key={label}
+      aria-label={label}
+      value={value}
+      disabled={inputsDisabled}
+      inputMode="numeric"
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 
   return (
@@ -127,7 +89,14 @@ function DrawEditor({ draw }: { draw: DrawDetail }) {
           <strong>דורש טיפול:</strong> {draw.attentionReason}
         </div>
       )}
-      {readOnly && <p className="muted">התוצאות אושרו – המסך במצב קריאה בלבד.</p>}
+      {readOnly && (
+        <p className="muted">
+          {draw.status === 'settled' ? 'ההגרלה סולקה' : 'התוצאות אושרו והסילוק בתהליך'} – המסך במצב קריאה בלבד.
+        </p>
+      )}
+      {!readOnly && draw.status === 'results_confirmed' && (
+        <p className="muted">הסילוק נכשל – ניתן לתקן את התוצאות ולשמור, והמערכת תנסה לסלק שוב.</p>
+      )}
 
       <div className="card ltr">
         <h2>תוצאות</h2>
@@ -160,9 +129,10 @@ function DrawEditor({ draw }: { draw: DrawDetail }) {
               </thead>
               <tbody>
                 {TIER_KEYS[g].map((t) => {
-                  const row = form.tiers[tierId(g, t)] ?? { winners: '', amount: '' };
-                  const upd = (patch: Partial<typeof row>) =>
-                    set((f) => ({ ...f, tiers: { ...f.tiers, [tierId(g, t)]: { ...row, ...patch } } }));
+                  const id = tierId(g, t);
+                  const upd = (patch: Partial<DrawForm['tiers'][string]>) =>
+                    set((f) => ({ ...f, tiers: { ...f.tiers, [id]: { ...(f.tiers[id] ?? { winners: '', amount: '' }), ...patch } } }));
+                  const row = form.tiers[id] ?? { winners: '', amount: '' };
                   return (
                     <tr key={t}>
                       <td className="ltr">{t}</td>
@@ -185,7 +155,7 @@ function DrawEditor({ draw }: { draw: DrawDetail }) {
           <button onClick={onSave} disabled={!dirty || save.isPending}>
             {save.isPending ? 'שומר…' : 'שמור שינויים'}
           </button>
-          <button onClick={() => setConfirming(true)} disabled={dirty || draw.status !== 'results_suggested'}>
+          <button onClick={() => setConfirming(true)} disabled={dirty || save.isPending || draw.status !== 'results_suggested'}>
             אשר תוצאות
           </button>
           {dirty && <span className="muted">יש שינויים שלא נשמרו – שמור לפני האישור.</span>}
