@@ -1,6 +1,5 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
-import { Loading } from './components/ui';
 import LoginPage from './pages/LoginPage';
 import DrawsPage from './pages/DrawsPage';
 import DrawDetailPage from './pages/DrawDetailPage';
@@ -22,7 +21,6 @@ const NAV: Array<[string, string]> = [
 
 function Shell() {
   const { status, logout } = useAuth();
-  if (status === 'loading') return <Loading />;
   if (status === 'out') return <Navigate to="/login" replace />;
   return (
     <div className="layout" dir="rtl">

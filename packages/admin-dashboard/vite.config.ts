@@ -21,6 +21,7 @@ export default defineConfig({
       { find: /^react-dom(\/.*)?$/, replacement: local('react-dom') + '$1' },
       { find: /^react(\/.*)?$/, replacement: local('react') + '$1' },
     ],
-    server: { deps: { inline: [/@testing-library\//] } },
+    // React Query is hoisted to the root too; inline it so its `react` import gets the alias.
+    server: { deps: { inline: [/@testing-library\//, /@tanstack\/react-query/] } },
   },
 });
