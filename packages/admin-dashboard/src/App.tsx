@@ -4,6 +4,7 @@ import { Loading } from './components/ui';
 import LoginPage from './pages/LoginPage';
 import DrawsPage from './pages/DrawsPage';
 import DrawDetailPage from './pages/DrawDetailPage';
+import PrizeClaimsPage from './pages/PrizeClaimsPage';
 
 const NAV: Array<[string, string]> = [
   ['/draws', 'הגרלות'],
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/draws" replace />} />
         <Route path="/draws" element={<DrawsPage />} />
         <Route path="/draws/:id" element={<DrawDetailPage />} />
+        <Route path="/prize-claims" element={<PrizeClaimsPage />} />
         {/* remaining screens are added section by section */}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
