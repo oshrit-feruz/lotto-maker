@@ -3,6 +3,7 @@ import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog } from '../../lib/audit-log.js';
 import { getPaymentProvider } from '../payments/payments.service.js';
 import { getDefaultCard } from '../payments/cards.service.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 import { retryStuckCardPayouts } from './withdrawals.service.js';
 
 const BACKOFF_BASE_MS = 5 * 60 * 1000;
@@ -69,6 +70,7 @@ export async function payCardCredit(id: string, now = new Date()): Promise<CardC
     actorType: 'system',
     metadata: { amount: credit.amount.toString(), providerTxId: result.providerTxId },
   });
+  notifyInBackground(credit.userId, 'card_credit_paid', { amount: credit.amount.toString() });
   return 'paid';
 }
 
@@ -144,5 +146,6 @@ export async function markCardCreditPaid(id: string, adminId: string, reference:
     actorType: 'admin',
     metadata: { reference, amount: credit.amount.toString() },
   });
+  notifyInBackground(credit.userId, 'card_credit_paid', { amount: credit.amount.toString() });
   return { id, status: 'paid' as const };
 }

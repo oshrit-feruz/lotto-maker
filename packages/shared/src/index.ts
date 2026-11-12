@@ -7,4 +7,5 @@ export * from './constants/games.js';
 export * from './constants/cutoffs.js';
 export * from './constants/lotto.js';
 export * from './constants/systematic.js';
+export * from './constants/notification-templates.js';
 export * from './validation/index.js';

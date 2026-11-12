@@ -5,7 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import { orderStatusChangeTx, writeAuditLogTx } from '../../lib/audit-log.js';
 import { redis } from '../../redis.js';
 import { config } from '../../config.js';
-import { notificationService, PAYLOADS } from '../../services/notifications.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
@@ -227,9 +227,7 @@ export async function attachScan(
 
   await publishQueueUpdate(slot.locationId, { type: 'slot_scanned', slotId });
 
-  notificationService
-    .sendToUser(slot.order.userId, PAYLOADS.orderKeyed())
-    .catch(console.error);
+  notifyInBackground(slot.order.userId, 'order_scanned', {});
 
   return { scanned: true };
 }

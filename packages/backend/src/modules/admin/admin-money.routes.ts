@@ -10,11 +10,12 @@ import {
 import { collectClaim, listClaims, scheduleClaimAsAdmin } from '../prize-claims/prize-claims.service.js';
 import { scheduleSchema } from '../prize-claims/prize-claims.routes.js';
 import { listCardCredits, markCardCreditPaid } from '../wallet/card-credits.service.js';
+import { reviewReasonSchema } from './review-reason.js';
 
 const withdrawalsQuerySchema = z.object({
   status: z.enum(['requested', 'approved', 'rejected', 'paid', 'failed', 'cancelled']).optional(),
 });
-const rejectSchema = z.object({ reason: z.string().min(2).max(500) });
+const rejectSchema = z.object({ reason: reviewReasonSchema });
 const claimsQuerySchema = z.object({
   status: z.enum(['awaiting_pickup', 'scheduled', 'collected', 'expired']).optional(),
 });

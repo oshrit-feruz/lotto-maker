@@ -592,3 +592,152 @@ model Admin {
 
   confirmedDraws Draw[]
 }
+
+// ─── Phase 6: KYC ────────────────────────────────────────────────────────────
+// The Phase 6 models carry a plain userId with no Prisma relation (and no foreign key in the
+// migrations), so the User model and its relation list stay untouched.
+
+enum KycCheckStatus {
+  verified
+  rejected
+  manual_review
+}
+
+// One identity check by the KYC provider. The ID number is kept only as AES-256-GCM ciphertext
+// plus the keyed hash and the last 4 digits (same as User). A check in `manual_review` is the
+// admin queue; approving it copies the identity onto the User.
+model KycCheck {
+  id           String         @id @default(cuid())
+  userId       String
+  provider     String
+  // The provider's reference for this check.
+  reference    String
+  status       KycCheckStatus
+  reason       String?
+  fullName     String
+  idNumberEnc  String
+  idNumberHash String
+  idLast4      String
+  birthYear    Int
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  // Also, in SQL only (Prisma cannot express a partial index): KycCheck_one_pending_per_user,
+  // UNIQUE ("userId") WHERE status = 'manual_review'. One check waiting for review per user.
+}
+
+// ─── Phase 6: responsible gaming ─────────────────────────────────────────────
+
+// Deposit limits (rolling day / week / 30 days) and the monthly loss limit, in ILS; null = no limit.
+// Lowering a limit applies at once. Raising or removing one is parked in `pending` as
+// { [limit]: { value: number | null, effectiveAt: ISO date } } and applies once effectiveAt has passed.
+// Self-exclusion lives here too: `selfExcludedUntil`, or `selfExcludedPermanent`.
+model UserLimits {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  depositDaily          Decimal?  @db.Decimal(12, 2)
+  depositWeekly         Decimal?  @db.Decimal(12, 2)
+  depositMonthly        Decimal?  @db.Decimal(12, 2)
+  lossMonthly           Decimal?  @db.Decimal(12, 2)
+  pending               Json      @default("{}")
+  selfExcludedUntil     DateTime?
+  selfExcludedPermanent Boolean   @default(false)
+  // When the current exclusion was set (a permanent one can be lifted by an admin 6 months later).
+  selfExcludedAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ─── Phase 6: notifications ──────────────────────────────────────────────────
+
+enum NotificationChannel {
+  sms
+  email
+  push
+}
+
+enum NotificationStatus {
+  sent
+  failed
+  // Not sent on purpose: the user opted out of the channel, or there is no address for it.
+  skipped
+}
+
+// Every send attempt. The payload never holds an OTP code.
+model Notification {
+  id        String              @id @default(cuid())
+  // Null for a message to someone without an account yet (an OTP at sign-up).
+  userId    String?
+  channel   NotificationChannel
+  template  String
+  payload   Json
+  status    NotificationStatus
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Per user and channel on/off. No row means on. OTP and legal notices ignore it.
+model NotificationPreference {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel
+  enabled   Boolean             @default(true)
+  updatedAt DateTime            @updatedAt
+
+  @@unique([userId, channel])
+}
+
+// ─── Phase 6: fee receipts ───────────────────────────────────────────────────
+
+enum ReceiptKind {
+  receipt
+  // Issued when a paid order is refunded; references the original receipt, amounts are negative.
+  credit
+}
+
+// Last number issued per year. The row lock taken by the upsert in the receipt's own transaction
+// is what makes numbers sequential, never repeated and never skipped.
+model ReceiptCounter {
+  year Int @id
+  last Int
+}
+
+// A receipt for the SERVICE FEE of one order (the ticket price is held for the customer and is not
+// our income). Not a tax invoice until an accountant approves the format.
+model Receipt {
+  id                String      @id @default(cuid())
+  // "2026-000001"
+  number            String      @unique
+  year              Int
+  seq               Int
+  kind              ReceiptKind @default(receipt)
+  orderId           String
+  userId            String
+  originalReceiptId String?
+  customerName      String?
+  idLast4           String?
+  // Fee including VAT, the VAT in it and the net amount. Negative on a credit receipt.
+  feeAmount         Decimal     @db.Decimal(10, 2)
+  vatRate           Decimal     @db.Decimal(5, 4)
+  vatAmount         Decimal     @db.Decimal(10, 2)
+  netAmount         Decimal     @db.Decimal(10, 2)
+  // The issuer as it stood when the receipt was issued, so a later config change does not alter
+  // it. Null only on receipts issued before these columns existed.
+  businessName      String?
+  businessId        String?
+  businessAddress   String?
+  issuedAt          DateTime    @default(now())
+
+  @@unique([year, seq])
+  // One receipt and at most one credit receipt per order
+  @@unique([orderId, kind])
+  @@index([userId, issuedAt])
+}

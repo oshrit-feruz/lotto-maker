@@ -8,6 +8,8 @@ import { assertGameEnabled } from '../../lib/games.js';
 import { computeOrderPrice } from '../../lib/pricing.js';
 import { getPriceRow } from '../../lib/price-row.js';
 import { cutoffsOf, getOpenDraws } from '../../lib/draws.js';
+import { assertCanPlaceOrder, assertCanPlaceOrderTx } from '../limits/limits.service.js';
+import { issueReceiptsInBackground } from '../receipts/receipts.service.js';
 import { assertValidTicket } from '../tickets/tickets.service.js';
 import { ticketFingerprint } from '@lotto-maker/shared';
 import type { TicketBody } from '../tickets/tickets.service.js';
@@ -143,6 +145,10 @@ export async function createOrder(params: CreateOrderParams) {
   const orderTotal = new Decimal(breakdown.total);
   const grandTotal = orderTotal.times(draws.length);
 
+  // Self-exclusion (403 SELF_EXCLUDED) and the monthly loss limit (422 LOSS_LIMIT): an early
+  // rejection; the authoritative check runs inside the charging transaction below.
+  await assertCanPlaceOrder(userId, grandTotal);
+
   let created;
   try {
     created = await prisma.$transaction(
@@ -156,6 +162,9 @@ export async function createOrder(params: CreateOrderParams) {
         `;
         const u = rows[0];
         if (!u) throw new AppError(404, 'USER_NOT_FOUND');
+        // Again under the User row lock, which limit and exclusion changes also take: the check
+        // above can be overtaken by a concurrent order or a new self-exclusion.
+        await assertCanPlaceOrderTx(tx, userId, grandTotal);
         if (new Decimal(u.walletBalance).lessThan(grandTotal)) {
           throw new AppError(402, 'INSUFFICIENT_BALANCE');
         }
@@ -263,6 +272,9 @@ export async function createOrder(params: CreateOrderParams) {
   for (const o of created.orders) {
     await orderStatusChange(o.orderId, 'pending', 'in_queue', userId, 'user');
   }
+
+  // Fee receipts, after the commit; a failure is picked up by the receipt sweep
+  issueReceiptsInBackground(created.orders.map((o) => o.orderId));
 
   const first = created.orders[0]!;
   return {

@@ -62,6 +62,17 @@ const envSchema = z.object({
   // Only the mock provider exists so far; it is refused when NODE_ENV=production.
   PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
   PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Phase 6. Only the mock KYC provider exists so far; production returns 503 until a real one is added.
+  KYC_PROVIDER: z.enum(['mock']).default('mock'),
+  // Test switch: the mock provider sends every otherwise-valid check to manual review.
+  KYC_MOCK_FORCE_MANUAL_REVIEW: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  // Raising or removing a responsible-gaming limit takes effect only after this delay.
+  RG_LIMIT_INCREASE_DELAY_HOURS: z.coerce.number().min(0).default(24),
+  // Fee receipts: VAT rate and the business details printed on them.
+  VAT_RATE: z.coerce.number().min(0).max(1).default(0.18),
+  BUSINESS_NAME: z.string().default(''),
+  BUSINESS_ID: z.string().default(''),
+  BUSINESS_ADDRESS: z.string().default(''),
   // Origins the hosted checkout may send the user back to (successUrl / cancelUrl), comma-separated,
   // e.g. "https://lotto.example,http://localhost:5173". Empty: return URLs are refused.
   CHECKOUT_RETURN_ORIGINS: z
