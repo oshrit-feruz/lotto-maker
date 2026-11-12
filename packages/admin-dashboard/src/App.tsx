@@ -25,14 +25,16 @@ function Shell() {
   return (
     <div className="layout" dir="rtl">
       <nav>
-        {NAV.map(([to, label]) => (
-          <NavLink key={to} to={to}>
-            {label}
-          </NavLink>
-        ))}
-        <button className="secondary" onClick={() => void logout()} style={{ marginTop: 'auto' }}>
-          יציאה
-        </button>
+        <div className="nav-inner">
+          {NAV.map(([to, label]) => (
+            <NavLink key={to} to={to}>
+              {label}
+            </NavLink>
+          ))}
+          <button className="secondary" onClick={() => void logout()} style={{ marginTop: 'auto' }}>
+            יציאה
+          </button>
+        </div>
       </nav>
       <main>
         <Outlet />

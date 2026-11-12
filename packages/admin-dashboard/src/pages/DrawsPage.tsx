@@ -6,12 +6,8 @@ import type { DrawStatus } from '../api/types';
 import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate } from '../lib/format';
 
-export const DRAW_STATUS_LABEL: Record<DrawStatus, string> = {
-  scheduled: 'מתוזמנת',
-  results_suggested: 'תוצאות מוצעות',
-  results_confirmed: 'תוצאות אושרו',
-  settled: 'שולמה',
-};
+import { DRAW_STATUS_LABEL } from '../lib/labels';
+export { DRAW_STATUS_LABEL };
 
 export const DRAWS_PAGE_SIZE = 25;
 

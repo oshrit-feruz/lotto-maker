@@ -30,3 +30,17 @@ th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid #e5e7eb;
 .nums { display: flex; gap: 6px; flex-wrap: wrap; }
 .nums input { width: 56px; text-align: center; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.money { unicode-bidi: isolate; white-space: nowrap; }
+.money.neg { color: #b91c1c; }
+.layout nav .nav-inner { position: sticky; top: 16px; height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.date-field { display: flex; align-items: center; gap: 8px; }
+.date-field output { font-size: 13px; color: #6b7280; min-width: 76px; direction: ltr; unicode-bidi: isolate; }
+.prize-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.prize-grid .card { min-width: 0; }
+.prize-grid table { table-layout: fixed; }
+.prize-grid th:first-child, .prize-grid td:first-child { width: 56px; }
+.prize-grid td input { width: 100%; min-width: 0; text-align: end; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0 0 12px; }
+.kv dt { color: #6b7280; }
+.kv dd { margin: 0; }
+.heading-sub { font-size: 16px; font-weight: normal; color: #6b7280; margin: 0 16px; }

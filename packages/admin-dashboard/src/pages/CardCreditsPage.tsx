@@ -8,12 +8,8 @@ import RequesterLink from '../components/RequesterLink';
 import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate, formatNis } from '../lib/format';
 
-export const CARD_CREDIT_STATUS_LABEL: Record<CardCreditStatus, string> = {
-  pending: 'ממתין',
-  processing: 'בזיכוי כעת',
-  paid: 'שולם',
-  failed: 'נכשל',
-};
+import { CARD_CREDIT_STATUS_LABEL } from '../lib/labels';
+export { CARD_CREDIT_STATUS_LABEL };
 const STATUS_TONE: Record<CardCreditStatus, 'green' | 'red' | 'amber' | 'blue'> = {
   pending: 'amber',
   processing: 'blue',

@@ -106,7 +106,7 @@ describe('withdrawal status labels', () => {
     renderPage();
     const link = (await screen.findByText('ישראל ישראלי')).closest('a')!;
     expect(link).toHaveAttribute('href', '/users/user-000000001');
-    expect(within(link).getByText('+972501234567')).toBeInTheDocument();
+    expect(within(link).getByText('050-1234567')).toBeInTheDocument();
   });
 
   it('pages with next and previous', async () => {

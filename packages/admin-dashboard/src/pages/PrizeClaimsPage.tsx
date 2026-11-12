@@ -8,13 +8,10 @@ import CollectClaimDialog from '../components/CollectClaimDialog';
 import { ConfirmDialog } from '../components/Dialog';
 import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate, formatNis, jerusalemLocalToIso, toJerusalemLocalInput } from '../lib/format';
+import { formatPhoneLocal } from '../lib/phone';
 
-export const CLAIM_STATUS_LABEL: Record<ClaimStatus, string> = {
-  awaiting_pickup: 'ממתין לאיסוף',
-  scheduled: 'נקבע מועד',
-  collected: 'נאסף',
-  expired: 'פג תוקף',
-};
+import { CLAIM_STATUS_LABEL } from '../lib/labels';
+export { CLAIM_STATUS_LABEL };
 
 /** Errors after which the claim's state on the server differs from the list: reload it. */
 const STALE_CLAIM_CODES = new Set(['CLAIM_ALREADY_COLLECTED', 'CLAIM_EXPIRED', 'CLAIM_NOT_OPEN', 'CLAIM_NOT_FOUND']);
@@ -110,7 +107,7 @@ export default function PrizeClaimsPage() {
                   {claims.map((c) => (
                     <tr key={c.id}>
                       <td>{c.claimantName ?? '—'}</td>
-                      <td className="ltr">{c.claimantPhone}</td>
+                      <td className="ltr">{formatPhoneLocal(c.claimantPhone)}</td>
                       <td>{c.drawNumber ?? '—'}</td>
                       <td>{formatNis(c.amount)}</td>
                       <td>{formatDate(c.createdAt)}</td>

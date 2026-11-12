@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { PrizeClaim } from '../api/types';
-import { formatNis } from '../lib/format';
 import { isIdLast4Format } from '../lib/idCheck';
+import { formatPhoneLocal } from '../lib/phone';
+import { Money } from './ui';
 import { ConfirmDialog } from './Dialog';
 
 /**
@@ -33,14 +34,26 @@ export default function CollectClaimDialog({
       onConfirm={() => onConfirm(typed)}
       onCancel={onCancel}
     >
-      <p>
-        סכום למסירה: <strong>{formatNis(claim.amount)}</strong>
-        {claim.drawNumber != null && <> · הגרלה {claim.drawNumber}</>}
-      </p>
-      <p>
-        זוכה: {claim.claimantName ?? '—'}
-        {claim.claimantPhone && <span className="ltr"> · {claim.claimantPhone}</span>}
-      </p>
+      <dl className="kv">
+        <dt>סכום למסירה</dt>
+        <dd>
+          <strong>
+            <Money value={claim.amount} />
+          </strong>
+        </dd>
+        {claim.drawNumber != null && (
+          <>
+            <dt>הגרלה</dt>
+            <dd>{claim.drawNumber}</dd>
+          </>
+        )}
+        <dt>זוכה</dt>
+        <dd>{claim.claimantName ?? '—'}</dd>
+        <dt>טלפון</dt>
+        <dd>
+          <span className="ltr">{claim.claimantPhone ? formatPhoneLocal(claim.claimantPhone) : '—'}</span>
+        </dd>
+      </dl>
       <label>
         4 ספרות אחרונות של תעודת הזהות
         <input

@@ -67,7 +67,7 @@ describe('card credits page', () => {
     renderPage();
     const links = await screen.findAllByRole('link');
     expect(links[0]).toHaveAttribute('href', '/users/user-000000001');
-    expect(within(links[0]!).getByText('+972501234567')).toBeInTheDocument();
+    expect(within(links[0]!).getByText('050-1234567')).toBeInTheDocument();
     expect(screen.getAllByText('ישראל ישראלי')).toHaveLength(2);
     expect(screen.getByText('זכייה 00000001')).toBeInTheDocument();
     expect(screen.getByText('משיכה 00000009')).toBeInTheDocument();

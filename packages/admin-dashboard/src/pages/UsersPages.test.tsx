@@ -7,6 +7,7 @@ import type { AdminUserDetail } from '../api/types';
 import { nationalDigits } from '../lib/phone';
 import UsersPage from './UsersPage';
 import { UserView } from './UserDetailPage';
+import { actorLabel } from './AuditPage';
 import * as users from '../api/users';
 
 vi.mock('../api/users', () => ({ searchUsers: vi.fn(), getUser: vi.fn(), suspendUser: vi.fn(), unsuspendUser: vi.fn() }));
@@ -72,5 +73,37 @@ describe('suspending a user', () => {
     await userEvent.click(confirm);
     expect(users.suspendUser).toHaveBeenCalledWith('u1', 'חשד להונאה');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});
+
+describe('user detail view', () => {
+  it('heads with the name and the local phone, in Hebrew, with signed amounts', () => {
+    wrap(
+      <UserView
+        user={{
+          ...user,
+          walletTransactions: [
+            { id: 't2', type: 'withdrawal_hold', amount: '-14.50', description: 'בקשת משיכה', createdAt: '2026-11-02T10:00:00Z' },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('ישראל ישראלי');
+    expect(screen.getByTestId('user-phone')).toHaveTextContent('050-1234567');
+    expect(screen.getByText('משיכה (הקפאה)')).toBeInTheDocument();
+    expect(screen.getByText('בקשת משיכה')).toBeInTheDocument();
+    expect(screen.getByText('זכתה')).toBeInTheDocument();
+    expect(screen.getByText('3900')).toBeInTheDocument();
+    expect(screen.getByText('-₪14.50')).toHaveAttribute('dir', 'ltr');
+  });
+});
+
+describe('audit actor', () => {
+  it('shows the admin name, else the local phone, never the raw actor id', () => {
+    const base = { actorType: 'admin', actorId: 'a1', adminName: null, adminPhone: null };
+    expect(actorLabel({ ...base, adminName: 'אושרית', adminPhone: '+972521112233' })).toBe('אושרית');
+    expect(actorLabel({ ...base, adminPhone: '+972521112233' })).toBe('052-1112233');
+    expect(actorLabel({ ...base, actorType: 'system', actorId: null })).toBe('מערכת');
+    expect(actorLabel({ ...base, actorType: 'user', actorId: 'u_7f3a9c21dana' })).toBe('לקוח 21dana');
   });
 });

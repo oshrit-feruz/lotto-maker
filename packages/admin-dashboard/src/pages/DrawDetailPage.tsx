@@ -134,7 +134,7 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
         </div>
       </div>
 
-      <div className="grid2">
+      <div className="prize-grid">
         {GAMES.map((g) => (
           <div className="card" key={g}>
             <h2>{GAME_LABEL[g]}</h2>
