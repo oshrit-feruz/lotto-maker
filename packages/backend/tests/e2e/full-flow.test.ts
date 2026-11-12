@@ -70,12 +70,12 @@ describe.skipIf(skip)('Full e2e flow', () => {
     await prisma.auditLog.deleteMany();
     await prisma.walletTransaction.deleteMany();
     await prisma.payment.deleteMany();
+    await prisma.pendingCardCredit.deleteMany(); // references Order and Withdrawal
     await prisma.withdrawal.deleteMany();
     await prisma.savedCard.deleteMany();
     await prisma.queueSlot.deleteMany();
     await prisma.orderWin.deleteMany();
     await prisma.prizeClaim.deleteMany();
-    await prisma.pendingCardCredit.deleteMany();
     await prisma.receipt.deleteMany();
     await prisma.subscriptionEvent.deleteMany();
     await prisma.order.deleteMany();
