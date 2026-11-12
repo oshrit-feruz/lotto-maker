@@ -47,6 +47,13 @@ const envSchema = z.object({
   // A win whose total for one order is at or below this is credited to the wallet;
   // above it the user collects it with the original ticket and ID.
   SMALL_PRIZE_LIMIT: z.coerce.number().positive().default(2600),
+  // Withdrawals: the smallest amount, the fee of a bank transfer (deducted from the amount;
+  // a card withdrawal is free) and the card-withdrawal size up to which no admin approval is needed.
+  MIN_WITHDRAWAL_AMOUNT: z.coerce.number().positive().default(10),
+  BANK_WITHDRAWAL_FEE: z.coerce.number().min(0).default(25),
+  AUTO_APPROVE_WITHDRAWAL_LIMIT: z.coerce.number().min(0).default(500),
+  // A prize above SMALL_PRIZE_LIMIT stays claimable this long after the draw (6 months).
+  PRIZE_CLAIM_RETENTION_DAYS: z.coerce.number().int().positive().default(182),
   // Orders stop this long before Draw.salesCloseAt, so an operator still has time to key the form.
   ORDER_CLOSE_BUFFER_MINUTES: z.coerce.number().int().min(0).default(30),
   // An in-progress slot claimed by one operator can be taken over by another
