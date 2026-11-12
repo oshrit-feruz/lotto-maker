@@ -77,6 +77,7 @@ const tier = (game: string, t: string, amount: number) => ({ game, tier: t, priz
 const makeDraw = (status: string) => ({
   id: 'draw1',
   status,
+  drawAt: new Date('2026-11-10T21:00:00Z'),
   numbers: [4, 11, 19, 23, 30, 36],
   strong: 5,
   extraDigits: [3, 1, 7, 2, 5, 6],
@@ -142,7 +143,8 @@ describe('settleDraw', () => {
     h.state.draw = makeDraw('results_confirmed');
     await settleDraw('draw1');
     expect(h.state.claims).toEqual([
-      { orderId: 'o2', userId: 'u2', amount: '5645.00', status: 'awaiting_pickup' },
+      // Kept 182 days after the draw.
+      { orderId: 'o2', userId: 'u2', amount: '5645.00', status: 'awaiting_pickup', expiresAt: new Date('2027-05-11T21:00:00Z') },
     ]);
     expect(balance('u2')).toBe(100);
     expect(h.state.walletTxs.some((t: any) => t.orderId === 'o2')).toBe(false);

@@ -49,18 +49,19 @@ export function createFakeMoney() {
   const table = (name: keyof typeof tables, defaults: () => any, unique: Array<string[]> = []) => ({
     findUnique: async ({ where, include }: any) => {
       const row = tables[name].find((r) => matches(r, where)) ?? null;
-      return row && include ? withIncludes(row, include) : row;
+      // Prisma returns fresh objects, never live rows: copy, so a later update can't change what a caller already read.
+      return row && include ? withIncludes(row, include) : row && { ...row };
     },
     findFirst: async ({ where, orderBy }: any = {}) => {
       const rows = tables[name].filter((r) => matches(r, where));
       if (orderBy?.createdAt === 'desc') rows.sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq);
-      return rows[0] ?? null;
+      return rows[0] ? { ...rows[0] } : null;
     },
     findMany: async ({ where, orderBy, take, include }: any = {}) => {
       let rows = tables[name].filter((r) => matches(r, where));
       if (orderBy?.createdAt === 'desc') rows = [...rows].sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq);
       if (take) rows = rows.slice(0, take);
-      return include ? rows.map((r) => withIncludes(r, include)) : rows;
+      return include ? rows.map((r) => withIncludes(r, include)) : rows.map((r) => ({ ...r }));
     },
     create: async ({ data }: any) => {
       for (const keys of unique) {
