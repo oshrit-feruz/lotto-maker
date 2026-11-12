@@ -40,15 +40,16 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001 -G nodejs
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Files stay owned by root and are only readable by the runtime user, so the app cannot modify its own code.
 # node_modules includes the prisma CLI (a devDependency) because migrations run from this image
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nodejs:nodejs /app/packages/shared/package.json ./packages/shared/package.json
-COPY --from=builder --chown=nodejs:nodejs /app/packages/shared/dist ./packages/shared/dist
-COPY --from=builder --chown=nodejs:nodejs /app/packages/backend/package.json ./packages/backend/package.json
-COPY --from=builder --chown=nodejs:nodejs /app/packages/backend/dist ./packages/backend/dist
-COPY --from=builder --chown=nodejs:nodejs /app/packages/backend/prisma ./packages/backend/prisma
-COPY --chown=nodejs:nodejs docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/backend/package.json ./packages/backend/package.json
+COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
+COPY --from=builder /app/packages/backend/prisma ./packages/backend/prisma
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 USER nodejs
 WORKDIR /app/packages/backend
