@@ -40,6 +40,10 @@ function classifyError(err: unknown): SkipOutcome {
       // createOrder checked KYC again — defensive, already guarded above
       return { skipReason: 'kyc_not_verified', shouldNotify: false };
     }
+    if (err.code === 'INVALID_TICKET' || err.code === 'GAME_NOT_AVAILABLE') {
+      // TODO Phase 3: subscriptions still hold one flat table; a lotto ticket needs an even table count
+      return { skipReason: 'unsupported_ticket', shouldNotify: false };
+    }
     if (err.code === 'ACCOUNT_SUSPENDED') {
       return { skipReason: 'account_suspended', shouldNotify: false };
     }
@@ -92,9 +96,16 @@ async function processOneSubscription(sub: SubRow, drawDate: Date): Promise<void
   try {
     const result = await createOrder({
       userId: sub.userId,
-      gameType: sub.gameType,
-      numbers: sub.numbers as number[],
-      strongNumber: sub.strongNumber ?? undefined,
+      // TODO Phase 3: a subscription holds one flat table, which is not a valid lotto ticket
+      // (tables must be an even count). Until subscriptions are redesigned this is rejected
+      // with INVALID_TICKET and recorded as a skipped event.
+      ticket: {
+        type: 'regular',
+        systematicType: null,
+        extra: false,
+        drawCount: 1,
+        tables: [{ numbers: sub.numbers as number[], strongNumbers: sub.strongNumber ? [sub.strongNumber] : [] }],
+      },
       type: 'subscription',
       subscriptionId: sub.id,
     });

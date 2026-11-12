@@ -16,8 +16,8 @@ export function QueueItem({ slot }: Props) {
   const [loading, setLoading] = useState(false);
 
   const gameName = GAME_DISPLAY_NAMES[slot.order.gameType as keyof typeof GAME_DISPLAY_NAMES] ?? slot.order.gameType;
-  const numbersDisplay = slot.order.numbers.join(', ');
-  const strongDisplay = slot.order.strongNumber ? ` | חזק: ${slot.order.strongNumber}` : '';
+  const typeDisplay = slot.order.ticketType === 'double' ? ' כפול' : '';
+  const extraDisplay = slot.order.extra ? ' + Extra' : '';
 
   async function handleStart() {
     setLoading(true);
@@ -44,13 +44,22 @@ export function QueueItem({ slot }: Props) {
   return (
     <div style={{ border: `2px solid ${borderColor}`, borderRadius: 8, padding: 16, marginBottom: 12, background: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: '1.3rem', fontWeight: 700 }}>{gameName}</span>
+        <span style={{ fontSize: '1.3rem', fontWeight: 700 }}>
+          {gameName}{typeDisplay}{extraDisplay}
+          {slot.order.drawNumber ? ` · הגרלה ${slot.order.drawNumber}` : ''}
+          {slot.order.systematicType ? ` · ${slot.order.systematicType}` : ''}
+        </span>
         <CountdownTimer deadline={slot.deadline} />
       </div>
 
-      <div style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: 2, marginBottom: 8, direction: 'ltr' }}>
-        {numbersDisplay}{strongDisplay}
-      </div>
+      {slot.order.tables.map((t, i) => (
+        <div
+          key={i}
+          style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: 2, marginBottom: 8, direction: 'ltr' }}
+        >
+          {i + 1}. {t.numbers.join(', ')} | חזק: {t.strongNumbers.join(', ')}
+        </div>
+      ))}
 
       {slot.order.idLast4 && (
         <div style={{ color: '#6b7280', marginBottom: 8 }}>
@@ -80,6 +89,7 @@ export function QueueItem({ slot }: Props) {
       {showScan && (
         <ScanUpload
           slotId={slot.id}
+          extra={slot.order.extra}
           onClose={() => setShowScan(false)}
           onSuccess={() => {
             setShowScan(false);

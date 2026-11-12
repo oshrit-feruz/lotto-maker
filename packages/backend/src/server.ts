@@ -12,6 +12,7 @@ import usersRoutes from './modules/users/users.routes.js';
 import walletRoutes from './modules/wallet/wallet.routes.js';
 import paymentsRoutes from './modules/payments/payments.routes.js';
 import ordersRoutes from './modules/orders/orders.routes.js';
+import ticketsRoutes from './modules/tickets/tickets.routes.js';
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes.js';
 import operatorsRoutes from './modules/operators/operators.routes.js';
 import { MAX_SCAN_BYTES } from './lib/scan-file.js';
@@ -34,6 +35,7 @@ export async function buildApp() {
   await app.register(walletRoutes);
   await app.register(paymentsRoutes);
   await app.register(ordersRoutes);
+  await app.register(ticketsRoutes);
   await app.register(subscriptionsRoutes);
   await app.register(operatorsRoutes);
   await app.register(resultsRoutes);

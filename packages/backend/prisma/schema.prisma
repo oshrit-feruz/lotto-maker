@@ -161,7 +161,8 @@ model Order {
   userId         String
   subscriptionId String?
   gameType       GameType
-  numbers        Json
+  // Legacy flat numbers from before Phase 2. New orders use ticketId. TODO: drop with the other legacy games.
+  numbers        Json?
   strongNumber   Int?
   drawDate       DateTime
   drawTime       DateTime

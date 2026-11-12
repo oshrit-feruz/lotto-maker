@@ -5,9 +5,13 @@ interface Props {
   slotId: string;
   onClose: () => void;
   onSuccess: () => void;
+  /** The ticket has Extra: the operator types the 6 digits the terminal printed. */
+  extra?: boolean;
 }
 
-export function ScanUpload({ slotId, onClose, onSuccess }: Props) {
+export function ScanUpload({ slotId, onClose, onSuccess, extra = false }: Props) {
+  const [extraDigits, setExtraDigits] = useState('');
+  const extraValid = !extra || /^[1-7]{6}$/.test(extraDigits);
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -25,7 +29,7 @@ export function ScanUpload({ slotId, onClose, onSuccess }: Props) {
     setUploading(true);
     setError(null);
     try {
-      await uploadScan(slotId, file);
+      await uploadScan(slotId, file, extra ? extraDigits : undefined);
       onSuccess();
     } catch {
       setError('שגיאה בהעלאה. נסה שוב.');
@@ -48,6 +52,16 @@ export function ScanUpload({ slotId, onClose, onSuccess }: Props) {
           style={{ marginBottom: 12, width: '100%' }}
         />
 
+        {extra && (
+          <input
+            value={extraDigits}
+            onChange={(e) => setExtraDigits(e.target.value.replace(/[^1-7]/g, '').slice(0, 6))}
+            placeholder="ספרות Extra (6 ספרות, 1-7)"
+            inputMode="numeric"
+            style={{ marginBottom: 12, width: '100%', padding: 8, direction: 'ltr', boxSizing: 'border-box' }}
+          />
+        )}
+
         {preview && (
           <img src={preview} alt="preview" style={{ width: '100%', borderRadius: 8, marginBottom: 12 }} />
         )}
@@ -55,7 +69,7 @@ export function ScanUpload({ slotId, onClose, onSuccess }: Props) {
         {error && <p style={{ color: '#e02424' }}>{error}</p>}
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={handleUpload} disabled={!preview || uploading} style={{ flex: 1, padding: 12, background: '#057a55', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+          <button onClick={handleUpload} disabled={!preview || uploading || !extraValid} style={{ flex: 1, padding: 12, background: '#057a55', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
             {uploading ? 'מעלה...' : 'אשר ושייך'}
           </button>
           <button onClick={onClose} style={{ padding: '12px 16px', background: '#e5e7eb', border: 'none', borderRadius: 6, cursor: 'pointer' }}>

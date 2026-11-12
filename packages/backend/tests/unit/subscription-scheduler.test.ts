@@ -106,9 +106,10 @@ describe('processSubscriptionsForGame', () => {
       expect(mockCreateOrder).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-1',
-          gameType: 'lotto',
-          numbers: [1, 2, 3, 4, 5, 6],
-          strongNumber: 3,
+          ticket: expect.objectContaining({
+            type: 'regular',
+            tables: [{ numbers: [1, 2, 3, 4, 5, 6], strongNumbers: [3] }],
+          }),
           type: 'subscription',
           subscriptionId: 'sub-1',
         }),

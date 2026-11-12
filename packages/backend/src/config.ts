@@ -37,6 +37,16 @@ const envSchema = z.object({
   PAIS_BASE_URL: z.string().url().default('https://www.pais.co.il'),
   // Maximum wallet balance (ILS). A deposit that would exceed it is rejected.
   WALLET_BALANCE_CAP: z.coerce.number().positive().default(2600),
+  // Games that accept new orders (comma-separated). Other games keep their code but return 403 GAME_NOT_AVAILABLE.
+  ENABLED_GAMES: z
+    .string()
+    .default('lotto')
+    .transform((v) => v.split(',').map((g) => g.trim()).filter(Boolean)),
+  // A win whose total for one order is at or below this is credited to the wallet;
+  // above it the user collects it with the original ticket and ID.
+  SMALL_PRIZE_LIMIT: z.coerce.number().positive().default(2600),
+  // Orders stop this long before Draw.salesCloseAt, so an operator still has time to key the form.
+  ORDER_CLOSE_BUFFER_MINUTES: z.coerce.number().int().min(0).default(30),
   // An in-progress slot claimed by one operator can be taken over by another
   // only after it has sat untouched this long.
   SLOT_CLAIM_TIMEOUT_MINUTES: z.coerce.number().positive().default(10),
