@@ -52,23 +52,49 @@ export class TwilioSmsChannel implements NotificationChannel {
   }
 }
 
-/** Push through the existing FCM service (which logs to the console when Firebase is not configured). */
+/** Thrown by a channel that has nobody to deliver to (e.g. no registered device): logged as `skipped`. */
+export class NoRecipientError extends Error {
+  constructor(detail = 'NO_RECIPIENT') {
+    super(detail);
+    this.name = 'NoRecipientError';
+  }
+}
+
+/**
+ * Push through the FCM service. Resolves only when at least one device accepted the message:
+ * no device -> NoRecipientError (skipped); every device failed -> throws (failed). Without
+ * Firebase, production throws and dev prints to the console.
+ */
 export class FcmPushChannel implements NotificationChannel {
   readonly channel = 'push' as const;
   async send(m: OutboundMessage): Promise<void> {
-    if (!m.userId) throw new Error('NO_RECIPIENT');
-    await notificationService.sendToUser(m.userId, {
+    if (!m.userId) throw new NoRecipientError();
+    const result = await notificationService.deliverToUser(m.userId, {
       title: m.title,
       body: m.body,
       data: { type: m.template.toUpperCase(), ...(m.data ?? {}) },
     });
+    if (result.devices === 0) throw new NoRecipientError('NO_DEVICE_TOKENS');
+    if (!result.configured) {
+      if (config.NODE_ENV === 'production') {
+        throw new AppError(503, 'PUSH_NOT_CONFIGURED', 'Push provider is not configured');
+      }
+      return; // dev: printed to the console
+    }
+    if (result.delivered === 0) {
+      throw new Error(`PUSH_FAILED: 0 of ${result.devices} device(s) accepted the message`);
+    }
   }
 }
 
-/** No email provider exists yet: fails in production so the attempt shows up as `failed` in the log. */
+/**
+ * No email provider exists yet. Every send throws, so the attempt is logged as `failed` (never
+ * as sent), and it is reported on the server log as well.
+ */
 export class UnconfiguredEmailChannel implements NotificationChannel {
   readonly channel = 'email' as const;
-  async send(): Promise<void> {
+  async send(m: OutboundMessage): Promise<void> {
+    console.error(`[notify] email not sent (${m.template}): no email provider is configured`);
     throw new AppError(503, 'EMAIL_NOT_CONFIGURED', 'Email provider is not configured');
   }
 }

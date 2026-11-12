@@ -6,8 +6,11 @@ export type NotificationChannelName = (typeof NOTIFICATION_CHANNELS)[number];
 export interface NotificationTemplateParams {
   otp: { code: string };
   order_scanned: { drawNumber?: string };
-  /** A small prize, credited to the wallet. */
-  order_won: { amount: string };
+  /**
+   * A small prize. `amount` is the whole win. When the wallet cap kept part of it out of the
+   * wallet, `walletAmount` is what was credited and `cardAmount` what goes to the saved card.
+   */
+  order_won: { amount: string; walletAmount?: string; cardAmount?: string };
   /** A prize above the wallet limit: collected with the original ticket and ID. */
   big_prize_claim_created: { amount: string };
   claim_reminder: { amount: string; expiresOn: string };
@@ -53,7 +56,13 @@ export const NOTIFICATION_TEMPLATES: Templates = {
     mandatory: false,
     defaultChannels: ['push'],
     title: () => 'כרטיסך ניצח! 🎉',
-    body: (p) => `זכית ב-₪${p.amount}! הכסף הופקד בארנק שלך.`,
+    body: (p) => {
+      if (!p.cardAmount || Number(p.cardAmount) <= 0) return `זכית ב-₪${p.amount}! הכסף הופקד בארנק שלך.`;
+      if (!p.walletAmount || Number(p.walletAmount) <= 0) {
+        return `זכית ב-₪${p.amount}! הסכום יועבר לכרטיס האשראי השמור שלך.`;
+      }
+      return `זכית ב-₪${p.amount}! ₪${p.walletAmount} הופקדו בארנק שלך, ו-₪${p.cardAmount} יועברו לכרטיס האשראי השמור.`;
+    },
   },
   big_prize_claim_created: {
     // The claim has a deadline, so this counts as a legal notice

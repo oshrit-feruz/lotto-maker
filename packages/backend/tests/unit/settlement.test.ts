@@ -232,6 +232,26 @@ describe('settlement notifications', () => {
     expect(h.state.notifications.every((n: any) => n.status === 'sent')).toBe(true);
   });
 
+  it('a winner capped by the wallet limit is told what went to the wallet and what goes to the card', async () => {
+    h.state.draw = makeDraw('results_confirmed');
+    await settleDraw('draw1');
+    await vi.waitFor(() => expect(channels.push.sent.filter((m) => m.template === 'order_won')).toHaveLength(2));
+    const won = (userId: string) => channels.push.sent.find((m) => m.template === 'order_won' && m.userId === userId)!;
+
+    // u4 won 15: 2 fit in the wallet (balance 2598, cap 2600), 13 wait for the card payout
+    const capped = won('u4');
+    expect(capped.body).toBe('זכית ב-₪15.00! ₪2.00 הופקדו בארנק שלך, ו-₪13.00 יועברו לכרטיס האשראי השמור.');
+    expect(capped.body).not.toContain('הכסף הופקד בארנק שלך');
+    expect(h.state.notifications.find((n: any) => n.userId === 'u4' && n.template === 'order_won').payload).toEqual({
+      amount: '15.00',
+      walletAmount: '2.00',
+      cardAmount: '13.00',
+    });
+
+    // u1 was not capped: the plain message
+    expect(won('u1').body).toBe('זכית ב-₪6.00! הכסף הופקד בארנק שלך.');
+  });
+
   it('a channel failure does not fail settlement; it is logged as failed', async () => {
     channels.push.failWith = new Error('FCM down');
     channels.sms.failWith = new Error('Twilio down');

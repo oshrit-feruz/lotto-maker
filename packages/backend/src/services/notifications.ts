@@ -10,6 +10,15 @@ export interface NotificationPayload {
   data?: Record<string, string>;
 }
 
+export interface PushDelivery {
+  /** Registered device tokens of the user. */
+  devices: number;
+  /** Tokens FCM accepted. */
+  delivered: number;
+  /** False when Firebase is not configured, so nothing was sent. */
+  configured: boolean;
+}
+
 // ─── Payload constants / factories ───────────────────────────────────────────
 
 export const PAYLOADS = {
@@ -82,17 +91,35 @@ class NotificationService {
     return admin;
   }
 
+  /** Fire and forget: never throws (used by the subscription scheduler). */
   async sendToUser(userId: string, payload: NotificationPayload): Promise<void> {
     try {
-      const rows = await prisma.deviceToken.findMany({
-        where: { userId },
-        select: { token: true },
-      });
-      if (rows.length === 0) return;
-      await this.sendBatch(rows.map((r) => r.token), payload);
+      await this.deliverToUser(userId, payload);
     } catch (err) {
       console.error('[notifications] sendToUser failed:', err);
     }
+  }
+
+  /**
+   * Sends to every device of the user and reports what happened, so a caller that logs
+   * deliveries can tell sent from not sent. Throws if FCM throws.
+   * `configured: false`: Firebase is not set up and nothing went out (dev prints to the console).
+   */
+  async deliverToUser(userId: string, payload: NotificationPayload): Promise<PushDelivery> {
+    const rows = await prisma.deviceToken.findMany({
+      where: { userId },
+      select: { token: true },
+    });
+    if (rows.length === 0) return { devices: 0, delivered: 0, configured: this.getAdmin() !== null };
+    const tokens = rows.map((r) => r.token);
+    let delivered = 0;
+    let configured = true;
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const ok = await this.sendChunk(tokens.slice(i, i + BATCH_SIZE), payload);
+      if (ok === null) configured = false;
+      else delivered += ok;
+    }
+    return { devices: tokens.length, delivered, configured };
   }
 
   async sendToMany(userIds: string[], payload: NotificationPayload): Promise<void> {
@@ -115,12 +142,13 @@ class NotificationService {
     }
   }
 
-  private async sendChunk(tokens: string[], payload: NotificationPayload): Promise<void> {
+  /** Number of tokens FCM accepted, or null when Firebase is not configured (nothing sent). */
+  private async sendChunk(tokens: string[], payload: NotificationPayload): Promise<number | null> {
     const a = this.getAdmin();
 
     if (!a) {
       console.log(`[DEV] FCM → ${tokens.length} token(s): ${payload.title}`);
-      return;
+      return null;
     }
 
     const result = await a.messaging().sendEachForMulticast({
@@ -140,6 +168,7 @@ class NotificationService {
           console.error('[notifications] Failed to delete stale tokens:', err),
         );
     }
+    return result.successCount;
   }
 }
 

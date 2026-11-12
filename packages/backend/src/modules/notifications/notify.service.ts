@@ -10,7 +10,8 @@ import type {
   NotificationTemplateParams,
 } from '@lotto-maker/shared';
 import { prisma } from '../../prisma.js';
-import { getChannels } from './channels.js';
+import { AppError } from '../../plugins/error-handler.js';
+import { getChannels, NoRecipientError } from './channels.js';
 
 export interface NotifyOptions {
   /** Override the template's default channels. */
@@ -44,24 +45,30 @@ async function record(
   }
 }
 
+type SendOutcome =
+  | { status: 'sent' }
+  | { status: 'skipped'; reason: string }
+  | { status: 'failed'; error: unknown };
+
 async function sendOne(
   userId: string | null,
   channelName: NotificationChannelName,
   template: NotificationTemplateName,
   params: object,
   opts: NotifyOptions,
-): Promise<void> {
+): Promise<SendOutcome> {
   // An OTP code must never be written to the log table
   const payload = template === 'otp' ? {} : params;
+  const skip = async (reason: string): Promise<SendOutcome> => {
+    await record(userId, channelName, template, payload, 'skipped', reason);
+    return { status: 'skipped', reason };
+  };
 
   if (!isMandatoryTemplate(template) && userId) {
     const pref = await prisma.notificationPreference.findUnique({
       where: { userId_channel: { userId, channel: channelName } },
     });
-    if (pref && !pref.enabled) {
-      await record(userId, channelName, template, payload, 'skipped', 'OPTED_OUT');
-      return;
-    }
+    if (pref && !pref.enabled) return skip('OPTED_OUT');
   }
 
   let to = opts.to;
@@ -70,19 +77,40 @@ async function sendOne(
   }
   const noRecipient =
     (channelName === 'push' && !userId) || (channelName === 'sms' && !to) || (channelName === 'email' && !to);
-  if (noRecipient) {
-    await record(userId, channelName, template, payload, 'skipped', 'NO_RECIPIENT');
-    return;
-  }
+  if (noRecipient) return skip('NO_RECIPIENT');
 
   const { title, body } = renderNotification(template, params as never);
   try {
     await getChannels()[channelName].send({ userId, to, template, title, body });
   } catch (err) {
+    // e.g. a push to a user with no registered device
+    if (err instanceof NoRecipientError) return skip(err.message);
     await record(userId, channelName, template, payload, 'failed', err instanceof Error ? err.message : String(err));
-    return;
+    return { status: 'failed', error: err };
   }
   await record(userId, channelName, template, payload, 'sent');
+  return { status: 'sent' };
+}
+
+/**
+ * Sends one templated message on one channel through the same logged path as `notify`, but
+ * reports the failure to the caller: for messages the caller cannot go on without (the
+ * sign-in OTP). Throws the channel's AppError as it is (e.g. 503 SMS_NOT_CONFIGURED), any other
+ * failure as 502 NOTIFICATION_NOT_SENT.
+ */
+export async function sendRequired<T extends NotificationTemplateName>(
+  userId: string | null,
+  channel: NotificationChannelName,
+  template: T,
+  params: NotificationTemplateParams[T],
+  opts: NotifyOptions = {},
+): Promise<void> {
+  const outcome = await sendOne(userId, channel, template, params, opts);
+  if (outcome.status === 'sent') return;
+  if (outcome.status === 'failed' && outcome.error instanceof AppError) throw outcome.error;
+  throw new AppError(502, 'NOTIFICATION_NOT_SENT', 'The message could not be sent', {
+    reason: outcome.status === 'skipped' ? outcome.reason : undefined,
+  });
 }
 
 /**
