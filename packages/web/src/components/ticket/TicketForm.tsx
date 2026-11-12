@@ -40,6 +40,8 @@ export function TicketForm() {
   const [calc, setCalc] = useState<CalculateResponse | null>(null);
   const [dup, setDup] = useState<DuplicateResponse | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
+  // Mobile only: the price breakdown is collapsed so the sticky bar stays one line high.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [loadingPrice, setLoadingPrice] = useState(false);
   const seq = useRef(0);
   // Visual only: which table(s) the Lottomat just filled, so the balls drop in.
@@ -300,30 +302,42 @@ export function TicketForm() {
         </div>
       ) : null}
 
-      <div className="price-bar" aria-live="polite">
+      <div className={`price-bar${detailsOpen ? ' details-open' : ''}`} aria-live="polite">
         {!complete ? (
-          <p className="muted small" style={{ margin: '0 0 8px' }}>
-            מלאו את כל הטבלאות כדי לראות מחיר.
-          </p>
+          <p className="muted small price-bar-note">מלאו את כל הטבלאות כדי לראות מחיר.</p>
         ) : loadingPrice ? (
-          <p className="muted small loading" style={{ margin: '0 0 8px' }}>
-            מחשב מחיר…
-          </p>
+          <p className="muted small loading price-bar-note">מחשב מחיר…</p>
         ) : priceError ? (
           <div className="alert alert-error small">{priceError}</div>
         ) : price ? (
           <>
-            <PriceSummary price={price} />
-            {calc && calc.draws[0] ? (
-              <p className="small muted" style={{ margin: '0 0 8px' }}>
-                הגרלה {calc.draws[0].drawNumber}, {formatDateTime(calc.draws[0].drawAt)}. ההזמנה נסגרת{' '}
-                {formatDateTime(calc.draws[0].orderCutoff)}.
-              </p>
-            ) : null}
+            <div className="price-bar-details" id="price-bar-details">
+              <PriceSummary price={price} hideWarning />
+              {calc && calc.draws[0] ? (
+                <p className="small muted" style={{ margin: '0 0 8px' }}>
+                  הגרלה {calc.draws[0].drawNumber}, {formatDateTime(calc.draws[0].drawAt)}. ההזמנה נסגרת{' '}
+                  {formatDateTime(calc.draws[0].orderCutoff)}.
+                </p>
+              ) : null}
+            </div>
+            {price.warning ? <div className="alert alert-warn small">{price.warning}</div> : null}
           </>
         ) : null}
-        <div className="spread">
-          <div className="price-total">{price ? <span dir="ltr">{price.total}</span> : null}</div>
+        <div className="price-bar-main">
+          <div className="price-bar-sum">
+            <div className="price-total">{price ? <span dir="ltr">{price.total}</span> : null}</div>
+            {price && !priceError && !loadingPrice ? (
+              <button
+                type="button"
+                className="price-bar-toggle"
+                aria-expanded={detailsOpen}
+                aria-controls="price-bar-details"
+                onClick={() => setDetailsOpen((o) => !o)}
+              >
+                {detailsOpen ? 'הסתרת פירוט' : 'פירוט המחיר'}
+              </button>
+            ) : null}
+          </div>
           <button type="button" className="btn" disabled={!canContinue} onClick={goToCheckout}>
             המשך לתשלום
           </button>

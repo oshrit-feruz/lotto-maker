@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Balls } from '@/components/Balls';
-import { formatDate, formatShekel } from '@/lib/format';
+import { formatCount, formatDate, formatShekel } from '@/lib/format';
 import { prizeTables, type PrizeTable as PrizeTableData } from '@/lib/results';
 import { publicFetch } from '@/lib/server-api';
 import type { LottoResult } from '@/lib/types';
@@ -28,7 +28,7 @@ function PrizeTable({ table }: { table: PrizeTableData }) {
               <td dir={t.ltr ? 'ltr' : undefined} style={t.ltr ? { textAlign: 'end' } : undefined}>
                 {t.label}
               </td>
-              <td>{t.winnersCount}</td>
+              <td>{formatCount(t.winnersCount)}</td>
               <td dir="ltr" style={{ textAlign: 'end' }}>
                 {formatShekel(t.prizeAmount)}
               </td>
