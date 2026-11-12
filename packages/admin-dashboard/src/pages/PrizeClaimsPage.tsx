@@ -6,7 +6,7 @@ import { errorText } from '../api/errors';
 import type { ClaimStatus, PrizeClaim } from '../api/types';
 import CollectClaimDialog from '../components/CollectClaimDialog';
 import { ConfirmDialog } from '../components/Dialog';
-import { Badge, Empty, QueryState } from '../components/ui';
+import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate, formatNis, jerusalemLocalToIso, toJerusalemLocalInput } from '../lib/format';
 
 export const CLAIM_STATUS_LABEL: Record<ClaimStatus, string> = {
@@ -32,10 +32,14 @@ export function slotError(local: string, expiresAt: string, now = new Date()): s
 export default function PrizeClaimsPage() {
   const qc = useQueryClient();
   const [status, setStatus] = useState<ClaimStatus>('awaiting_pickup');
+  const [page, setPage] = useState(1);
   const [collecting, setCollecting] = useState<PrizeClaim | null>(null);
   const [scheduling, setScheduling] = useState<PrizeClaim | null>(null);
   const [slot, setSlot] = useState('');
-  const q = useQuery({ queryKey: ['claims', status], queryFn: () => listClaims(status) });
+  const q = useQuery({
+    queryKey: ['claims', status, page],
+    queryFn: () => listClaims(status, page),
+  });
 
   const reload = () => void qc.invalidateQueries({ queryKey: ['claims'] });
   const onStaleError = (err: unknown) => {
@@ -67,7 +71,13 @@ export default function PrizeClaimsPage() {
       <div className="row">
         <label>
           סטטוס
-          <select value={status} onChange={(e) => setStatus(e.target.value as ClaimStatus)}>
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value as ClaimStatus);
+              setPage(1);
+            }}
+          >
             {Object.entries(CLAIM_STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
@@ -77,61 +87,64 @@ export default function PrizeClaimsPage() {
         </label>
       </div>
       <QueryState q={q}>
-        {(claims) =>
-          claims.length === 0 ? (
-            <Empty />
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>זוכה</th>
-                  <th>טלפון</th>
-                  <th>הגרלה</th>
-                  <th>סכום</th>
-                  <th>נוצר</th>
-                  <th>מועד איסוף</th>
-                  <th>בתוקף עד</th>
-                  <th>סטטוס</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {claims.map((c) => (
-                  <tr key={c.id}>
-                    <td>{c.claimantName ?? '—'}</td>
-                    <td className="ltr">{c.claimantPhone}</td>
-                    <td>{c.drawNumber ?? '—'}</td>
-                    <td>{formatNis(c.amount)}</td>
-                    <td>{formatDate(c.createdAt)}</td>
-                    <td>{formatDate(c.scheduledFor)}</td>
-                    <td>{formatDate(c.expiresAt)}</td>
-                    <td>
-                      <Badge tone={c.status === 'collected' ? 'green' : c.status === 'expired' ? 'red' : 'amber'}>
-                        {CLAIM_STATUS_LABEL[c.status]}
-                      </Badge>
-                    </td>
-                    <td>
-                      {(c.status === 'awaiting_pickup' || c.status === 'scheduled') && (
-                        <div className="row">
-                          <button
-                            className="secondary"
-                            onClick={() => {
-                              setSlot(c.scheduledFor ? toJerusalemLocalInput(c.scheduledFor) : '');
-                              setScheduling(c);
-                            }}
-                          >
-                            קבע מועד
-                          </button>
-                          <button onClick={() => setCollecting(c)}>מסור</button>
-                        </div>
-                      )}
-                    </td>
+        {({ items: claims, total, pageSize }) => (
+          <>
+            {claims.length === 0 ? (
+              <Empty />
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>זוכה</th>
+                    <th>טלפון</th>
+                    <th>הגרלה</th>
+                    <th>סכום</th>
+                    <th>נוצר</th>
+                    <th>מועד איסוף</th>
+                    <th>בתוקף עד</th>
+                    <th>סטטוס</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        }
+                </thead>
+                <tbody>
+                  {claims.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.claimantName ?? '—'}</td>
+                      <td className="ltr">{c.claimantPhone}</td>
+                      <td>{c.drawNumber ?? '—'}</td>
+                      <td>{formatNis(c.amount)}</td>
+                      <td>{formatDate(c.createdAt)}</td>
+                      <td>{formatDate(c.scheduledFor)}</td>
+                      <td>{formatDate(c.expiresAt)}</td>
+                      <td>
+                        <Badge tone={c.status === 'collected' ? 'green' : c.status === 'expired' ? 'red' : 'amber'}>
+                          {CLAIM_STATUS_LABEL[c.status]}
+                        </Badge>
+                      </td>
+                      <td>
+                        {(c.status === 'awaiting_pickup' || c.status === 'scheduled') && (
+                          <div className="row">
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                setSlot(c.scheduledFor ? toJerusalemLocalInput(c.scheduledFor) : '');
+                                setScheduling(c);
+                              }}
+                            >
+                              קבע מועד
+                            </button>
+                            <button onClick={() => setCollecting(c)}>מסור</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {(total > pageSize || page > 1) && <Pager page={page} pageSize={pageSize} total={total} onPage={setPage} />}
+          </>
+        )}
       </QueryState>
 
       {collecting && (

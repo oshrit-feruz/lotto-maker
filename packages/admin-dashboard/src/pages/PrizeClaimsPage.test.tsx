@@ -3,12 +3,16 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { toError } from '../api/client';
-import type { PrizeClaim } from '../api/types';
+import type { Page, PrizeClaim } from '../api/types';
 import { jerusalemLocalToIso, toJerusalemLocalInput } from '../lib/format';
 import PrizeClaimsPage, { slotError } from './PrizeClaimsPage';
 import * as claims from '../api/claims';
 
-vi.mock('../api/claims', () => ({ listClaims: vi.fn(), collectClaim: vi.fn(), scheduleClaim: vi.fn() }));
+vi.mock('../api/claims', () => ({
+  listClaims: vi.fn(),
+  collectClaim: vi.fn(),
+  scheduleClaim: vi.fn(),
+}));
 
 const claim: PrizeClaim = {
   id: 'c1',
@@ -21,10 +25,17 @@ const claim: PrizeClaim = {
   createdAt: '2026-11-01T10:00:00.000Z',
   claimantName: 'ישראל ישראלי',
   claimantPhone: '+972501234567',
-  claimantIdLast4: '4321',
   scheduledFor: null,
   drawNumber: 3901,
 };
+
+const pageOf = <T,>(items: T[], over: Partial<Page<T>> = {}): Page<T> => ({
+  items,
+  total: items.length,
+  page: 1,
+  pageSize: 50,
+  ...over,
+});
 
 const apiError = (status: number, code: string) => toError({ status }, { error: code, message: `english ${code}` });
 
@@ -45,20 +56,30 @@ async function openCollect() {
 
 describe('prize claim collect flow', () => {
   beforeEach(() => {
-    vi.mocked(claims.listClaims).mockReset().mockResolvedValue([claim]);
+    vi.mocked(claims.listClaims)
+      .mockReset()
+      .mockResolvedValue(pageOf([claim]));
     vi.mocked(claims.collectClaim).mockReset();
   });
 
-  it('never shows or prefills the claimant’s ID last 4', async () => {
+  it('starts with an empty ID input and Collect disabled; it is enabled by any 4 digits', async () => {
     const dialog = await openCollect();
-    expect(screen.queryByText(/4321/)).toBeNull();
-    expect(document.body.innerHTML).not.toContain('4321');
-    expect(within(dialog).getByLabelText('4 ספרות אחרונות של תעודת הזהות')).toHaveValue('');
-    expect(within(dialog).getByRole('button', { name: 'סמן כנאסף' })).toBeDisabled();
+    const input = within(dialog).getByLabelText('4 ספרות אחרונות של תעודת הזהות');
+    expect(input).toHaveValue('');
+    const button = within(dialog).getByRole('button', { name: 'סמן כנאסף' });
+    expect(button).toBeDisabled();
+    await userEvent.type(input, '987');
+    expect(button).toBeDisabled();
+    await userEvent.type(input, '6');
+    expect(button).toBeEnabled();
   });
 
   it('sends the typed digits, closes and reloads the list on success', async () => {
-    vi.mocked(claims.collectClaim).mockResolvedValueOnce({ ...claim, status: 'collected', collectedAt: '2026-11-12T10:00:00Z' });
+    vi.mocked(claims.collectClaim).mockResolvedValueOnce({
+      ...claim,
+      status: 'collected',
+      collectedAt: '2026-11-12T10:00:00Z',
+    });
     const dialog = await openCollect();
     await userEvent.type(within(dialog).getByLabelText('4 ספרות אחרונות של תעודת הזהות'), '4321');
     await userEvent.click(within(dialog).getByRole('button', { name: 'סמן כנאסף' }));
@@ -76,6 +97,14 @@ describe('prize claim collect flow', () => {
     expect(screen.queryByText(/english/)).toBeNull();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(claims.listClaims).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the Hebrew message when the claimant has no verified ID on file', async () => {
+    vi.mocked(claims.collectClaim).mockRejectedValueOnce(apiError(422, 'ID_NOT_ON_FILE'));
+    const dialog = await openCollect();
+    await userEvent.type(within(dialog).getByLabelText('4 ספרות אחרונות של תעודת הזהות'), '1111');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'סמן כנאסף' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('אין לזוכה תעודת זהות מאומתת');
   });
 
   it('reloads the list when the claim was already collected', async () => {
@@ -126,16 +155,64 @@ describe('scheduling', () => {
 
   it('sends scheduledFor as an ISO instant', async () => {
     const day = 24 * 60 * 60 * 1000;
-    const open = { ...claim, expiresAt: new Date(Date.now() + 90 * day).toISOString() };
-    vi.mocked(claims.listClaims).mockReset().mockResolvedValue([open]);
-    vi.mocked(claims.scheduleClaim).mockReset().mockResolvedValueOnce({ ...open, status: 'scheduled' });
+    const open = {
+      ...claim,
+      expiresAt: new Date(Date.now() + 90 * day).toISOString(),
+    };
+    vi.mocked(claims.listClaims)
+      .mockReset()
+      .mockResolvedValue(pageOf([open]));
+    vi.mocked(claims.scheduleClaim)
+      .mockReset()
+      .mockResolvedValueOnce({ ...open, status: 'scheduled' });
     renderPage();
     await screen.findByText('ישראל ישראלי');
     await userEvent.click(screen.getByRole('button', { name: 'קבע מועד' }));
     const dialog = screen.getByRole('dialog');
     const slot = toJerusalemLocalInput(new Date(Date.now() + 30 * day));
-    fireEvent.change(within(dialog).getByLabelText('תאריך ושעה (שעון ישראל)'), { target: { value: slot } });
+    fireEvent.change(within(dialog).getByLabelText('תאריך ושעה (שעון ישראל)'), {
+      target: { value: slot },
+    });
     await userEvent.click(within(dialog).getByRole('button', { name: 'קבע' }));
     expect(claims.scheduleClaim).toHaveBeenCalledWith('c1', jerusalemLocalToIso(slot));
+  });
+});
+
+describe('paging', () => {
+  it('asks for page 1, moves next and previous, and starts over when the status changes', async () => {
+    vi.mocked(claims.listClaims)
+      .mockReset()
+      .mockImplementation(async (_status, page = 1) =>
+        pageOf([{ ...claim, id: `c${page}`, claimantName: `זוכה ${page}` }], {
+          total: 120,
+          page,
+        }),
+      );
+    renderPage();
+    await screen.findByText('זוכה 1');
+    expect(claims.listClaims).toHaveBeenLastCalledWith('awaiting_pickup', 1);
+    expect(screen.getByText('עמוד 1 מתוך 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'הקודם' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'הבא' }));
+    await screen.findByText('זוכה 2');
+    expect(claims.listClaims).toHaveBeenLastCalledWith('awaiting_pickup', 2);
+    await userEvent.click(screen.getByRole('button', { name: 'הבא' }));
+    await screen.findByText('זוכה 3');
+    expect(screen.getByRole('button', { name: 'הבא' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'הקודם' }));
+    await screen.findByText('זוכה 2');
+
+    await userEvent.selectOptions(screen.getByLabelText('סטטוס'), 'collected');
+    await waitFor(() => expect(claims.listClaims).toHaveBeenLastCalledWith('collected', 1));
+  });
+
+  it('hides the pager when everything fits on one page', async () => {
+    vi.mocked(claims.listClaims)
+      .mockReset()
+      .mockResolvedValue(pageOf([claim]));
+    renderPage();
+    await screen.findByText('ישראל ישראלי');
+    expect(screen.queryByRole('button', { name: 'הבא' })).toBeNull();
   });
 });
