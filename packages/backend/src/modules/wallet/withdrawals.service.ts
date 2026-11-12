@@ -63,7 +63,7 @@ export function namesMatch(a: string, b: string): boolean {
       .toLowerCase()
       .split(/[^\p{L}\p{N}]+/u)
       .filter(Boolean)
-      .sort()
+      .sort((x, y) => x.localeCompare(y))
       .join(' ');
   const left = words(a);
   return left.length > 0 && left === words(b);
