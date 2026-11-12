@@ -62,6 +62,25 @@ const envSchema = z.object({
   // Only the mock provider exists so far; it is refused when NODE_ENV=production.
   PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
   PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Origins the hosted checkout may send the user back to (successUrl / cancelUrl), comma-separated,
+  // e.g. "https://lotto.example,http://localhost:5173". Empty: return URLs are refused.
+  CHECKOUT_RETURN_ORIGINS: z
+    .string()
+    .default('')
+    .transform((v, ctx) =>
+      v
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+        .map((o) => {
+          try {
+            return new URL(o).origin;
+          } catch {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: `not an origin: ${o}` });
+            return z.NEVER;
+          }
+        }),
+    ),
   // Public base URL of this API, used to build hosted-checkout links.
   PUBLIC_API_URL: z.string().url().optional(),
   // AES-256-GCM key for ID numbers at rest. Losing it makes stored IDs unreadable.
