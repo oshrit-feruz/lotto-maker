@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { liftPermanentExclusion } from '../limits/limits.service.js';
+import { reviewReasonSchema } from './review-reason.js';
 
-const liftSchema = z.object({ reason: z.string().min(2).max(500) });
+const liftSchema = z.object({ reason: reviewReasonSchema });
 
 export default async function adminLimitsRoutes(app: FastifyInstance) {
   // Only a permanent exclusion older than 6 months; audited with the reason

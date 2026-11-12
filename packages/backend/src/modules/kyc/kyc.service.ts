@@ -1,4 +1,4 @@
-import { isValid, parseISO } from 'date-fns';
+import { differenceInYears, isValid, parseISO } from 'date-fns';
 import { prisma } from '../../prisma.js';
 import { config } from '../../config.js';
 import { AppError } from '../../plugins/error-handler.js';
@@ -72,7 +72,22 @@ export async function submitKyc(
   if (!isValid(dob) || dob > new Date()) {
     throw new AppError(400, 'INVALID_DATE_OF_BIRTH', 'Date of birth is not valid');
   }
+  // Before the provider call: a minor is never sent to the provider, so no `verified` verdict
+  // and no `manual_review` check (which an admin could approve) can exist for one.
+  const age = differenceInYears(new Date(), dob);
+  if (age < 18) {
+    await writeAuditLog({
+      entityType: 'user',
+      entityId: userId,
+      action: 'kyc_rejected:underage',
+      actorId: userId,
+      actorType: 'user',
+      metadata: { age },
+    });
+    throw new AppError(403, 'AGE_VERIFICATION_FAILED', 'Must be 18 or older to use this service');
+  }
 
+  // A fast answer; the partial unique index KycCheck_one_pending_per_user is what makes it atomic
   const pending = await prisma.kycCheck.findFirst({
     where: { userId, status: 'manual_review' },
     select: { id: true },
@@ -130,16 +145,27 @@ export async function submitKyc(
     return { verifiedAdult: true, status: 'verified' };
   }
 
-  await prisma.kycCheck.create({ data: checkData });
-  // Nothing identifying goes into the audit log: no ID number, not even the last 4.
-  await writeAuditLog({
-    entityType: 'user',
-    entityId: userId,
-    action: `kyc_${result.status}`,
-    actorId: userId,
-    actorType: 'user',
-    metadata: { reference: result.reference, provider: kycProvider.name, reason: result.reason },
-  });
+  try {
+    // The check and its audit entry commit together
+    await prisma.$transaction(async (tx: AnyTx) => {
+      await tx.kycCheck.create({ data: checkData });
+      // Nothing identifying goes into the audit log: no ID number, not even the last 4.
+      await writeAuditLogTx(tx, {
+        entityType: 'user',
+        entityId: userId,
+        action: `kyc_${result.status}`,
+        actorId: userId,
+        actorType: 'user',
+        metadata: { reference: result.reference, provider: kycProvider.name, reason: result.reason },
+      });
+    });
+  } catch (err) {
+    // A concurrent submission already queued a check: one pending check per user (partial unique index)
+    if (result.status === 'manual_review' && (err as { code?: string }).code === 'P2002') {
+      throw new AppError(409, 'KYC_PENDING', 'Your identity check is waiting for review');
+    }
+    throw err;
+  }
 
   if (result.status === 'rejected') {
     throw new AppError(422, 'KYC_REJECTED', 'Identity verification was rejected', { reason: result.reason });
@@ -164,21 +190,47 @@ const adminSelect = {
   createdAt: true,
 } as const;
 
-export async function listKycChecks(adminId: string, status?: 'verified' | 'rejected' | 'manual_review') {
-  const rows = await prisma.kycCheck.findMany({
-    where: status ? { status } : {},
-    orderBy: { createdAt: 'asc' },
-    select: adminSelect,
-  });
+export const KYC_LIST_DEFAULT_PAGE_SIZE = 50;
+export const KYC_LIST_MAX_PAGE_SIZE = 200;
+
+export async function listKycChecks(
+  adminId: string,
+  params: { status?: 'verified' | 'rejected' | 'manual_review'; page?: number; pageSize?: number } = {},
+) {
+  const { status } = params;
+  const page = Math.max(1, Math.floor(params.page ?? 1));
+  const pageSize = Math.min(
+    KYC_LIST_MAX_PAGE_SIZE,
+    Math.max(1, Math.floor(params.pageSize ?? KYC_LIST_DEFAULT_PAGE_SIZE)),
+  );
+  const where = status ? { status } : {};
+  const [items, total] = await Promise.all([
+    prisma.kycCheck.findMany({
+      where,
+      // Oldest first (the review queue); id breaks ties so pages do not overlap
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: adminSelect,
+    }),
+    prisma.kycCheck.count({ where }),
+  ]);
   await writeAuditLog({
     entityType: 'kyc',
     entityId: 'list',
     action: 'kyc:list',
     actorId: adminId,
     actorType: 'admin',
-    metadata: { status: status ?? 'all', count: rows.length },
+    metadata: { status: status ?? 'all', page, pageSize, count: items.length },
   });
-  return rows;
+  return { items, total, page, pageSize };
+}
+
+/** A review reason that is blank or whitespace only is refused, not stored. */
+export function requireReason(reason: string): string {
+  const trimmed = reason.trim();
+  if (trimmed.length < 2) throw new AppError(400, 'REASON_REQUIRED', 'A reason is required');
+  return trimmed;
 }
 
 async function loadPending(id: string) {
@@ -214,7 +266,8 @@ export async function approveKyc(id: string, adminId: string) {
   return { id, status: 'verified' as const };
 }
 
-export async function rejectKyc(id: string, adminId: string, reason: string) {
+export async function rejectKyc(id: string, adminId: string, rawReason: string) {
+  const reason = requireReason(rawReason);
   const check = await loadPending(id);
   await prisma.$transaction(async (tx: AnyTx) => {
     const { count } = await tx.kycCheck.updateMany({

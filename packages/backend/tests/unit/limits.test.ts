@@ -4,14 +4,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const h = vi.hoisted(() => {
   const s = {
     limits: null as any,
-    payments: [] as Array<{ amount: number; createdAt: Date; status: string }>,
+    payments: [] as Array<{ id?: string; amount: number; createdAt: Date; status: string }>,
     spend: 0,
     prizes: 0,
     audit: [] as any[],
+    /** Make the next audit write throw (to check that the change rolls back with it). */
+    failAudit: false,
+    /** Ids passed to the User row lock, in order. */
+    locks: [] as string[],
   };
+
+  // A Prisma-style `where` on payments: id { not }, status, createdAt { gte }, OR [...]
+  const matches = (p: any, where: any): boolean =>
+    Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
+      if (k === 'OR') return v.some((w: any) => matches(p, w));
+      if (k === 'userId') return true; // one user in these tests
+      if (v && typeof v === 'object' && !(v instanceof Date)) {
+        if ('not' in v && p[k] === v.not) return false;
+        if ('gte' in v && !(p[k] >= v.gte)) return false;
+        return true;
+      }
+      return p[k] === v;
+    });
+
+  // A tick between reads and writes, so unserialized concurrent calls would interleave
+  const tick = () => new Promise((r) => setTimeout(r, 1));
+  let chain: Promise<unknown> = Promise.resolve();
+
   const fake: any = {
     userLimits: {
-      findUnique: async () => s.limits,
+      findUnique: async () => {
+        const row = s.limits;
+        await tick();
+        return row;
+      },
       upsert: async ({ create, update }: any) => {
         s.limits = s.limits ? { ...s.limits, ...update } : { ...baseRow(), ...create };
         return s.limits;
@@ -22,13 +48,44 @@ const h = vi.hoisted(() => {
       },
     },
     payment: {
-      findMany: async () => s.payments.map((p) => ({ amount: p.amount, createdAt: p.createdAt })),
-      aggregate: async () => ({ _sum: { amount: s.payments.reduce((a, p) => a + p.amount, 0) } }),
+      findMany: async ({ where }: any) =>
+        s.payments.filter((p) => matches(p, where)).map((p) => ({ amount: p.amount, createdAt: p.createdAt })),
+      aggregate: async ({ where }: any) => ({
+        _sum: { amount: s.payments.filter((p) => matches(p, where)).reduce((a, p) => a + p.amount, 0) },
+      }),
     },
     order: { aggregate: async () => ({ _sum: { totalCharged: s.spend } }) },
     orderWin: { aggregate: async () => ({ _sum: { amount: s.prizes } }) },
     user: { findUnique: async () => ({ status: 'active', walletBalance: 0 }) },
-    auditLog: { create: async ({ data }: any) => void s.audit.push(data) },
+    auditLog: {
+      create: async ({ data }: any) => {
+        if (s.failAudit) {
+          s.failAudit = false;
+          throw new Error('audit write failed');
+        }
+        s.audit.push(data);
+      },
+    },
+    // UPDATE "User" ... (the per-user lock of limits.service)
+    $executeRaw: async (_strings: TemplateStringsArray, userId: string) => {
+      s.locks.push(userId);
+      return 1;
+    },
+    // Like the row lock: transactions run one at a time, and a failure rolls back the store
+    $transaction: (fn: (tx: any) => Promise<unknown>) => {
+      const run = chain.then(async () => {
+        const saved = { limits: s.limits, audit: [...s.audit] };
+        try {
+          return await fn(fake);
+        } catch (err) {
+          s.limits = saved.limits;
+          s.audit = saved.audit;
+          throw err;
+        }
+      });
+      chain = run.catch(() => undefined);
+      return run;
+    },
   };
   function baseRow() {
     return {
@@ -51,6 +108,8 @@ import {
   applyMatured,
   assertCanPlaceOrder,
   assertDepositAllowed,
+  assertDepositAllowedTx,
+  exclusionUntil,
   getActivitySummary,
   getLimits,
   liftPermanentExclusion,
@@ -72,6 +131,8 @@ beforeEach(() => {
   h.s.spend = 0;
   h.s.prizes = 0;
   h.s.audit = [];
+  h.s.failAudit = false;
+  h.s.locks = [];
 });
 
 describe('limit changes: decrease now, increase after the delay', () => {
@@ -107,6 +168,24 @@ describe('limit changes: decrease now, increase after the delay', () => {
     expect(view.depositWeekly).toBe(300);
     expect(view.pending.depositWeekly?.value).toBeNull();
     expect((await getLimits('u1', hoursAfter(DELAY + 1))).depositWeekly).toBeNull();
+  });
+
+  it('concurrent updates to different limits both stick', async () => {
+    await Promise.all([
+      updateLimits('u1', { depositDaily: 100 }, NOW),
+      updateLimits('u1', { depositWeekly: 300 }, NOW),
+    ]);
+    const view = await getLimits('u1', NOW);
+    expect(view.depositDaily).toBe(100);
+    expect(view.depositWeekly).toBe(300);
+    expect(h.s.locks).toEqual(['u1', 'u1']);
+  });
+
+  it('a limit change and its audit entry commit together', async () => {
+    h.s.limits = { ...h.baseRow(), depositDaily: 500 };
+    h.s.failAudit = true;
+    await expect(updateLimits('u1', { depositDaily: 100 }, NOW)).rejects.toThrow('audit write failed');
+    expect(h.s.limits.depositDaily).toBe(500);
   });
 
   it('a decrease cancels a pending increase for that limit', () => {
@@ -168,6 +247,59 @@ describe('deposit limit blocks checkout', () => {
     await expect(assertDepositAllowed('u1', 300, NOW)).rejects.toMatchObject({
       details: { period: 'weekly', remaining: '100.00' },
     });
+  });
+
+  it('a failed payment and a pending one older than the pending window do not count', async () => {
+    h.s.limits = { ...h.baseRow(), depositDaily: 500 };
+    h.s.payments = [
+      { amount: 400, createdAt: hoursAfter(-2), status: 'failed' },
+      // still `pending`, but its checkout is 2 hours old: past the 1-hour window
+      { amount: 400, createdAt: hoursAfter(-2), status: 'pending' },
+      { amount: 400, createdAt: hoursAfter(-3), status: 'refunded' },
+    ];
+    await expect(assertDepositAllowed('u1', 500, NOW)).resolves.toBeUndefined();
+    await expect(assertDepositAllowed('u1', 500.01, NOW)).rejects.toMatchObject({
+      code: 'DEPOSIT_LIMIT',
+      details: { remaining: '500.00' },
+    });
+  });
+
+  it('a pending checkout inside the window still counts', async () => {
+    h.s.limits = { ...h.baseRow(), depositDaily: 500 };
+    h.s.payments = [{ amount: 300, createdAt: new Date(NOW.getTime() - 30 * 60_000), status: 'pending' }];
+    await expect(assertDepositAllowed('u1', 201, NOW)).rejects.toMatchObject({ details: { remaining: '200.00' } });
+  });
+
+  it('at credit time the payment being credited counts once, not twice', async () => {
+    h.s.limits = { ...h.baseRow(), depositDaily: 500 };
+    h.s.payments = [
+      { id: 'pay_this', amount: 300, createdAt: hoursAfter(-0.5), status: 'approved' },
+      { id: 'pay_other', amount: 200, createdAt: hoursAfter(-2), status: 'approved' },
+    ];
+    await expect(assertDepositAllowedTx(h.fake, 'u1', 300, { excludePaymentId: 'pay_this', now: NOW })).resolves.toBeUndefined();
+    h.s.payments[1]!.amount = 201;
+    await expect(assertDepositAllowedTx(h.fake, 'u1', 300, { excludePaymentId: 'pay_this', now: NOW })).rejects.toMatchObject({
+      code: 'DEPOSIT_LIMIT',
+    });
+  });
+
+  it('at credit time another checkout that is still pending does not block a real deposit', async () => {
+    h.s.limits = { ...h.baseRow(), depositDaily: 500 };
+    h.s.payments = [
+      { id: 'pay_this', amount: 300, createdAt: hoursAfter(-0.2), status: 'approved' },
+      { id: 'pay_open', amount: 300, createdAt: hoursAfter(-0.1), status: 'pending' },
+      { id: 'pay_failed', amount: 300, createdAt: hoursAfter(-0.1), status: 'failed' },
+    ];
+    await expect(assertDepositAllowedTx(h.fake, 'u1', 300, { excludePaymentId: 'pay_this', now: NOW })).resolves.toBeUndefined();
+  });
+
+  it('the reality check counts approved deposits only', async () => {
+    h.s.payments = [
+      { amount: 100, createdAt: NOW, status: 'approved' },
+      { amount: 999, createdAt: NOW, status: 'failed' },
+      { amount: 999, createdAt: NOW, status: 'pending' },
+    ];
+    await expect(getActivitySummary('u1', NOW)).resolves.toMatchObject({ deposits: '100.00' });
   });
 
   it('a limit that is still pending does not apply yet', async () => {
@@ -264,6 +396,51 @@ describe('self-exclusion', () => {
       actorType: 'admin',
       metadata: { reason: 'cooling-off complete, user request' },
     });
+  });
+
+  it('6 months is clamped to the last day of the target month', () => {
+    expect(exclusionUntil('6m', new Date('2026-08-31T12:00:00Z'))!.toISOString()).toBe('2027-02-28T12:00:00.000Z');
+    // leap year
+    expect(exclusionUntil('6m', new Date('2027-08-31T09:30:00Z'))!.toISOString()).toBe('2028-02-29T09:30:00.000Z');
+    expect(exclusionUntil('6m', new Date('2026-12-31T00:00:00Z'))!.toISOString()).toBe('2027-06-30T00:00:00.000Z');
+    // a day that exists is kept, across the year end
+    expect(exclusionUntil('6m', new Date('2026-09-15T08:00:00Z'))!.toISOString()).toBe('2027-03-15T08:00:00.000Z');
+  });
+
+  it('concurrent requests cannot shorten an exclusion: the later 24h request sees the 30d one', async () => {
+    const results = await Promise.allSettled([selfExclude('u1', '30d', NOW), selfExclude('u1', '24h', NOW)]);
+    expect(results[0]!.status).toBe('fulfilled');
+    expect(results[1]).toMatchObject({ status: 'rejected', reason: { code: 'SELF_EXCLUSION_CANNOT_SHORTEN' } });
+    expect(h.s.limits.selfExcludedUntil.toISOString()).toBe('2026-12-12T12:00:00.000Z');
+    expect(h.s.locks).toEqual(['u1', 'u1']);
+  });
+
+  it('the exclusion and its audit entry commit together', async () => {
+    h.s.failAudit = true;
+    await expect(selfExclude('u1', '7d', NOW)).rejects.toThrow('audit write failed');
+    expect(h.s.limits).toBeNull();
+  });
+
+  it('the admin lift rolls back if its audit entry cannot be written', async () => {
+    await selfExclude('u1', 'permanent', NOW);
+    h.s.failAudit = true;
+    const sevenMonths = new Date(NOW.getTime() + 213 * 86_400_000);
+    await expect(liftPermanentExclusion('u1', 'admin1', 'user request', sevenMonths)).rejects.toThrow('audit write failed');
+    expect(h.s.limits.selfExcludedPermanent).toBe(true);
+    expect(h.s.audit.some((a) => a.action === 'self_exclusion:lifted')).toBe(false);
+  });
+
+  it('the admin lift needs a real reason, not blanks', async () => {
+    await selfExclude('u1', 'permanent', NOW);
+    const sevenMonths = new Date(NOW.getTime() + 213 * 86_400_000);
+    for (const reason of ['', '   ', ' \n\t ', ' x ']) {
+      await expect(liftPermanentExclusion('u1', 'admin1', reason, sevenMonths)).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'REASON_REQUIRED',
+      });
+    }
+    await liftPermanentExclusion('u1', 'admin1', '  cooling-off done  ', sevenMonths);
+    expect(h.s.audit.at(-1).metadata.reason).toBe('cooling-off done');
   });
 
   it('only a permanent exclusion can be lifted', async () => {

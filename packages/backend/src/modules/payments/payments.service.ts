@@ -8,7 +8,7 @@ import { AppError } from '../../plugins/error-handler.js';
 import { writeAuditLog, writeAuditLogTx } from '../../lib/audit-log.js';
 import { assertWithinBalanceCap, depositTx, reverseDepositTx, type Tx } from '../wallet/wallet.service.js';
 import { saveCardTx } from './cards.service.js';
-import { assertDepositAllowed } from '../limits/limits.service.js';
+import { assertDepositAllowed, assertDepositAllowedTx } from '../limits/limits.service.js';
 import { notifyInBackground } from '../notifications/notify.service.js';
 import type { PaymentProvider } from './payment-provider.js';
 import { MockPaymentProvider } from './mock-payment-provider.js';
@@ -129,7 +129,9 @@ export type WebhookOutcome =
   | 'reversed'
   | 'duplicate'
   | 'ignored'
-  | 'cap_exceeded';
+  | 'cap_exceeded'
+  /** Self-excluded or over a deposit limit when the webhook landed: not credited, refunded. */
+  | 'rg_blocked';
 
 /**
  * Handles a provider webhook. The signature is verified first; the wallet is
@@ -189,6 +191,27 @@ export async function processWebhook(
     });
     if (count === 0) return { ...base, outcome: 'duplicate' as const };
 
+    // Responsible gaming, again at credit time: the user may have self-excluded or lowered a
+    // limit since checkout, and concurrent checkouts may each have fit the same remaining limit.
+    // Under the User row lock that limit changes, orders and other credits also take.
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${payment.userId} FOR UPDATE`;
+    try {
+      await assertDepositAllowedTx(tx, payment.userId, amount, { excludePaymentId: payment.id });
+    } catch (err) {
+      if (!(err instanceof AppError) || (err.code !== 'SELF_EXCLUDED' && err.code !== 'DEPOSIT_LIMIT')) throw err;
+      // Same handling as the wallet cap: credit nothing, mark it failed, refund after the commit
+      await tx.payment.update({ where: { id: payment.id }, data: { status: 'failed' } });
+      await writeAuditLogTx(tx, {
+        entityType: 'payment',
+        entityId: payment.id,
+        action: 'payment:rejected_responsible_gaming',
+        actorId: 'system',
+        actorType: 'system',
+        metadata: { amount: amount.toFixed(2), code: err.code, details: err.details },
+      });
+      return { ...base, outcome: 'rg_blocked' as const, refundAmount: amount.toNumber() };
+    }
+
     try {
       await depositTx(tx, payment.userId, amount.toNumber(), 'הפקדה לארנק', payment.id);
     } catch (err) {
@@ -224,7 +247,7 @@ export async function processWebhook(
     return { ...base, outcome: 'credited' as const };
   });
 
-  if (result.outcome === 'cap_exceeded') {
+  if (result.outcome === 'cap_exceeded' || result.outcome === 'rg_blocked') {
     await refundRejectedPayment(paymentProvider, result.paymentId, event.providerTxId, result.refundAmount);
   }
 

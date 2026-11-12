@@ -9,20 +9,36 @@ const mockCheckFindFirst = vi.hoisted(() => vi.fn());
 const mockCheckFindUnique = vi.hoisted(() => vi.fn());
 const mockCheckFindMany = vi.hoisted(() => vi.fn());
 const mockCheckUpdateMany = vi.hoisted(() => vi.fn());
+const mockCheckCount = vi.hoisted(() => vi.fn());
+/** Which writes ran inside a transaction (and which one: they share an id when committed together). */
+const txLog = vi.hoisted(() => ({ current: 0, next: 0, writes: [] as Array<{ what: string; tx: number }> }));
 
 vi.mock('../../src/prisma.js', () => {
+  const inTx = (what: string, fn: (...a: any[]) => any) => (...args: any[]) => {
+    txLog.writes.push({ what, tx: txLog.current });
+    return fn(...args);
+  };
   const client: Record<string, unknown> = {
     user: { findFirst: mockFindFirst, findMany: mockFindMany, update: mockUpdate },
-    auditLog: { create: mockAuditCreate },
+    auditLog: { create: inTx('audit', (...a) => mockAuditCreate(...a)) },
     kycCheck: {
-      create: mockCheckCreate,
+      create: inTx('check', (...a) => mockCheckCreate(...a)),
       findFirst: mockCheckFindFirst,
       findUnique: mockCheckFindUnique,
       findMany: mockCheckFindMany,
-      updateMany: mockCheckUpdateMany,
+      count: mockCheckCount,
+      updateMany: inTx('check_update', (...a) => mockCheckUpdateMany(...a)),
     },
   };
-  client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(client);
+  client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => {
+    const outer = txLog.current;
+    txLog.current = ++txLog.next;
+    try {
+      return await fn(client);
+    } finally {
+      txLog.current = outer;
+    }
+  };
   return { prisma: client };
 });
 
@@ -47,7 +63,15 @@ beforeEach(() => {
   mockUpdate.mockResolvedValue({ verifiedAdult: true });
   mockCheckCreate.mockResolvedValue({});
   mockCheckUpdateMany.mockResolvedValue({ count: 1 });
+  txLog.writes = [];
 });
+
+/** True when the check write and the audit entry ran in the same (non-zero) transaction. */
+function committedTogether(checkWhat = 'check') {
+  const check = txLog.writes.find((w) => w.what === checkWhat);
+  const audit = txLog.writes.filter((w) => w.what === 'audit').at(-1);
+  return !!check && !!audit && check.tx !== 0 && check.tx === audit.tx;
+}
 
 describe('submitKyc: verified', () => {
   it.each(['123456789', '12345', 'abcdefghi', '1234567890', '000000000'])(
@@ -117,18 +141,37 @@ describe('submitKyc: verified', () => {
   });
 });
 
-describe('submitKyc: rejected', () => {
-  it('returns 422 KYC_REJECTED for a minor, stores the reason and does not verify', async () => {
-    const lastYear = `${new Date().getFullYear() - 1}-01-01`;
-    await expect(submitKyc('u1', { ...VALID, dateOfBirth: lastYear })).rejects.toMatchObject({
-      statusCode: 422,
-      code: 'KYC_REJECTED',
-      details: { reason: 'UNDERAGE' },
-    });
+describe('submitKyc: under 18', () => {
+  const verify = vi.fn(async () => ({ status: 'verified' as const, reference: 'r-minor' }));
+
+  it.each([
+    ['verified', { status: 'verified' as const, reference: 'r1' }],
+    ['manual_review', { status: 'manual_review' as const, reference: 'r2' }],
+  ])('refuses a minor with 403 AGE_VERIFICATION_FAILED before the provider, even one that would say %s', async (_v, verdict) => {
+    verify.mockResolvedValue(verdict as never);
+    setKycProviderForTests({ name: 'lenient', verify });
+    const seventeen = new Date();
+    seventeen.setFullYear(seventeen.getFullYear() - 17);
+    await expect(
+      submitKyc('u1', { ...VALID, dateOfBirth: seventeen.toISOString().slice(0, 10) }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'AGE_VERIFICATION_FAILED' });
+    expect(verify).not.toHaveBeenCalled();
+    expect(mockCheckCreate).not.toHaveBeenCalled(); // no check an admin could approve
     expect(mockUpdate).not.toHaveBeenCalled();
-    expect(mockCheckCreate.mock.calls[0]![0].data).toMatchObject({ status: 'rejected', reason: 'UNDERAGE' });
+    expect(mockAuditCreate.mock.calls[0]![0].data).toMatchObject({ action: 'kyc_rejected:underage', metadata: { age: 17 } });
   });
 
+  it('lets an 18-year-old through to the provider', async () => {
+    const eighteen = new Date();
+    eighteen.setFullYear(eighteen.getFullYear() - 18);
+    eighteen.setDate(eighteen.getDate() - 1);
+    await expect(submitKyc('u1', { ...VALID, dateOfBirth: eighteen.toISOString().slice(0, 10) })).resolves.toMatchObject({
+      status: 'verified',
+    });
+  });
+});
+
+describe('submitKyc: rejected', () => {
   it('returns 422 when the provider rejects', async () => {
     setKycProviderForTests({
       name: 'test',
@@ -141,6 +184,7 @@ describe('submitKyc: rejected', () => {
       reference: 'r1',
       provider: 'test',
     });
+    expect(committedTogether()).toBe(true);
   });
 });
 
@@ -151,6 +195,19 @@ describe('submitKyc: manual review', () => {
     await expect(submitKyc('u1', VALID)).resolves.toEqual({ verifiedAdult: false, status: 'manual_review' });
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockCheckCreate.mock.calls[0]![0].data).toMatchObject({ userId: 'u1', status: 'manual_review' });
+    // The check and its audit entry are one transaction
+    expect(committedTogether()).toBe(true);
+  });
+
+  it('a concurrent second submission hits the one-pending-check index and gets 409 KYC_PENDING', async () => {
+    // Both passed the findFirst guard; the database refuses the second insert
+    mockCheckCreate.mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+    await expect(submitKyc('u1', VALID)).rejects.toMatchObject({ statusCode: 409, code: 'KYC_PENDING' });
+  });
+
+  it('other errors while queueing the check are not turned into KYC_PENDING', async () => {
+    mockCheckCreate.mockRejectedValueOnce(new Error('db down'));
+    await expect(submitKyc('u1', VALID)).rejects.toThrow('db down');
   });
 
   it('admin approval copies the stored identity onto the user, audited', async () => {
@@ -176,6 +233,23 @@ describe('submitKyc: manual review', () => {
     expect(mockCheckUpdateMany.mock.calls[0]![0].data).toMatchObject({ status: 'rejected', reason: 'blurry document' });
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockAuditCreate.mock.calls.at(-1)![0].data.action).toBe('kyc:manual_review->rejected');
+    expect(committedTogether('check_update')).toBe(true);
+  });
+
+  it('approval and its audit entry are one transaction', async () => {
+    mockCheckFindUnique.mockResolvedValue({ id: 'chk1', userId: 'u1', status: 'manual_review', reference: 'r' });
+    await approveKyc('chk1', 'admin1');
+    expect(committedTogether('check_update')).toBe(true);
+  });
+
+  it('a blank or whitespace-only rejection reason is refused, and the trimmed reason is stored', async () => {
+    mockCheckFindUnique.mockResolvedValue({ id: 'chk1', userId: 'u1', status: 'manual_review' });
+    for (const reason of ['', '  ', '\n\t ', ' a ']) {
+      await expect(rejectKyc('chk1', 'admin1', reason)).rejects.toMatchObject({ statusCode: 400, code: 'REASON_REQUIRED' });
+    }
+    expect(mockCheckUpdateMany).not.toHaveBeenCalled();
+    await rejectKyc('chk1', 'admin1', '  blurry document  ');
+    expect(mockCheckUpdateMany.mock.calls[0]![0].data.reason).toBe('blurry document');
   });
 
   it('cannot decide a check twice', async () => {
@@ -188,9 +262,29 @@ describe('submitKyc: manual review', () => {
 
   it('listing the queue is audited', async () => {
     mockCheckFindMany.mockResolvedValue([]);
-    await listKycChecks('admin1', 'manual_review');
+    mockCheckCount.mockResolvedValue(0);
+    await listKycChecks('admin1', { status: 'manual_review' });
     expect(mockCheckFindMany.mock.calls[0]![0].where).toEqual({ status: 'manual_review' });
     expect(mockAuditCreate.mock.calls[0]![0].data.action).toBe('kyc:list');
+  });
+
+  it('the queue is paged: 50 by default, at most 200, with the total', async () => {
+    mockCheckFindMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
+    mockCheckCount.mockResolvedValue(312);
+
+    await expect(listKycChecks('admin1')).resolves.toEqual({
+      items: [{ id: 'a' }, { id: 'b' }],
+      total: 312,
+      page: 1,
+      pageSize: 50,
+    });
+    expect(mockCheckFindMany.mock.calls[0]![0]).toMatchObject({ skip: 0, take: 50 });
+
+    await expect(listKycChecks('admin1', { page: 3, pageSize: 20 })).resolves.toMatchObject({ page: 3, pageSize: 20 });
+    expect(mockCheckFindMany.mock.calls[1]![0]).toMatchObject({ skip: 40, take: 20 });
+
+    await expect(listKycChecks('admin1', { pageSize: 5000 })).resolves.toMatchObject({ pageSize: 200 });
+    expect(mockCheckFindMany.mock.calls[2]![0]).toMatchObject({ take: 200 });
   });
 });
 

@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   salesClosed: false,
   /** Simulates a concurrent request that inserted the same key first. */
   raceOnCreate: null as null | (() => void),
+  calls: [] as string[],
 }));
 
 vi.mock('../../src/prisma.js', () => {
@@ -79,13 +80,23 @@ vi.mock('../../src/prisma.js', () => {
     },
     auditLog: { create: async ({ data }: any) => state.audit.push(data) },
     $executeRaw: async () => 0,
-    $queryRaw: async () => [{ walletBalance: new Decimal(state.balance).toFixed(2) }],
+    $queryRaw: async () => {
+      state.calls.push('user_row_lock');
+      return [{ walletBalance: new Decimal(state.balance).toFixed(2) }];
+    },
   };
   prisma.$transaction = (fn: (tx: any) => Promise<unknown>) => fn(prisma);
   return { prisma };
 });
-// Phase 6 checks run before the order; they have their own tests (limits, receipts).
-vi.mock('../../src/modules/limits/limits.service.js', () => ({ assertCanPlaceOrder: vi.fn(async () => undefined) }));
+// Phase 6 checks run before the order and again inside the charge; they have their own tests (limits, receipts).
+const rg = vi.hoisted(() => ({
+  early: vi.fn(async (..._args: unknown[]) => undefined),
+  inTx: vi.fn(async (..._args: unknown[]) => undefined),
+}));
+vi.mock('../../src/modules/limits/limits.service.js', () => ({
+  assertCanPlaceOrder: rg.early,
+  assertCanPlaceOrderTx: rg.inTx,
+}));
 vi.mock('../../src/modules/receipts/receipts.service.js', () => ({ issueReceiptsInBackground: vi.fn() }));
 vi.mock('../../src/storage/r2.service.js', () => ({ r2Service: {}, DEFAULT_SIGNED_URL_TTL_SECONDS: 60 }));
 
@@ -115,6 +126,11 @@ beforeEach(() => {
   state.seq = 0;
   state.raceOnCreate = null;
   state.salesClosed = false;
+  state.calls = [];
+  rg.early.mockReset().mockResolvedValue(undefined);
+  rg.inTx.mockReset().mockImplementation(async () => {
+    state.calls.push('rg_check_in_tx');
+  });
   const now = Date.now();
   state.draws = [1, 2, 3].map((n) => ({
     id: `draw-${n}`,
@@ -123,6 +139,27 @@ beforeEach(() => {
     salesCloseAt: new Date(now + n * 24 * HOUR - 15 * 60_000),
     status: 'scheduled',
   }));
+});
+
+describe('responsible-gaming check inside the charge', () => {
+  it('runs after the User row lock, with the full amount, before anything is charged', async () => {
+    await createOrder({ userId: 'user-1', ticket: ticket(), type: 'one_time' });
+    expect(state.calls).toEqual(['user_row_lock', 'rg_check_in_tx']);
+    const [, userId, total] = rg.inTx.mock.calls[0]!;
+    expect(userId).toBe('user-1');
+    expect(new Decimal(total as Decimal.Value).toFixed(2)).toBe('22.00');
+  });
+
+  it('a limit or exclusion seen only under the lock refuses the order and charges nothing', async () => {
+    // The early check passed (e.g. before a concurrent order or a new self-exclusion committed)
+    rg.inTx.mockRejectedValueOnce(Object.assign(new Error('loss limit'), { statusCode: 422, code: 'LOSS_LIMIT' }));
+    await expect(createOrder({ userId: 'user-1', ticket: ticket(), type: 'one_time' })).rejects.toMatchObject({
+      code: 'LOSS_LIMIT',
+    });
+    expect(state.balance).toBe(100);
+    expect(state.orders).toHaveLength(0);
+    expect(state.walletTxs).toHaveLength(0);
+  });
 });
 
 describe('createOrder with an Idempotency-Key', () => {

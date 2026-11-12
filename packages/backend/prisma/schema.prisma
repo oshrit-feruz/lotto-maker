@@ -626,6 +626,8 @@ model KycCheck {
 
   @@index([status, createdAt])
   @@index([userId, createdAt])
+  // Also, in SQL only (Prisma cannot express a partial index): KycCheck_one_pending_per_user,
+  // UNIQUE ("userId") WHERE status = 'manual_review'. One check waiting for review per user.
 }
 
 // ─── Phase 6: responsible gaming ─────────────────────────────────────────────
@@ -727,6 +729,11 @@ model Receipt {
   vatRate           Decimal     @db.Decimal(5, 4)
   vatAmount         Decimal     @db.Decimal(10, 2)
   netAmount         Decimal     @db.Decimal(10, 2)
+  // The issuer as it stood when the receipt was issued, so a later config change does not alter
+  // it. Null only on receipts issued before these columns existed.
+  businessName      String?
+  businessId        String?
+  businessAddress   String?
   issuedAt          DateTime    @default(now())
 
   @@unique([year, seq])

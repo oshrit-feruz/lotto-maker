@@ -13,7 +13,21 @@ export function createFakePrisma() {
   const walletTxs: any[] = [];
   const savedCards: any[] = [];
   const auditLogs: any[] = [];
+  /** The UserLimits row of every user (self-exclusion, deposit limits). */
+  const limits = new Map<string, any>();
   let seq = 0;
+
+  // A Prisma-style `where` on payments: id { not }, status, createdAt { gte }, OR [...]
+  const paymentMatches = (p: any, where: any): boolean =>
+    Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
+      if (k === 'OR') return v.some((w: any) => paymentMatches(p, w));
+      if (v && typeof v === 'object' && !(v instanceof Date)) {
+        if ('not' in v && p[k] === v.not) return false;
+        if ('gte' in v && !(p[k] >= v.gte)) return false;
+        return true;
+      }
+      return p[k] === v;
+    });
   const nextId = (prefix: string) => `${prefix}_${++seq}`;
 
   const findPayment = (where: any) =>
@@ -37,11 +51,11 @@ export function createFakePrisma() {
         return user;
       },
     },
-    // Responsible-gaming checks in createCheckout: no limits, no self-exclusion
-    userLimits: { findUnique: async () => null },
+    // Responsible-gaming checks (checkout and webhook): none unless a test sets a row
+    userLimits: { findUnique: async ({ where }: any) => limits.get(where.userId) ?? null },
     payment: {
       findUnique: async ({ where }: any) => findPayment(where),
-      findMany: async () => [],
+      findMany: async ({ where }: any) => [...payments.values()].filter((p) => paymentMatches(p, where)),
       create: async ({ data }: any) => {
         if (findPayment({ providerTxId: data.providerTxId }) || findPayment({ idempotencyKey: data.idempotencyKey })) {
           throw new Error('unique constraint violation');
@@ -108,7 +122,7 @@ export function createFakePrisma() {
         return data;
       },
     },
-    // Only used for: SELECT "walletBalance" FROM "User" WHERE id = $1 FOR UPDATE
+    // Only used for the User row lock: SELECT "walletBalance" (or id) FROM "User" WHERE id = $1 FOR UPDATE
     $queryRaw: async (_strings: TemplateStringsArray, userId: string) => {
       const user = users.get(userId);
       return user ? [{ walletBalance: new Decimal(user.walletBalance).toFixed(2) }] : [];
@@ -123,6 +137,7 @@ export function createFakePrisma() {
     walletTxs,
     savedCards,
     auditLogs,
+    limits,
     addUser(id: string, walletBalance = 0) {
       users.set(id, { id, status: 'active', walletBalance: new Decimal(walletBalance) });
     },

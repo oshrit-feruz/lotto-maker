@@ -2,7 +2,8 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '../../prisma.js';
 import { config } from '../../config.js';
 import { AppError } from '../../plugins/error-handler.js';
-import { writeAuditLog } from '../../lib/audit-log.js';
+import { writeAuditLogTx } from '../../lib/audit-log.js';
+import type { Tx } from '../wallet/wallet.service.js';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -113,8 +114,14 @@ export function exclusionUntil(period: ExclusionPeriod, now: Date): Date | null 
     case '30d':
       return new Date(now.getTime() + 30 * DAY_MS);
     case '6m': {
+      // Same day six calendar months on, clamped to the last day of that month
+      // (31 Aug -> 28/29 Feb, not 2/3 Mar), at the same time of day.
+      const targetMonth = now.getUTCMonth() + 6;
+      const lastDay = new Date(Date.UTC(now.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
       const d = new Date(now.getTime());
-      d.setUTCMonth(d.getUTCMonth() + 6);
+      d.setUTCDate(1);
+      d.setUTCMonth(targetMonth);
+      d.setUTCDate(Math.min(now.getUTCDate(), lastDay));
       return d;
     }
     case 'permanent':
@@ -130,8 +137,24 @@ export function isSelfExcluded(row: LimitsRow | null, now: Date): boolean {
 
 // ─── Reads ───────────────────────────────────────────────────────────────────
 
-async function loadRow(userId: string): Promise<LimitsRow | null> {
-  return (await prisma.userLimits.findUnique({ where: { userId } })) as LimitsRow | null;
+type Db = Pick<Tx, 'userLimits' | 'payment' | 'order' | 'orderWin'>;
+
+async function loadRow(db: Db, userId: string): Promise<LimitsRow | null> {
+  return (await db.userLimits.findUnique({ where: { userId } })) as LimitsRow | null;
+}
+
+/**
+ * Serializes everything that reads or changes one user's limits and self-exclusion: these
+ * writers, the order charge and the webhook credit all lock the same User row, so a check and
+ * the write it guards cannot interleave with a concurrent change.
+ *
+ * Writers also bump `updatedAt`: a SERIALIZABLE transaction (the order charge) whose snapshot
+ * predates this change then fails on its own `FOR UPDATE` of the row instead of acting on the
+ * stale limits it read.
+ */
+export async function lockUserForLimitChangeTx(tx: Tx, userId: string): Promise<void> {
+  const n = await tx.$executeRaw`UPDATE "User" SET "updatedAt" = NOW() WHERE id = ${userId}`;
+  if (n === 0) throw new AppError(404, 'USER_NOT_FOUND');
 }
 
 function viewOf(row: LimitsRow | null, now: Date) {
@@ -149,30 +172,34 @@ function viewOf(row: LimitsRow | null, now: Date) {
 }
 
 export async function getLimits(userId: string, now = new Date()) {
-  return viewOf(await loadRow(userId), now);
+  return viewOf(await loadRow(prisma, userId), now);
 }
 
 export async function updateLimits(userId: string, input: Partial<LimitValues>, now = new Date()) {
-  const row = await loadRow(userId);
-  const folded = applyMatured(valuesOf(row), pendingOf(row), now);
-  const plan = planLimitUpdate(folded, input, now, config.RG_LIMIT_INCREASE_DELAY_HOURS);
+  return prisma.$transaction(async (tx: Tx) => {
+    await lockUserForLimitChangeTx(tx, userId);
+    // Re-read under the lock, so a concurrent change to another limit is not overwritten
+    const row = await loadRow(tx, userId);
+    const folded = applyMatured(valuesOf(row), pendingOf(row), now);
+    const plan = planLimitUpdate(folded, input, now, config.RG_LIMIT_INCREASE_DELAY_HOURS);
 
-  const data = { ...plan.values, pending: plan.pending as object };
-  const saved = (await prisma.userLimits.upsert({
-    where: { userId },
-    create: { userId, ...data },
-    update: data,
-  })) as LimitsRow;
+    const data = { ...plan.values, pending: plan.pending as object };
+    const saved = (await tx.userLimits.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data,
+    })) as LimitsRow;
 
-  await writeAuditLog({
-    entityType: 'user',
-    entityId: userId,
-    action: 'limits:updated',
-    actorId: userId,
-    actorType: 'user',
-    metadata: { requested: input, applied: plan.values, pending: plan.pending },
+    await writeAuditLogTx(tx, {
+      entityType: 'user',
+      entityId: userId,
+      action: 'limits:updated',
+      actorId: userId,
+      actorType: 'user',
+      metadata: { requested: input, applied: plan.values, pending: plan.pending },
+    });
+    return viewOf(saved, now);
   });
-  return viewOf(saved, now);
 }
 
 // ─── Enforcement ─────────────────────────────────────────────────────────────
@@ -188,7 +215,32 @@ function assertNotExcluded(row: LimitsRow | null, now: Date): void {
 
 /** Called by POST /payments/checkout. Withdrawals and login never call this. */
 export async function assertDepositAllowed(userId: string, amount: Decimal.Value, now = new Date()): Promise<void> {
-  const row = await loadRow(userId);
+  return checkDeposit(prisma, userId, amount, now);
+}
+
+/**
+ * The same check when the webhook credits a deposit. The caller holds the User row lock and
+ * passes the payment being credited, which counts once: as `amount`, not again as a payment.
+ * Only money actually credited (approved payments) counts here: another checkout that is still
+ * pending may never be paid, and is checked again when its own webhook lands.
+ */
+export async function assertDepositAllowedTx(
+  tx: Tx,
+  userId: string,
+  amount: Decimal.Value,
+  opts: { excludePaymentId: string; now?: Date },
+): Promise<void> {
+  return checkDeposit(tx, userId, amount, opts.now ?? new Date(), opts.excludePaymentId);
+}
+
+async function checkDeposit(
+  db: Db,
+  userId: string,
+  amount: Decimal.Value,
+  now: Date,
+  excludePaymentId?: string,
+): Promise<void> {
+  const row = await loadRow(db, userId);
   assertNotExcluded(row, now);
 
   const { values } = applyMatured(valuesOf(row), pendingOf(row), now);
@@ -196,14 +248,18 @@ export async function assertDepositAllowed(userId: string, amount: Decimal.Value
   if (active.length === 0) return;
 
   const since = new Date(now.getTime() - 30 * DAY_MS);
-  const payments = (await prisma.payment.findMany({
+  const payments = (await db.payment.findMany({
     where: {
       userId,
       createdAt: { gte: since },
-      OR: [
-        { status: 'approved' },
-        { status: 'pending', createdAt: { gte: new Date(now.getTime() - PENDING_DEPOSIT_COUNTS_MS) } },
-      ],
+      ...(excludePaymentId
+        ? { id: { not: excludePaymentId }, status: 'approved' as const }
+        : {
+            OR: [
+              { status: 'approved' as const },
+              { status: 'pending' as const, createdAt: { gte: new Date(now.getTime() - PENDING_DEPOSIT_COUNTS_MS) } },
+            ],
+          }),
     },
     select: { amount: true, createdAt: true },
   })) as Array<{ amount: { toString(): string }; createdAt: Date }>;
@@ -230,17 +286,17 @@ export async function assertDepositAllowed(userId: string, amount: Decimal.Value
 }
 
 /** Spend, prizes and deposits over the last `days`, for the loss limit and the reality check. */
-async function activityTotals(userId: string, since: Date) {
+async function activityTotals(db: Db, userId: string, since: Date) {
   const [spend, prizes, deposits] = await Promise.all([
-    prisma.order.aggregate({
+    db.order.aggregate({
       _sum: { totalCharged: true },
       where: { userId, createdAt: { gte: since }, status: { notIn: ['refunded', 'cancelled'] } },
     }),
-    prisma.orderWin.aggregate({
+    db.orderWin.aggregate({
       _sum: { amount: true },
       where: { order: { userId, createdAt: { gte: since } } },
     }),
-    prisma.payment.aggregate({
+    db.payment.aggregate({
       _sum: { amount: true },
       where: { userId, createdAt: { gte: since }, status: 'approved' },
     }),
@@ -252,15 +308,31 @@ async function activityTotals(userId: string, since: Date) {
   };
 }
 
-/** Called by POST /orders with the full price of the order(s) about to be placed. */
+/**
+ * Called by POST /orders with the full price of the order(s) about to be placed: early, so a
+ * refused order does no other work. assertCanPlaceOrderTx repeats it inside the charge.
+ */
 export async function assertCanPlaceOrder(userId: string, orderTotal: Decimal.Value, now = new Date()): Promise<void> {
-  const row = await loadRow(userId);
+  return checkOrder(prisma, userId, orderTotal, now);
+}
+
+/**
+ * The authoritative check, inside the charging transaction after its `FOR UPDATE` of the User
+ * row: two concurrent orders cannot both fit into the same remaining loss limit, and an
+ * exclusion committed before the charge is seen.
+ */
+export async function assertCanPlaceOrderTx(tx: Tx, userId: string, orderTotal: Decimal.Value, now = new Date()): Promise<void> {
+  return checkOrder(tx, userId, orderTotal, now);
+}
+
+async function checkOrder(db: Db, userId: string, orderTotal: Decimal.Value, now: Date): Promise<void> {
+  const row = await loadRow(db, userId);
   assertNotExcluded(row, now);
 
   const { values } = applyMatured(valuesOf(row), pendingOf(row), now);
   if (values.lossMonthly === null) return;
 
-  const { spend, prizes } = await activityTotals(userId, new Date(now.getTime() - 30 * DAY_MS));
+  const { spend, prizes } = await activityTotals(db, userId, new Date(now.getTime() - 30 * DAY_MS));
   // Losses = what was paid for orders minus what they won, in the rolling 30 days
   const loss = Decimal.max(spend.minus(prizes), 0);
   const remaining = Decimal.max(new Decimal(values.lossMonthly).minus(loss), 0);
@@ -276,72 +348,82 @@ export async function assertCanPlaceOrder(userId: string, orderTotal: Decimal.Va
 // ─── Self-exclusion ──────────────────────────────────────────────────────────
 
 export async function selfExclude(userId: string, period: ExclusionPeriod, now = new Date()) {
-  const row = await loadRow(userId);
-  if (row?.selfExcludedPermanent) {
-    throw new AppError(409, 'SELF_EXCLUSION_CANNOT_SHORTEN', 'A permanent exclusion cannot be changed');
-  }
-  const until = exclusionUntil(period, now);
-  // Only ever extend: a request that would end earlier than the current exclusion is refused
-  if (until !== null && row?.selfExcludedUntil && row.selfExcludedUntil.getTime() > until.getTime()) {
-    throw new AppError(409, 'SELF_EXCLUSION_CANNOT_SHORTEN', 'An active exclusion cannot be shortened or cancelled');
-  }
+  return prisma.$transaction(async (tx: Tx) => {
+    // Under the lock, so a concurrent shorter request cannot overwrite a longer one it did not see
+    await lockUserForLimitChangeTx(tx, userId);
+    const row = await loadRow(tx, userId);
+    if (row?.selfExcludedPermanent) {
+      throw new AppError(409, 'SELF_EXCLUSION_CANNOT_SHORTEN', 'A permanent exclusion cannot be changed');
+    }
+    const until = exclusionUntil(period, now);
+    // Only ever extend: a request that would end earlier than the current exclusion is refused
+    if (until !== null && row?.selfExcludedUntil && row.selfExcludedUntil.getTime() > until.getTime()) {
+      throw new AppError(409, 'SELF_EXCLUSION_CANNOT_SHORTEN', 'An active exclusion cannot be shortened or cancelled');
+    }
 
-  const permanent = until === null;
-  const data = {
-    selfExcludedUntil: until,
-    selfExcludedPermanent: permanent,
-    selfExcludedAt: now,
-  };
-  const saved = (await prisma.userLimits.upsert({
-    where: { userId },
-    create: { userId, ...data },
-    update: data,
-  })) as LimitsRow;
+    const permanent = until === null;
+    const data = {
+      selfExcludedUntil: until,
+      selfExcludedPermanent: permanent,
+      selfExcludedAt: now,
+    };
+    const saved = (await tx.userLimits.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data,
+    })) as LimitsRow;
 
-  await writeAuditLog({
-    entityType: 'user',
-    entityId: userId,
-    action: 'self_exclusion:set',
-    actorId: userId,
-    actorType: 'user',
-    metadata: { period, until: until?.toISOString() ?? 'permanent' },
+    await writeAuditLogTx(tx, {
+      entityType: 'user',
+      entityId: userId,
+      action: 'self_exclusion:set',
+      actorId: userId,
+      actorType: 'user',
+      metadata: { period, until: until?.toISOString() ?? 'permanent' },
+    });
+    return viewOf(saved, now).selfExclusion;
   });
-  return viewOf(saved, now).selfExclusion;
 }
 
 /** Admin: lifts a permanent exclusion, only 6 months after it was set, with a reason. Audited. */
-export async function liftPermanentExclusion(userId: string, adminId: string, reason: string, now = new Date()) {
-  const row = await loadRow(userId);
-  if (!row?.selfExcludedPermanent) throw new AppError(409, 'NOT_PERMANENTLY_EXCLUDED');
+export async function liftPermanentExclusion(userId: string, adminId: string, rawReason: string, now = new Date()) {
+  const reason = rawReason.trim();
+  if (reason.length < 2) throw new AppError(400, 'REASON_REQUIRED', 'A reason is required');
+  return prisma.$transaction(async (tx: Tx) => {
+    await lockUserForLimitChangeTx(tx, userId);
+    const row = await loadRow(tx, userId);
+    if (!row?.selfExcludedPermanent) throw new AppError(409, 'NOT_PERMANENTLY_EXCLUDED');
 
-  const since = row.selfExcludedAt;
-  const eligibleAt = since ? new Date(since.getTime() + PERMANENT_EXCLUSION_MIN_DAYS * DAY_MS) : null;
-  if (!eligibleAt || eligibleAt.getTime() > now.getTime()) {
-    throw new AppError(403, 'EXCLUSION_LIFT_TOO_EARLY', 'A permanent exclusion can be lifted after 6 months', {
-      eligibleAt,
+    const since = row.selfExcludedAt;
+    const eligibleAt = since ? new Date(since.getTime() + PERMANENT_EXCLUSION_MIN_DAYS * DAY_MS) : null;
+    if (!eligibleAt || eligibleAt.getTime() > now.getTime()) {
+      throw new AppError(403, 'EXCLUSION_LIFT_TOO_EARLY', 'A permanent exclusion can be lifted after 6 months', {
+        eligibleAt,
+      });
+    }
+
+    // The lift and its audit entry commit together, or neither does
+    await tx.userLimits.update({
+      where: { userId },
+      data: { selfExcludedPermanent: false, selfExcludedUntil: null, selfExcludedAt: null },
     });
-  }
-
-  await prisma.userLimits.update({
-    where: { userId },
-    data: { selfExcludedPermanent: false, selfExcludedUntil: null, selfExcludedAt: null },
+    await writeAuditLogTx(tx, {
+      entityType: 'user',
+      entityId: userId,
+      action: 'self_exclusion:lifted',
+      actorId: adminId,
+      actorType: 'admin',
+      metadata: { reason, excludedSince: since?.toISOString() },
+    });
+    return { userId, lifted: true };
   });
-  await writeAuditLog({
-    entityType: 'user',
-    entityId: userId,
-    action: 'self_exclusion:lifted',
-    actorId: adminId,
-    actorType: 'admin',
-    metadata: { reason, excludedSince: since?.toISOString() },
-  });
-  return { userId, lifted: true };
 }
 
 // ─── Reality check ───────────────────────────────────────────────────────────
 
 export async function getActivitySummary(userId: string, now = new Date()) {
   const from = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * DAY_MS);
-  const { spend, prizes, deposits } = await activityTotals(userId, from);
+  const { spend, prizes, deposits } = await activityTotals(prisma, userId, from);
   return {
     days: ACTIVITY_WINDOW_DAYS,
     from,
