@@ -101,6 +101,8 @@ enum PrizeClaimStatus {
 enum PendingCardCreditStatus {
   pending
   paid
+  // Reserved. Nothing sets it today: a credit that cannot be paid stays `pending` and is retried.
+  failed
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -469,20 +471,30 @@ model PrizeClaim {
   @@index([userId])
 }
 
-// Part of a small prize that did not fit under the wallet cap.
-// TODO: pay out to the user's card.
+// Part of a small prize that did not fit under the wallet cap. A job pays it to the user's
+// default saved card; without a card, or on failure, it stays pending and is retried with
+// backoff (nextAttemptAt). An admin can also mark it paid by hand.
 model PendingCardCredit {
   id        String                  @id @default(cuid())
   orderId   String                  @unique
   userId    String
   amount    Decimal                 @db.Decimal(12, 2)
   status    PendingCardCreditStatus @default(pending)
+  providerTxId String?
+  attempts  Int                     @default(0)
+  nextAttemptAt DateTime            @default(now())
+  lastError String?
+  paidAt    DateTime?
+  // Set when an admin paid it outside the system.
+  paidByAdminId String?
+  manualReference String?
   createdAt DateTime                @default(now())
 
   order     Order                   @relation(fields: [orderId], references: [id])
   user      User                    @relation(fields: [userId], references: [id])
 
   @@index([userId, status])
+  @@index([status, nextAttemptAt])
 }
 
 // A card the user paid with, tokenised by the payment provider. The newest active card is the

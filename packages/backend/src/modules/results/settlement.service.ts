@@ -103,7 +103,7 @@ export async function settleOrderTx(
   if (total.lte(config.SMALL_PRIZE_LIMIT)) {
     const { excess } = await creditPrizeTx(tx, order.userId, total, order.id);
     if (excess.gt(0)) {
-      // TODO: pay the part that did not fit under the wallet cap out to the user's card
+      // Paid to the user's default card by the card-credit job (modules/wallet/card-credits.service)
       await tx.pendingCardCredit.create({
         data: { orderId: order.id, userId: order.userId, amount: excess.toFixed(2) },
       });

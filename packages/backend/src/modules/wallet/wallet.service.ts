@@ -210,7 +210,7 @@ export function assertWithinBalanceCap(balance: string | number, amount: number)
 /**
  * Credits a prize to the wallet inside the caller's transaction, respecting the wallet cap.
  * Whatever does not fit under WALLET_BALANCE_CAP is returned as `excess`; the caller records
- * it as a PendingCardCredit (TODO: pay it out to the user's card).
+ * it as a PendingCardCredit, which the card-credit job pays out to the user's card.
  */
 export async function creditPrizeTx(
   tx: Tx,

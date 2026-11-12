@@ -73,7 +73,8 @@ export class MockPaymentProvider implements PaymentProvider {
       this.creditFailure === 'decline'
         ? { providerTxId: `mock_credit_${nanoid(16)}`, status: 'failed' }
         : { providerTxId: `mock_credit_${nanoid(16)}`, status: 'paid' };
-    this.creditResults.set(idempotencyKey, result);
+    // Only a successful payout is remembered, so a later retry of a declined one can succeed
+    if (result.status === 'paid') this.creditResults.set(idempotencyKey, result);
     return result;
   }
 }
