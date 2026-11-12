@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { searchUsers } from '../api/users';
 import { Badge, Empty, QueryState } from '../components/ui';
 import { formatDate, formatNis } from '../lib/format';
-import { MIN_PHONE_SEARCH_DIGITS, nationalDigits, PHONE_SEARCH_HINT } from '../lib/phone';
+import { formatPhoneLocal, MIN_PHONE_SEARCH_DIGITS, nationalDigits, PHONE_SEARCH_HINT } from '../lib/phone';
 
 export default function UsersPage() {
   const [input, setInput] = useState('');
@@ -75,7 +75,9 @@ export default function UsersPage() {
                     {users.map((u) => (
                       <tr key={u.id}>
                         <td className="ltr">
-                          <Link to={`/users/${u.id}`}>{u.phone}</Link>
+                          <Link to={`/users/${u.id}`}>
+                            <span className="ltr">{formatPhoneLocal(u.phone)}</span>
+                          </Link>
                         </td>
                         <td>{u.fullName ?? '—'}</td>
                         <td>{formatNis(u.walletBalance)}</td>

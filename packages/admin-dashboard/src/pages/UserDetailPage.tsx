@@ -5,29 +5,10 @@ import { errorText } from '../api/errors';
 import { getUser, suspendUser, unsuspendUser } from '../api/users';
 import type { AdminUserDetail } from '../api/types';
 import { ConfirmDialog } from '../components/Dialog';
-import { Badge, Empty, QueryState } from '../components/ui';
-import { formatDate, formatNis } from '../lib/format';
-
-const ORDER_STATUS: Record<string, string> = {
-  pending: 'ממתינה',
-  in_queue: 'בתור',
-  keyed: 'הוקלדה',
-  scanned: 'נסרקה',
-  won: 'זכתה',
-  lost: 'לא זכתה',
-  refunded: 'הוחזרה',
-  results_delayed: 'תוצאות מתעכבות',
-  cancelled: 'בוטלה',
-};
-const TX_TYPE: Record<string, string> = {
-  deposit: 'הפקדה',
-  charge: 'חיוב',
-  refund: 'החזר',
-  winning: 'זכייה',
-  refund_reversal: 'ביטול החזר',
-  withdrawal_hold: 'משיכה (הקפאה)',
-  withdrawal_release: 'שחרור משיכה',
-};
+import { Badge, Empty, Money, QueryState } from '../components/ui';
+import { formatDate } from '../lib/format';
+import { ORDER_STATUS_LABEL, TX_TYPE_LABEL, labelOf } from '../lib/labels';
+import { formatPhoneLocal } from '../lib/phone';
 
 /** The backend accepts a reason of 2–500 characters. Required here for a suspension. */
 export const REASON_MIN = 2;
@@ -74,11 +55,23 @@ export function UserView({ user }: { user: AdminUserDetail }) {
 
   return (
     <>
-      <h1 className="ltr">{user.phone}</h1>
+      <h1>
+        {user.fullName || formatPhoneLocal(user.phone)}
+        {user.fullName && (
+          <span className="heading-sub ltr" data-testid="user-phone">
+            {formatPhoneLocal(user.phone)}
+          </span>
+        )}
+      </h1>
       <div className="card">
-        <p>שם: {user.fullName ?? '—'}</p>
         <p>
-          יתרה: <strong>{formatNis(user.walletBalance)}</strong>
+          טלפון: <span className="ltr">{formatPhoneLocal(user.phone)}</span>
+        </p>
+        <p>
+          יתרה:{' '}
+          <strong>
+            <Money value={user.walletBalance} />
+          </strong>
         </p>
         <p>
           סטטוס: <Badge tone={suspended ? 'red' : 'green'}>{suspended ? 'מושעה' : 'פעיל'}</Badge>
@@ -123,8 +116,10 @@ export function UserView({ user }: { user: AdminUserDetail }) {
                   <tr key={o.id}>
                     <td>{formatDate(o.createdAt)}</td>
                     <td>{o.drawNumber ?? '—'}</td>
-                    <td>{ORDER_STATUS[o.status] ?? o.status}</td>
-                    <td>{formatNis(o.total)}</td>
+                    <td>{labelOf(ORDER_STATUS_LABEL, o.status)}</td>
+                    <td>
+                      <Money value={o.total} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -149,9 +144,11 @@ export function UserView({ user }: { user: AdminUserDetail }) {
                 {user.walletTransactions.map((t) => (
                   <tr key={t.id}>
                     <td>{formatDate(t.createdAt)}</td>
-                    <td>{TX_TYPE[t.type] ?? t.type}</td>
+                    <td>{labelOf(TX_TYPE_LABEL, t.type)}</td>
                     <td>{t.description ?? ''}</td>
-                    <td>{formatNis(t.amount)}</td>
+                    <td>
+                      <Money value={t.amount} className={Number(t.amount) < 0 ? 'neg' : undefined} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -171,7 +168,9 @@ export function UserView({ user }: { user: AdminUserDetail }) {
           onConfirm={() => toggle.mutate()}
           onCancel={close}
         >
-          <p className="ltr">{user.phone}</p>
+          <p>
+            {user.fullName ?? ''} <span className="ltr">{formatPhoneLocal(user.phone)}</span>
+          </p>
           <label>
             {suspended ? 'סיבה (רשות)' : 'סיבת ההשעיה'}
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={REASON_MAX} rows={3} autoFocus />

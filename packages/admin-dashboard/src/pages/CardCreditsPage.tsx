@@ -8,12 +8,8 @@ import RequesterLink from '../components/RequesterLink';
 import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate, formatNis } from '../lib/format';
 
-export const CARD_CREDIT_STATUS_LABEL: Record<CardCreditStatus, string> = {
-  pending: 'ממתין',
-  processing: 'בזיכוי כעת',
-  paid: 'שולם',
-  failed: 'נכשל',
-};
+import { CARD_CREDIT_STATUS_LABEL, labelOf } from '../lib/labels';
+export { CARD_CREDIT_STATUS_LABEL };
 const STATUS_TONE: Record<CardCreditStatus, 'green' | 'red' | 'amber' | 'blue'> = {
   pending: 'amber',
   processing: 'blue',
@@ -119,12 +115,12 @@ export default function CardCreditsPage() {
                         {c.manualReference
                           ? `אסמכתה: ${c.manualReference}`
                           : c.lastError
-                            ? (LAST_ERROR_LABEL[c.lastError] ?? c.lastError)
+                            ? labelOf(LAST_ERROR_LABEL, c.lastError)
                             : ''}
                       </td>
                       <td>
-                        <Badge tone={STATUS_TONE[c.status] ?? 'gray'}>
-                          {CARD_CREDIT_STATUS_LABEL[c.status] ?? c.status}
+                        <Badge tone={Object.hasOwn(STATUS_TONE, c.status) ? STATUS_TONE[c.status] : 'gray'}>
+                          {labelOf(CARD_CREDIT_STATUS_LABEL, c.status)}
                         </Badge>
                       </td>
                       <td>{c.status === 'pending' && <button onClick={() => setTarget(c)}>סמן כשולם</button>}</td>

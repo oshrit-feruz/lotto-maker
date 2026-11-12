@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { errorText } from '../api/errors';
+import { formatNis } from '../lib/format';
 
 export function Loading() {
   return <p className="muted">טוען…</p>;
@@ -75,4 +76,13 @@ export function QueryState<T>({
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   if (q.data === undefined) return null;
   return <>{children(q.data)}</>;
+}
+
+/** An amount as `₪1,234.00` / `-₪14.50`, isolated LTR so the minus stays in front in RTL text. */
+export function Money({ value, className }: { value: number | string | null | undefined; className?: string | undefined }) {
+  return (
+    <span dir="ltr" className={['money', className].filter(Boolean).join(' ')}>
+      {formatNis(value)}
+    </span>
+  );
 }

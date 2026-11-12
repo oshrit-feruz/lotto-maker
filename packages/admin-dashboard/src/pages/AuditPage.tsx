@@ -3,16 +3,36 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { listAudit } from '../api/audit';
 import type { AuditEntry } from '../api/types';
 import { Empty, Pager, QueryState } from '../components/ui';
-import { formatDate } from '../lib/format';
+import { formatDate, formatDayInput } from '../lib/format';
+import { ACTOR_TYPE_LABEL, ENTITY_LABEL, auditActionLabel, labelOf } from '../lib/labels';
+import { formatPhoneLocal } from '../lib/phone';
 
 const PAGE_SIZE = 50;
 
-/** Who did it: the admin's name / phone when an admin acted, else the actor type and id. */
+/**
+ * Who did it: the admin's name, else their phone (local form), when an admin acted; else the actor
+ * type in Hebrew and the end of the actor's id.
+ */
 export function actorLabel(e: Pick<AuditEntry, 'actorType' | 'actorId' | 'adminName' | 'adminPhone'>): string {
   if (e.actorType === 'admin' && (e.adminName || e.adminPhone)) {
-    return [e.adminName, e.adminPhone].filter(Boolean).join(' · ');
+    return e.adminName || formatPhoneLocal(e.adminPhone);
   }
-  return `${e.actorType ?? '—'}${e.actorId ? `:${e.actorId.slice(-6)}` : ''}`;
+  if (!e.actorType) return '—';
+  const type = labelOf(ACTOR_TYPE_LABEL, e.actorType);
+  return e.actorId && e.actorType !== 'system' ? `${type} ${e.actorId.slice(-6)}` : type;
+}
+
+/** A date filter: the native picker (localized where the browser allows) plus the value as dd/mm/yyyy. */
+function DateFilter({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label>
+      {label}
+      <span className="date-field">
+        <input type="date" lang="he-IL" value={value} onChange={(e) => onChange(e.target.value)} />
+        <output aria-live="polite">{formatDayInput(value) || 'dd/mm/yyyy'}</output>
+      </span>
+    </label>
+  );
 }
 
 export default function AuditPage() {
@@ -47,14 +67,8 @@ export default function AuditPage() {
           פעולה (תחילית)
           <input value={action} onChange={(e) => reset(setAction)(e.target.value)} dir="ltr" placeholder="user: / draw:results" />
         </label>
-        <label>
-          מתאריך
-          <input type="date" value={from} onChange={(e) => reset(setFrom)(e.target.value)} />
-        </label>
-        <label>
-          עד תאריך
-          <input type="date" value={to} onChange={(e) => reset(setTo)(e.target.value)} />
-        </label>
+        <DateFilter label="מתאריך" value={from} onChange={reset(setFrom)} />
+        <DateFilter label="עד תאריך" value={to} onChange={reset(setTo)} />
       </div>
       <QueryState q={q}>
         {(data) =>
@@ -76,12 +90,17 @@ export default function AuditPage() {
                   {data.items.map((e) => (
                     <tr key={e.id}>
                       <td>{formatDate(e.createdAt)}</td>
-                      <td className="ltr">{e.action}</td>
-                      <td className="ltr">
-                        {e.entityType}:{e.entityId.slice(-8)}
-                        {e.orderId && e.orderId !== e.entityId ? ` (order:${e.orderId.slice(-8)})` : ''}
+                      <td title={e.action}>{auditActionLabel(e.action)}</td>
+                      <td>
+                        {labelOf(ENTITY_LABEL, e.entityType)} <span className="ltr muted">{e.entityId.slice(-8)}</span>
+                        {e.orderId && e.orderId !== e.entityId && (
+                          <>
+                            {' '}
+                            · הזמנה <span className="ltr muted">{e.orderId.slice(-8)}</span>
+                          </>
+                        )}
                       </td>
-                      <td className="ltr">{actorLabel(e)}</td>
+                      <td>{actorLabel(e)}</td>
                       <td className="ltr">{e.metadata ? JSON.stringify(e.metadata) : ''}</td>
                     </tr>
                   ))}
