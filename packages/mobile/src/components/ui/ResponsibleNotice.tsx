@@ -6,7 +6,7 @@ import { HELPLINE } from '../../config.js';
  * Responsible gaming: an always-visible panel, never fine print. The 18+
  * badge and the 118 helpline are the same as the website's footer.
  */
-export function ResponsibleNotice({ children }: { children?: string }) {
+export function ResponsibleNotice({ children }: Readonly<{ children?: string }>) {
   return (
     <View style={styles.panel} accessibilityRole="summary">
       {children ? <Text style={styles.lead}>{children}</Text> : null}

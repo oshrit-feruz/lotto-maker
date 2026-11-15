@@ -26,7 +26,7 @@ export function Button({
   icon,
   style,
   accessibilityLabel,
-}: {
+}: Readonly<{
   label: string;
   onPress: () => void;
   variant?: Variant;
@@ -37,7 +37,7 @@ export function Button({
   icon?: ReactNode;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
-}) {
+}>) {
   const v = VARIANTS[variant];
   const off = disabled || loading;
   return (

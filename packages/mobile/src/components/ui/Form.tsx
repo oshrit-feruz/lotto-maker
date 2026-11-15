@@ -4,7 +4,7 @@ import type { TextInputProps, StyleProp, ViewStyle } from 'react-native';
 import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 
 /** A labelled text input (48pt tall, pine focus ring). */
-export const Field = forwardRef<TextInput, TextInputProps & { label: string; hint?: string; ltr?: boolean }>(
+export const Field = forwardRef<TextInput, Readonly<TextInputProps & { label: string; hint?: string; ltr?: boolean }>>(
   function Field({ label, hint, ltr, style, onFocus, onBlur, ...props }, ref) {
     const [focused, setFocused] = useState(false);
     return (
@@ -31,12 +31,12 @@ export function Segmented<T extends string>({
   value,
   onChange,
   style,
-}: {
+}: Readonly<{
   options: ReadonlyArray<{ value: T; label: string }>;
   value: T;
   onChange: (v: T) => void;
   style?: StyleProp<ViewStyle>;
-}) {
+}>) {
   return (
     <View style={[styles.segmented, style]} accessibilityRole="radiogroup">
       {options.map((o) => {

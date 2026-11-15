@@ -5,7 +5,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { colors, radii, shadows, spacing } from '../../theme/index.js';
 
 /** A white panel on the paper background. */
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function Card({ children, style }: Readonly<{ children: ReactNode; style?: StyleProp<ViewStyle> }>) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
@@ -21,13 +21,13 @@ export function Stub({
   style,
   raised,
   bordered = true,
-}: {
+}: Readonly<{
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   /** Lifted off a dark background (the home hero). */
   raised?: boolean;
   bordered?: boolean;
-}) {
+}>) {
   return (
     <View style={[styles.stubShadow, raised ? shadows.raised : shadows.card, style]}>
       <View style={[styles.stub, bordered && styles.stubBorder]}>{children}</View>
@@ -40,7 +40,7 @@ export function Stub({
  * from each side, filled with the colour behind the stub. Drawn with small
  * views because iOS cannot dash a single border side.
  */
-export function Perforation({ notchColor = colors.paper, bordered = true }: { notchColor?: string; bordered?: boolean }) {
+export function Perforation({ notchColor = colors.paper, bordered = true }: Readonly<{ notchColor?: string; bordered?: boolean }>) {
   const [width, setWidth] = useState(0);
   const dashes = Math.max(0, Math.floor((width - NOTCH * 2 - 8) / 10));
   return (

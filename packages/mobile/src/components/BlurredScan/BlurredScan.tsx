@@ -10,7 +10,7 @@ const HEIGHT = 380;
  * which the courier does for the customer. The blurred band is a second copy
  * of the image, bottom-aligned in a clipped strip so the two line up.
  */
-export function BlurredScan({ url }: { url: string }) {
+export function BlurredScan({ url }: Readonly<{ url: string }>) {
   return (
     <View style={styles.wrap} accessible accessibilityRole="image" accessibilityLabel="צילום הטופס שהוגש">
       <Image source={url} cachePolicy="none" style={styles.full} contentFit="contain" transition={300} />
