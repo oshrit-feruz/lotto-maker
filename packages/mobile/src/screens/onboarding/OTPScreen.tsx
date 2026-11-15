@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator,
+  View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { AuthLayout } from '../../components/ui/index.js';
 import { colors, fonts, radii, rtl, type } from '../../theme/index.js';
 import { authApi, setToken, setRefreshToken } from '../../api/client.js';
 import { usersApi } from '../../api/client.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   phone: string;
@@ -37,7 +38,7 @@ export function OTPScreen({ phone, onVerified }: Readonly<Props>) {
       setUser(user);
       onVerified(user);
     } catch {
-      Alert.alert('קוד שגוי', 'הקוד שהזנת שגוי. נסה שנית.');
+      notify('קוד שגוי', 'הקוד שהזנת שגוי. נסה שנית.');
       setCode('');
       inputRef.current?.focus();
     } finally {

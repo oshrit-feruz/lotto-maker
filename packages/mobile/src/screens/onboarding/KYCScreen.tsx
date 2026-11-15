@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Text, StyleSheet, Alert } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { AuthLayout, Button, Field, Notice } from '../../components/ui/index.js';
 import { colors, rtl, type } from '../../theme/index.js';
 import { usersApi } from '../../api/client.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   onVerified: () => void;
@@ -18,13 +19,13 @@ export function KYCScreen({ onVerified }: Readonly<Props>) {
 
   async function handleSubmit() {
     if (!fullName || !idNumber || !dob) {
-      Alert.alert('שדות חסרים', 'אנא מלא את כל השדות.');
+      notify('שדות חסרים', 'אנא מלא את כל השדות.');
       return;
     }
     // Parse DD/MM/YYYY → YYYY-MM-DD
     const parts = dob.split('/');
     if (parts.length !== 3) {
-      Alert.alert('תאריך שגוי', 'הזן תאריך בפורמט DD/MM/YYYY');
+      notify('תאריך שגוי', 'הזן תאריך בפורמט DD/MM/YYYY');
       return;
     }
     const isoDate = `${parts[2]}-${parts[1]!.padStart(2, '0')}-${parts[0]!.padStart(2, '0')}`;
@@ -37,18 +38,18 @@ export function KYCScreen({ onVerified }: Readonly<Props>) {
     } catch (err: unknown) {
       const e = err as { code?: string };
       if (e.code === 'AGE_VERIFICATION_FAILED') {
-        Alert.alert('גיל לא מספיק', 'עליך להיות בן 18 ומעלה להשתמש בשירות זה.');
+        notify('גיל לא מספיק', 'עליך להיות בן 18 ומעלה להשתמש בשירות זה.');
       } else if (e.code === 'INVALID_ID_NUMBER') {
-        Alert.alert('תעודת זהות שגויה', 'מספר תעודת הזהות אינו תקין. בדוק את המספר ונסה שנית.');
+        notify('תעודת זהות שגויה', 'מספר תעודת הזהות אינו תקין. בדוק את המספר ונסה שנית.');
       } else if (e.code === 'INVALID_DATE_OF_BIRTH') {
-        Alert.alert('תאריך שגוי', 'תאריך הלידה אינו תקין.');
+        notify('תאריך שגוי', 'תאריך הלידה אינו תקין.');
       } else if (e.code === 'KYC_PENDING') {
         // A returning user whose earlier check is waiting for manual review: let them in.
-        Alert.alert('האימות בבדיקה', 'בדיקת הזהות שלך ממתינה לאישור. נעדכן כשתאושר.', [{ text: 'המשך', onPress: onVerified }]);
+        notify('האימות בבדיקה', 'בדיקת הזהות שלך ממתינה לאישור. נעדכן כשתאושר.', { okText: 'המשך', onDismiss: onVerified });
       } else if (e.code === 'ID_NUMBER_ALREADY_USED') {
-        Alert.alert('תעודת זהות בשימוש', 'מספר תעודת הזהות כבר רשום בחשבון אחר.');
+        notify('תעודת זהות בשימוש', 'מספר תעודת הזהות כבר רשום בחשבון אחר.');
       } else {
-        Alert.alert('שגיאה', 'אירעה שגיאה. בדוק את הפרטים ונסה שנית.');
+        notify('שגיאה', 'אירעה שגיאה. בדוק את הפרטים ונסה שנית.');
       }
     } finally {
       setLoading(false);

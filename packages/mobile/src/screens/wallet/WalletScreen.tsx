@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, Alert, RefreshControl,
+  View, Text, FlatList, StyleSheet, Pressable, RefreshControl,
 } from 'react-native';
-import { Amount, BallFace, EmptyState, Loading } from '../../components/ui/index.js';
+import { Amount, BallFace, EmptyState, LoadError, Loading } from '../../components/ui/index.js';
 import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { walletApi } from '../../api/client.js';
 import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
 import { formatTxAmount, txDirection } from '../../lib/money.js';
+import { notify } from '../../lib/confirm.js';
 
 const PRESET_AMOUNTS = [20, 50, 100, 200];
 
@@ -32,6 +33,7 @@ export function WalletScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [error, setError] = useState(false);
   const pendingPayment = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -42,6 +44,9 @@ export function WalletScreen() {
       ]);
       updateUser({ walletBalance: balRes.balance });
       setTxs(txRes.data as TxRow[]);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -59,7 +64,7 @@ export function WalletScreen() {
       pendingPayment.current = await openCheckout(amount);
     } catch (err: unknown) {
       setPaying(false);
-      Alert.alert('שגיאה', depositErrorMessage(err));
+      notify('שגיאה', depositErrorMessage(err));
     }
   }
 
@@ -72,18 +77,23 @@ export function WalletScreen() {
       const status = await waitForPayment(paymentId);
       await load();
       if (status === 'approved') {
-        Alert.alert('הופקד בהצלחה', 'הסכום נוסף לארנק שלך');
+        notify('הופקד בהצלחה', 'הסכום נוסף לארנק שלך');
       } else if (status === 'pending') {
-        Alert.alert('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.');
+        notify('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.');
       } else {
-        Alert.alert('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
+        notify('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
       }
     } catch {
-      Alert.alert('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
+      notify('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
     } finally {
       setPaying(false);
     }
   });
+
+  function retry() {
+    setLoading(true);
+    load();
+  }
 
   if (loading) return <Loading />;
 
@@ -95,6 +105,7 @@ export function WalletScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.pine} colors={[colors.pine]} onRefresh={() => { setRefreshing(true); load(); }} />}
       ListHeaderComponent={() => (
         <View>
+          {error && <LoadError message="לא הצלחנו לטעון את הארנק." onRetry={retry} />}
           <View style={styles.balanceCard}>
             <View style={styles.balanceDeco} pointerEvents="none">
               <BallFace size={110} tone="sun" />
@@ -123,7 +134,7 @@ export function WalletScreen() {
           <Text style={styles.sectionTitle}>היסטוריית עסקאות</Text>
         </View>
       )}
-      ListEmptyComponent={<EmptyState text="אין עסקאות עדיין" />}
+      ListEmptyComponent={error ? null : <EmptyState text="אין עסקאות עדיין" />}
       contentContainerStyle={styles.list}
       renderItem={({ item }) => {
         const direction = txDirection(item.type, item.amount);

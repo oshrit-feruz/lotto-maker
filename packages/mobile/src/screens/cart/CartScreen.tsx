@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Alert,
+  View, Text, ScrollView, Pressable, StyleSheet,
 } from 'react-native';
 import { Amount, Button, EmptyState, Perforation, ScreenTitle, Stub } from '../../components/ui/index.js';
 import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
@@ -8,6 +8,7 @@ import { useCartStore } from '../../store/cart.store.js';
 import { useAuthStore } from '../../store/auth.store.js';
 import { ordersApi, walletApi } from '../../api/client.js';
 import { TICKET_TYPE_LABELS } from '@lotto-maker/shared';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   onOrderPlaced: () => void;
@@ -23,12 +24,12 @@ export function CartScreen({ onOrderPlaced }: Props) {
     const cartTotal = total();
 
     if (!user?.verifiedAdult) {
-      Alert.alert('נדרש אימות זהות', 'השלם את אימות הגיל לפני ביצוע הזמנות.');
+      notify('נדרש אימות זהות', 'השלם את אימות הגיל לפני ביצוע הזמנות.');
       return;
     }
 
     if (parseFloat(user.walletBalance) < cartTotal) {
-      Alert.alert('יתרה לא מספיקה', `יתרתך: ₪${user.walletBalance}. נדרש: ₪${cartTotal.toFixed(2)}`);
+      notify('יתרה לא מספיקה', `יתרתך: ₪${user.walletBalance}. נדרש: ₪${cartTotal.toFixed(2)}`);
       return;
     }
 
@@ -40,20 +41,20 @@ export function CartScreen({ onOrderPlaced }: Props) {
       const { balance } = await walletApi.getBalance();
       updateUser({ walletBalance: balance });
       clear();
-      Alert.alert('ההזמנה בוצעה!', 'הטפסים שלך נכנסו לתור הקלדה.');
+      notify('ההזמנה בוצעה!', 'הטפסים שלך נכנסו לתור הקלדה.');
       onOrderPlaced();
     } catch (err: unknown) {
       const e = err as { code?: string };
       if (e.code === 'QUEUE_FULL') {
-        Alert.alert('התור מלא', 'הגענו לקיבולת לערב זה. נסה להזמין מוקדם יותר בפעם הבאה.');
+        notify('התור מלא', 'הגענו לקיבולת לערב זה. נסה להזמין מוקדם יותר בפעם הבאה.');
       } else if (e.code === 'CUTOFF_PASSED') {
-        Alert.alert('מאוחר מדי', 'ההגרלה הסגירה הזמנות. נסה להגרלה הבאה.');
+        notify('מאוחר מדי', 'ההגרלה הסגירה הזמנות. נסה להגרלה הבאה.');
       } else if (e.code === 'NOT_ENOUGH_DRAWS') {
-        Alert.alert('מספר ההגרלות גדול מדי', 'עדיין לא פורסמו מספיק הגרלות קרובות. הקטן את מספר ההגרלות.');
+        notify('מספר ההגרלות גדול מדי', 'עדיין לא פורסמו מספיק הגרלות קרובות. הקטן את מספר ההגרלות.');
       } else if (e.code === 'GAME_NOT_AVAILABLE') {
-        Alert.alert('המשחק אינו זמין', 'המשחק הזה אינו זמין כרגע להזמנה.');
+        notify('המשחק אינו זמין', 'המשחק הזה אינו זמין כרגע להזמנה.');
       } else {
-        Alert.alert('שגיאה', 'ההזמנה נכשלה. נסה שנית.');
+        notify('שגיאה', 'ההזמנה נכשלה. נסה שנית.');
       }
     } finally {
       setLoading(false);

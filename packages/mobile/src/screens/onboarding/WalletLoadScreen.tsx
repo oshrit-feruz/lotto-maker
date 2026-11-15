@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { Amount, AuthLayout, Button } from '../../components/ui/index.js';
 import { colors, radii, rtl } from '../../theme/index.js';
 import { walletApi } from '../../api/client.js';
 import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { notify } from '../../lib/confirm.js';
 
 const PRESET_AMOUNTS = [20, 50, 100, 200];
 
@@ -27,7 +28,7 @@ export function WalletLoadScreen({ onContinue }: Props) {
       pendingPayment.current = await openCheckout(selected);
     } catch (err: unknown) {
       setLoading(false);
-      Alert.alert('שגיאה', depositErrorMessage(err));
+      notify('שגיאה', depositErrorMessage(err));
     }
   }
 
@@ -43,12 +44,12 @@ export function WalletLoadScreen({ onContinue }: Props) {
         updateUser({ walletBalance: balance });
         onContinue();
       } else if (status === 'pending') {
-        Alert.alert('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.', [{ text: 'המשך', onPress: onContinue }]);
+        notify('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.', { okText: 'המשך', onDismiss: onContinue });
       } else {
-        Alert.alert('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
+        notify('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
       }
     } catch {
-      Alert.alert('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
+      notify('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
     } finally {
       setLoading(false);
     }
