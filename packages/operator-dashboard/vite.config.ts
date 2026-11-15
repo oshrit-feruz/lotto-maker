@@ -14,14 +14,17 @@ export default defineConfig({
         short_name: 'Lotto Ops',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#ffffff',
-        theme_color: '#1a56db',
+        // Design tokens (packages/shared/src/design): paper and pine.
+        background_color: '#f0f5f1',
+        theme_color: '#0c3b33',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
         ],
       },
       workbox: {
+        // Precache the self-hosted fonts too, so the queue keeps its type offline.
+        globPatterns: ['**/*.{js,css,html,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\/.*/,

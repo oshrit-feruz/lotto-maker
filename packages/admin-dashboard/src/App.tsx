@@ -26,12 +26,16 @@ function Shell() {
     <div className="layout" dir="rtl">
       <nav>
         <div className="nav-inner">
+          <div className="nav-brand">
+            <span className="brand-mark" aria-hidden="true" />
+            ניהול
+          </div>
           {NAV.map(([to, label]) => (
             <NavLink key={to} to={to}>
               {label}
             </NavLink>
           ))}
-          <button className="secondary" onClick={() => void logout()} style={{ marginTop: 'auto' }}>
+          <button className="secondary" onClick={() => void logout()}>
             יציאה
           </button>
         </div>

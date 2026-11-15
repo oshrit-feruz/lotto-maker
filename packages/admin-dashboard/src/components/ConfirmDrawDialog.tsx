@@ -1,6 +1,7 @@
 import type { DrawDetail } from '../api/types';
 import { formatCount, formatNis } from '../lib/format';
 import { GAMES, GAME_LABEL, computePayout } from '../lib/payout';
+import { Balls, ExtraDigits } from './Balls';
 import { ConfirmDialog } from './Dialog';
 
 export const ESTIMATE_NOTE = 'הערכה לפי טבלת הזכיות הארצית — הסכום בפועל נקבע לפי הטפסים של הלקוחות';
@@ -34,9 +35,10 @@ export default function ConfirmDrawDialog({
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      <p className="ltr">
-        {draw.numbers.join(' · ')} + {draw.strong ?? '?'} | {draw.extraDigits.join('')}
-      </p>
+      <div className="results-line">
+        <Balls numbers={draw.numbers} strong={draw.strong} />
+        <ExtraDigits digits={draw.extraDigits} />
+      </div>
       <p className="muted">{ESTIMATE_NOTE}</p>
       <table>
         <thead>

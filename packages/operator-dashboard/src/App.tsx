@@ -16,23 +16,36 @@ export function App() {
 
   return (
     <div>
-      <nav style={{ background: '#1a56db', padding: '10px 16px', display: 'flex', gap: 16, alignItems: 'center', direction: 'rtl' }}>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: '1.1rem' }}>לוטו מייקר</span>
-        <button onClick={() => setPage('queue')} style={navBtn(page === 'queue')}>תור</button>
-        <button onClick={() => setPage('shift-log')} style={navBtn(page === 'shift-log')}>לוג משמרת</button>
-        <button onClick={() => { clearToken(); setIsLoggedIn(false); }} style={{ ...navBtn(false), marginRight: 'auto' }}>יציאה</button>
+      <nav className="topbar">
+        <div className="topbar-inner">
+          <span className="brand">
+            <span className="brand-mark" aria-hidden="true" />
+            לוטו מייקר
+          </span>
+          <button className="nav-btn" aria-current={page === 'queue' ? 'page' : undefined} onClick={() => setPage('queue')}>
+            תור
+          </button>
+          <button
+            className="nav-btn"
+            aria-current={page === 'shift-log' ? 'page' : undefined}
+            onClick={() => setPage('shift-log')}
+          >
+            לוג משמרת
+          </button>
+          <button
+            className="nav-btn logout"
+            onClick={() => {
+              clearToken();
+              setIsLoggedIn(false);
+            }}
+          >
+            יציאה
+          </button>
+        </div>
       </nav>
 
       {page === 'queue' && <QueuePage />}
       {page === 'shift-log' && <ShiftLogPage />}
     </div>
   );
-}
-
-function navBtn(active: boolean): React.CSSProperties {
-  return {
-    background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
-    color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4,
-    cursor: 'pointer', fontWeight: active ? 700 : 400,
-  };
 }

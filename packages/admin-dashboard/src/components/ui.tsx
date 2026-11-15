@@ -51,7 +51,7 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
 }
 
 export function Empty({ children = 'אין נתונים' }: { children?: ReactNode }) {
-  return <p className="muted">{children}</p>;
+  return <p className="muted empty">{children}</p>;
 }
 
 export function Badge({
