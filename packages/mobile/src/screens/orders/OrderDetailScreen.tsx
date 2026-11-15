@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { BlurredScan } from '../../components/BlurredScan/BlurredScan.js';
 import {
-  Amount, BallFace, BallRow, Card, Loading, Notice, Perforation, Stub,
+  Amount, BallFace, BallRow, Card, LoadError, Loading, Notice, Perforation, Stub,
 } from '../../components/ui/index.js';
 import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { ordersApi } from '../../api/client.js';
@@ -67,8 +67,10 @@ export function OrderDetailScreen({ orderId }: Props) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   // Short-lived signed URL, fetched each time the screen opens (never stored)
   const [scanUrl, setScanUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(false);
     setScanUrl(null);
     ordersApi.get(orderId).then((o) => {
       const detail = o as unknown as OrderDetail;
@@ -78,8 +80,18 @@ export function OrderDetailScreen({ orderId }: Props) {
           .then(({ url }) => setScanUrl(url))
           .catch(() => {/* scan is optional on this screen */});
       }
-    }).catch(console.error);
+    }).catch(() => setError(true));
   }, [orderId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (error) {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <LoadError message="לא הצלחנו לטעון את ההזמנה." onRetry={load} />
+      </ScrollView>
+    );
+  }
 
   if (!order) return <Loading />;
 

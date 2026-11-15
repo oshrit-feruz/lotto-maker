@@ -236,3 +236,25 @@ jobs:
         run: npm run build -w packages/${{ matrix.package }}
       - name: Tests
         run: npm test -w packages/${{ matrix.package }}
+
+  # ── Mobile (Expo / React Native): types and unit tests ─────────────────────────
+  mobile:
+    name: mobile (tsc + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install (mobile + shared workspaces)
+        run: npm ci --ignore-scripts --no-audit --no-fund -w packages/mobile -w packages/shared
+      - name: Build shared
+        run: npm run build -w packages/shared
+      - name: Type-check
+        working-directory: packages/mobile
+        run: npm exec --no -- tsc --noEmit
+      - name: Unit tests
+        working-directory: packages/mobile
+        run: npm test

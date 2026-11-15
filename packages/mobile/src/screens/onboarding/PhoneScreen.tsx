@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { AuthLayout, Button, Field } from '../../components/ui/index.js';
 import { authApi } from '../../api/client.js';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   onOtpSent: (phone: string) => void;
@@ -18,7 +18,7 @@ export function PhoneScreen({ onOtpSent }: Props) {
       await authApi.sendOtp(normalized);
       onOtpSent(normalized);
     } catch {
-      Alert.alert('שגיאה', 'לא ניתן לשלוח קוד. בדוק את המספר ונסה שנית.');
+      notify('שגיאה', 'לא ניתן לשלוח קוד. בדוק את המספר ונסה שנית.');
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ export { Card, Stub, Perforation } from './Card.js';
 export { Countdown } from './Countdown.js';
 export { ResponsibleNotice } from './ResponsibleNotice.js';
 export { Notice, EmptyState, Loading } from './Feedback.js';
+export { LoadError } from './LoadError.js';
 export { Field, Segmented } from './Form.js';
 export { BrandMark, AppHeader, ScreenTitle, Amount } from './Brand.js';
 export { AuthLayout } from './AuthLayout.js';

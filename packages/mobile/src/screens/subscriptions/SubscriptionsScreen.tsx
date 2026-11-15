@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet,
-  Alert, RefreshControl,
+  View, Text, FlatList, StyleSheet, RefreshControl,
 } from 'react-native';
-import { BallRow, Button, Card, EmptyState, Loading, Notice, ScreenTitle } from '../../components/ui/index.js';
+import { BallRow, Button, Card, EmptyState, LoadError, Loading, ScreenTitle } from '../../components/ui/index.js';
 import { colors, fonts, rtl, spacing, type } from '../../theme/index.js';
 import { subscriptionsApi } from '../../api/client.js';
+import { confirmAction, notify } from '../../lib/confirm.js';
 import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
 import type { GameType, DrawDay } from '@lotto-maker/shared';
 
@@ -43,22 +43,22 @@ export function SubscriptionsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleCancel(id: string) {
-    Alert.alert('ביטול מנוי', 'האם לבטל את המנוי?', [
-      { text: 'לא' },
-      {
-        text: 'כן, בטל',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await subscriptionsApi.cancel(id);
-            setSubs((s) => s.filter((x) => x.id !== id));
-          } catch {
-            Alert.alert('שגיאה', 'לא הצלחנו לבטל את המנוי. נסה שנית.');
-          }
-        },
+  function handleCancel(id: string) {
+    confirmAction({
+      title: 'ביטול מנוי',
+      message: 'האם לבטל את המנוי?',
+      cancelText: 'לא',
+      confirmText: 'כן, בטל',
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await subscriptionsApi.cancel(id);
+          setSubs((s) => s.filter((x) => x.id !== id));
+        } catch {
+          notify('שגיאה', 'לא הצלחנו לבטל את המנוי. נסה שנית.');
+        }
       },
-    ]);
+    });
   }
 
   function retry() {
@@ -78,12 +78,7 @@ export function SubscriptionsScreen() {
       ListHeaderComponent={
         <>
           <ScreenTitle title="מנויים" />
-          {error && (
-            <Notice tone="error">
-              <Text style={styles.errorText}>לא הצלחנו לטעון את המנויים.</Text>
-              <Button label="נסה שוב" onPress={retry} variant="ghost" size="sm" style={styles.retryBtn} />
-            </Notice>
-          )}
+          {error && <LoadError message="לא הצלחנו לטעון את המנויים." onRetry={retry} />}
         </>
       }
       ListEmptyComponent={error ? null : <EmptyState text="אין מנויים פעילים" />}
@@ -132,6 +127,4 @@ const styles = StyleSheet.create({
   dayText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.pine },
   nextDraw: { ...type.caption, marginBottom: 8, textAlign: rtl.textStart },
   cancelBtn: { alignSelf: rtl.alignEnd, marginTop: 4 },
-  errorText: { ...type.small, color: colors.dangerInk, textAlign: rtl.textStart },
-  retryBtn: { alignSelf: rtl.alignStart, marginTop: 10 },
 });

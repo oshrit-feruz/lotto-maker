@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ScrollView, Alert, Switch, ActivityIndicator,
+  View, Text, Pressable, StyleSheet, ScrollView, Switch, ActivityIndicator,
 } from 'react-native';
 import {
   GAME_DISPLAY_NAMES,
@@ -22,17 +22,20 @@ import { useCartStore } from '../../store/cart.store.js';
 import { ticketsApi } from '../../api/client.js';
 import type { TicketPayload, TicketPrice } from '../../api/client.js';
 import { nanoid } from 'nanoid/non-secure';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   onAddedToCart: () => void;
 }
 
 interface TableState {
+  /** Stable React key; never sent to the server. */
+  id: string;
   numbers: number[];
   strong: number | null;
 }
 
-const emptyTable = (): TableState => ({ numbers: [], strong: null });
+const emptyTable = (): TableState => ({ id: nanoid(), numbers: [], strong: null });
 const isComplete = (t: TableState) => t.numbers.length === LOTTO_PICK_COUNT && t.strong !== null;
 
 function resize(tables: TableState[], count: number): TableState[] {
@@ -130,9 +133,13 @@ export function LottoFormScreen({ onAddedToCart }: Readonly<Props>) {
     setLottomatBusy(true);
     try {
       const { tables: generated } = await ticketsApi.lottomat(type, tables.length);
-      setTables(generated.map((t) => ({ numbers: t.numbers, strong: t.strongNumbers[0] ?? null })));
+      setTables((prev) => generated.map((t, i) => ({
+        id: prev[i]?.id ?? nanoid(),
+        numbers: t.numbers,
+        strong: t.strongNumbers[0] ?? null,
+      })));
     } catch {
-      Alert.alert('שגיאה', 'לא ניתן להגריל מספרים כרגע.');
+      notify('שגיאה', 'לא ניתן להגריל מספרים כרגע.');
     } finally {
       setLottomatBusy(false);
     }
@@ -141,7 +148,7 @@ export function LottoFormScreen({ onAddedToCart }: Readonly<Props>) {
   function handleAddToCart() {
     if (!payload || !price) return;
     if (!price.enoughDraws) {
-      Alert.alert('אין מספיק הגרלות', 'עדיין לא פורסמו מספיק הגרלות קרובות. הקטן את מספר ההגרלות.');
+      notify('אין מספיק הגרלות', 'עדיין לא פורסמו מספיק הגרלות קרובות. הקטן את מספר ההגרלות.');
       return;
     }
     addItem({
@@ -218,7 +225,7 @@ export function LottoFormScreen({ onAddedToCart }: Readonly<Props>) {
           const done = isComplete(t);
           return (
             <Pressable
-              key={i}
+              key={t.id}
               style={[styles.chip, done && styles.chipDone, on && styles.chipActive]}
               onPress={() => setActive(i)}
               accessibilityRole="tab"
