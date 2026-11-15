@@ -17,14 +17,14 @@ export const Ball = memo(function Ball({
   size = 36,
   dim = false,
   style,
-}: {
+}: Readonly<{
   n: number | string;
   tone?: BallTone;
   size?: number;
   /** A number that did not match: kept legible but quiet. */
   dim?: boolean;
   style?: StyleProp<ViewStyle>;
-}) {
+}>) {
   const shade = ballShades[tone];
   return (
     <View
@@ -46,7 +46,7 @@ export const Ball = memo(function Ball({
 });
 
 /** Just the shaded sphere, for decoration and the brand mark. */
-export function BallFace({ size, tone }: { size: number; tone: BallTone }) {
+export function BallFace({ size, tone }: Readonly<{ size: number; tone: BallTone }>) {
   const shade = ballShades[tone];
   const L = rtl.physicalLeft;
   const body = size * 0.9;
@@ -87,7 +87,7 @@ export function BallRow({
   matched,
   strongMatched,
   gap = 6,
-}: {
+}: Readonly<{
   numbers: number[];
   strong?: number[];
   size?: number;
@@ -95,7 +95,7 @@ export function BallRow({
   matched?: Set<number>;
   strongMatched?: number | null;
   gap?: number;
-}) {
+}>) {
   return (
     <View style={[styles.row, { gap }]}>
       {numbers.map((n) => {
@@ -123,14 +123,14 @@ export const BallButton = memo(function BallButton({
   disabled,
   strong = false,
   onPress,
-}: {
+}: Readonly<{
   n: number;
   size: number;
   selected: boolean;
   disabled?: boolean;
   strong?: boolean;
   onPress: (n: number) => void;
-}) {
+}>) {
   const tone: BallTone = strong ? 'plum' : 'sun';
   const hit = Math.max(size, touch);
   return (

@@ -13,7 +13,7 @@ const TONES: Record<Tone, { bg: string; line: string; strip: string; ink: string
 };
 
 /** An inline message with a coloured strip on its start edge. */
-export function Notice({ tone, children, style }: { tone: Tone; children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function Notice({ tone, children, style }: Readonly<{ tone: Tone; children: ReactNode; style?: StyleProp<ViewStyle> }>) {
   const t = TONES[tone];
   return (
     <View
@@ -33,7 +33,7 @@ export function Notice({ tone, children, style }: { tone: Tone; children: ReactN
 }
 
 /** Nothing here yet: a dashed empty ball and one line of direction. */
-export function EmptyState({ text, children }: { text: string; children?: ReactNode }) {
+export function EmptyState({ text, children }: Readonly<{ text: string; children?: ReactNode }>) {
   return (
     <View style={styles.empty}>
       <View style={styles.emptyRing} />
@@ -43,7 +43,7 @@ export function EmptyState({ text, children }: { text: string; children?: ReactN
   );
 }
 
-export function Loading({ label }: { label?: string }) {
+export function Loading({ label }: Readonly<{ label?: string }>) {
   return (
     <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel={label ?? 'טוען'}>
       <ActivityIndicator size="large" color={colors.pine} />

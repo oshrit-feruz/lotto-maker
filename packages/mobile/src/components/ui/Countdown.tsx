@@ -22,7 +22,7 @@ function split(remaining: number): number[] {
  * right to left like the website's countdown. Purely visual: the caller ticks
  * `remainingMs` and prints the exact time next to it.
  */
-export function Countdown({ remainingMs }: { remainingMs: number | null }) {
+export function Countdown({ remainingMs }: Readonly<{ remainingMs: number | null }>) {
   const parts = remainingMs === null ? null : split(remainingMs);
   const spoken = parts
     ? UNITS.map((u, i) => `${parts[i]} ${u.label}`).join(', ')
