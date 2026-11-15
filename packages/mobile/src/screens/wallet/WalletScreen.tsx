@@ -7,6 +7,7 @@ import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { walletApi } from '../../api/client.js';
 import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { formatTxAmount, txDirection } from '../../lib/money.js';
 
 const PRESET_AMOUNTS = [20, 50, 100, 200];
 
@@ -125,15 +126,16 @@ export function WalletScreen() {
       ListEmptyComponent={<EmptyState text="אין עסקאות עדיין" />}
       contentContainerStyle={styles.list}
       renderItem={({ item }) => {
-        const isCredit = item.type === 'deposit' || item.type === 'winning' || item.type === 'refund';
+        const direction = txDirection(item.type, item.amount);
+        const color = TX_COLORS[item.type] ?? (direction === 'debit' ? colors.danger : colors.ink);
         return (
           <View style={styles.txRow}>
             <View style={styles.txMain}>
               <Text style={styles.txDesc}>{item.description}</Text>
               <Text style={styles.txDate}>{new Date(item.createdAt).toLocaleDateString('he-IL')}</Text>
             </View>
-            <Text style={[styles.txAmount, { color: TX_COLORS[item.type] ?? colors.ink }]}>
-              {isCredit ? '+' : '-'}₪{item.amount}
+            <Text style={[styles.txAmount, { color }]}>
+              {formatTxAmount(item.type, item.amount)}
             </Text>
           </View>
         );
