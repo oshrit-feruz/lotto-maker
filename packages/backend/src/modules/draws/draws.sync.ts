@@ -56,21 +56,6 @@ export async function fetchLottoDraw(drawNumber: number): Promise<ParsedLottoDra
   return parsed;
 }
 
-/**
- * The prize unit is a guess until a real pais response confirms it (parseAnnouncedPrizeDetailed):
- * say so whenever a value was read as millions, with the raw value, so it can be checked.
- */
-function warnIfPrizeUnitAssumed(info: NextLotteryInfo): void {
-  const fired = [
-    info.firstPrizeAssumedMillions ? `firstPrize=${JSON.stringify(info.firstPrizeRaw)} -> ${info.firstPrize}` : null,
-    info.doublePrizeAssumedMillions ? `secondPrize=${JSON.stringify(info.doublePrizeRaw)} -> ${info.doublePrize}` : null,
-  ].filter(Boolean);
-  if (fired.length > 0) {
-    console.warn(
-      `[draws] draw ${info.drawNumber}: announced prize below 1,000 read as millions (unverified unit): ${fired.join(', ')}`,
-    );
-  }
-}
 
 /**
  * Keeps the upcoming draw in sync with getNextLotteryDate. A draw that is still `scheduled`
@@ -79,7 +64,6 @@ function warnIfPrizeUnitAssumed(info: NextLotteryInfo): void {
 export async function syncUpcomingDraws(): Promise<void> {
   const info = await fetchNextLotteryInfo();
   const existing = await prisma.draw.findUnique({ where: { drawNumber: info.drawNumber } });
-  warnIfPrizeUnitAssumed(info);
   const prizes = {
     announcedFirstPrize: info.firstPrize,
     announcedDoublePrize: info.doublePrize,

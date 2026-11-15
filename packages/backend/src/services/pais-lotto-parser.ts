@@ -167,17 +167,18 @@ export interface NextLotteryInfo {
   salesCloseAt: Date;
   /** Assumed draw time: sales close plus DRAW_AFTER_CLOSE_MINUTES. */
   drawAt: Date;
-  /** Announced first prize in ILS ("12.00" -> 2 decimals), or null if missing / unparseable. */
+  /** Announced first prize in ILS with 2 decimals, or null if missing / unparseable. */
   firstPrize: string | null;
-  /** Announced double-lotto first prize (pais `secondPrize`), same format. */
+  /**
+   * Announced double-lotto first prize. pais does not send it in this response, so this is always
+   * null for now. pais's `secondPrize` is NOT the double prize (a real response had firstPrize
+   * 8,000,000 and secondPrize 750,000); it is kept as raw text only until its meaning is confirmed.
+   */
   doublePrize: string | null;
   /** `firstPrize` exactly as pais sent it (as text), or null when absent. */
   firstPrizeRaw: string | null;
-  /** `secondPrize` exactly as pais sent it (as text), or null when absent. */
+  /** `secondPrize` exactly as pais sent it (as text), or null when absent. Meaning unconfirmed. */
   doublePrizeRaw: string | null;
-  /** True when a prize was read as millions (see parseAnnouncedPrizeDetailed). */
-  firstPrizeAssumedMillions: boolean;
-  doublePrizeAssumedMillions: boolean;
 }
 
 /** Longest raw value kept; pais sends a short number, anything longer is cut. */
@@ -188,32 +189,23 @@ export interface AnnouncedPrize {
   value: string | null;
   /** The value as pais sent it, as text (cut to 100 chars), or null when absent. */
   raw: string | null;
-  /** True when the number was below 1,000 and so multiplied by 1,000,000. */
-  assumedMillions: boolean;
 }
 
 /**
- * UNVERIFIED UNIT HEURISTIC. We have not yet seen a real getNextLotteryDate response, so the unit
- * of firstPrize / secondPrize is a guess: shekels ("5,000,000", 5000000) or millions as the site
- * shows them ("5", "5.5", "5 מיליון"). A number below 1,000 is read as millions, since no lotto
- * first prize is that small. `assumedMillions` says when this fired; the caller logs it and keeps
- * `raw`, so a real response can confirm or correct the rule. Do not extend the guess further.
- *
- * Examples: "5,000,000" -> 5000000.00 (as is); 10 -> 10000000.00 (millions); "5.5 מיליון" ->
- * 5500000.00 (millions); "n/a" -> null.
+ * pais sends the announced prize as a number in shekels. Confirmed with a real
+ * getNextLotteryDate response on 15/11/2026: firstPrize 8000000 for an 8 million prize.
+ * Commas are tolerated ("8,000,000"). Anything that is not a positive number gives null.
  */
 export function parseAnnouncedPrizeDetailed(input: unknown): AnnouncedPrize {
-  if (input === null || input === undefined) return { value: null, raw: null, assumedMillions: false };
+  if (input === null || input === undefined) return { value: null, raw: null };
   const raw = String(input).trim().slice(0, RAW_PRIZE_MAX);
   const m = /(\d+(?:\.\d+)?)/.exec(raw.replace(/,/g, ''));
-  let value = m ? Number(m[1]) : NaN;
-  if (!Number.isFinite(value) || value <= 0) return { value: null, raw, assumedMillions: false };
-  const assumedMillions = value < 1000;
-  if (assumedMillions) value *= 1_000_000;
-  return { value: value.toFixed(2), raw, assumedMillions };
+  const value = m ? Number(m[1]) : NaN;
+  if (!Number.isFinite(value) || value <= 0) return { value: null, raw };
+  return { value: value.toFixed(2), raw };
 }
 
-/** The announced prize in shekels; see parseAnnouncedPrizeDetailed for the unit heuristic. */
+/** The announced prize in shekels (see parseAnnouncedPrizeDetailed). */
 export function parseAnnouncedPrize(raw: unknown): string | null {
   return parseAnnouncedPrizeDetailed(raw).value;
 }
@@ -249,16 +241,15 @@ export function parseNextLotteryResponse(json: unknown): NextLotteryInfo {
   if (!salesCloseAt || Number.isNaN(salesCloseAt.getTime())) throw new PaisParseError('draw date/time not parseable');
 
   const first = parseAnnouncedPrizeDetailed(rec['firstPrize']);
-  const double = parseAnnouncedPrizeDetailed(rec['secondPrize']);
+  // secondPrize is not the double-lotto prize; keep its raw text only (see NextLotteryInfo).
+  const second = parseAnnouncedPrizeDetailed(rec['secondPrize']);
   return {
     drawNumber,
     salesCloseAt,
     drawAt: new Date(salesCloseAt.getTime() + DRAW_AFTER_CLOSE_MINUTES * 60_000),
     firstPrize: first.value,
-    doublePrize: double.value,
+    doublePrize: null,
     firstPrizeRaw: first.raw,
-    doublePrizeRaw: double.raw,
-    firstPrizeAssumedMillions: first.assumedMillions,
-    doublePrizeAssumedMillions: double.assumedMillions,
+    doublePrizeRaw: second.raw,
   };
 }
