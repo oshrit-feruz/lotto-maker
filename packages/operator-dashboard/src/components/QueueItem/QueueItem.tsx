@@ -4,20 +4,20 @@ import { ScanUpload } from '../ScanUpload/ScanUpload.js';
 import { startSlot, doneSlot } from '../../api/client.js';
 import { useQueueStore } from '../../store/queue.store.js';
 import type { QueueSlotWithOrder } from '../../api/client.js';
-import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
+import { SLOT_STATUS_LABEL, slotTitle, systematicLabel } from '../../lib/display.js';
 
 interface Props {
   slot: QueueSlotWithOrder;
 }
+
+const STATUS_TONE: Record<string, string> = { in_progress: 'badge-plum', done: 'badge-ok' };
 
 export function QueueItem({ slot }: Props) {
   const { updateSlot, removeSlot } = useQueueStore();
   const [showScan, setShowScan] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const gameName = GAME_DISPLAY_NAMES[slot.order.gameType as keyof typeof GAME_DISPLAY_NAMES] ?? slot.order.gameType;
-  const typeDisplay = slot.order.ticketType === 'double' ? ' כפול' : '';
-  const extraDisplay = slot.order.extra ? ' + Extra' : '';
+  const systematic = systematicLabel(slot.order.systematicType);
 
   async function handleStart() {
     setLoading(true);
@@ -39,51 +39,67 @@ export function QueueItem({ slot }: Props) {
     }
   }
 
-  const borderColor = slot.status === 'in_progress' ? '#1a56db' : slot.status === 'done' ? '#057a55' : '#e5e7eb';
-
   return (
-    <div style={{ border: `2px solid ${borderColor}`, borderRadius: 8, padding: 16, marginBottom: 12, background: '#fff' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: '1.3rem', fontWeight: 700 }}>
-          {gameName}{typeDisplay}{extraDisplay}
-          {slot.order.drawNumber ? ` · הגרלה ${slot.order.drawNumber}` : ''}
-          {slot.order.systematicType ? ` · ${slot.order.systematicType}` : ''}
-        </span>
+    <article className="stub" data-status={slot.status}>
+      <div className="stub-head">
+        <div className="stub-title">
+          <h2>{slotTitle(slot.order)}</h2>
+          {slot.order.drawNumber ? <span className="chip">הגרלה {slot.order.drawNumber}</span> : null}
+          {systematic ? <span className="chip">{systematic}</span> : null}
+          <span className={`badge ${STATUS_TONE[slot.status] ?? ''}`}>{SLOT_STATUS_LABEL[slot.status] ?? slot.status}</span>
+        </div>
         <CountdownTimer deadline={slot.deadline} />
       </div>
 
-      {slot.order.tables.map((t, i) => (
-        <div
-          key={i}
-          style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: 2, marginBottom: 8, direction: 'ltr' }}
-        >
-          {i + 1}. {t.numbers.join(', ')} | חזק: {t.strongNumbers.join(', ')}
-        </div>
-      ))}
+      <div className="perf" aria-hidden="true" />
 
-      {slot.order.idLast4 && (
-        <div style={{ color: '#6b7280', marginBottom: 8 }}>
-          ת.ז. (4 ספרות אחרונות): <span style={{ direction: 'ltr', fontWeight: 600 }}>{slot.order.idLast4}</span>
-        </div>
-      )}
+      <ol className="tables">
+        {slot.order.tables.map((t, i) => (
+          <li key={i} aria-label={`טבלה ${i + 1}: ${t.numbers.join(', ')}${t.strongNumbers.length ? ` | חזק: ${t.strongNumbers.join(', ')}` : ''}`}>
+            <span className="table-no" aria-hidden="true">
+              {i + 1}
+            </span>
+            <span className="balls" dir="ltr" aria-hidden="true">
+              {t.numbers.map((n, j) => (
+                <span key={`n${j}`} className="ball">
+                  {n}
+                </span>
+              ))}
+              {t.strongNumbers.map((s, j) => (
+                <span key={`s${j}`} className="ball ball-strong" title="המספר החזק">
+                  {s}
+                </span>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ol>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {slot.status === 'waiting' && (
-          <button onClick={handleStart} disabled={loading} style={btnStyle('#1a56db')}>
-            התחלתי להקליד
-          </button>
+      <div className="stub-foot">
+        {slot.order.idLast4 && (
+          <div className="id-last4">
+            ת.ז. (4 ספרות אחרונות): <strong className="ltr">{slot.order.idLast4}</strong>
+          </div>
         )}
-        {slot.status === 'in_progress' && (
-          <button onClick={handleDone} disabled={loading} style={btnStyle('#057a55')}>
-            סיימתי
-          </button>
-        )}
-        {/* The scan can only be attached once the form has been keyed */}
-        {slot.status === 'done' && (
-          <button onClick={() => setShowScan(true)} style={btnStyle('#6b7280')}>
-            סרוק טופס
-          </button>
-        )}
+
+        <div className="actions">
+          {slot.status === 'waiting' && (
+            <button onClick={handleStart} disabled={loading} className="btn">
+              התחלתי להקליד
+            </button>
+          )}
+          {slot.status === 'in_progress' && (
+            <button onClick={handleDone} disabled={loading} className="btn btn-accent">
+              סיימתי
+            </button>
+          )}
+          {/* The scan can only be attached once the form has been keyed */}
+          {slot.status === 'done' && (
+            <button onClick={() => setShowScan(true)} className="btn">
+              סרוק טופס
+            </button>
+          )}
+        </div>
       </div>
 
       {showScan && (
@@ -97,19 +113,6 @@ export function QueueItem({ slot }: Props) {
           }}
         />
       )}
-    </div>
+    </article>
   );
-}
-
-function btnStyle(bg: string): React.CSSProperties {
-  return {
-    background: bg,
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    padding: '10px 20px',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    fontWeight: 600,
-  };
 }

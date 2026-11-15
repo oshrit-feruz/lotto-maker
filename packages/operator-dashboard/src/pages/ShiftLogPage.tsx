@@ -9,17 +9,29 @@ export function ShiftLogPage() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 16, fontFamily: 'system-ui, sans-serif', direction: 'rtl' }}>
-      <h1>לוג משמרת</h1>
+    <main className="page">
+      <div className="page-head">
+        <h1>לוג משמרת</h1>
+        {log && (
+          <span className="badge">
+            תאריך: <span className="ltr">{log.date}</span>
+          </span>
+        )}
+      </div>
       {log ? (
-        <div style={{ background: '#f9fafb', borderRadius: 8, padding: 20 }}>
-          <p>תאריך: {log.date}</p>
-          <p style={{ fontSize: '2rem', fontWeight: 700, color: '#057a55' }}>✓ הושלמו: {log.done}</p>
-          <p style={{ fontSize: '1.5rem', color: '#e02424' }}>✗ נכשלו: {log.failed}</p>
+        <div className="stats">
+          <div className="stat">
+            <p className="stat-label">✓ הושלמו</p>
+            <p className="stat-value">{log.done}</p>
+          </div>
+          <div className="stat bad">
+            <p className="stat-label">✗ נכשלו</p>
+            <p className="stat-value">{log.failed}</p>
+          </div>
         </div>
       ) : (
-        <p>טוען...</p>
+        <p className="muted">טוען...</p>
       )}
-    </div>
+    </main>
   );
 }

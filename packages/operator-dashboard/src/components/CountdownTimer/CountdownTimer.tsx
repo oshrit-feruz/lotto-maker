@@ -1,4 +1,5 @@
 import { useCountdown } from '../../hooks/useCountdown.js';
+import { pad2 } from '../../lib/display.js';
 
 interface Props {
   deadline: string;
@@ -6,12 +7,10 @@ interface Props {
 
 export function CountdownTimer({ deadline }: Props) {
   const { minutes, seconds, isUrgent } = useCountdown(deadline);
-  const color = isUrgent ? '#e02424' : '#1a56db';
-  const pad = (n: number) => String(n).padStart(2, '0');
 
   return (
-    <span style={{ color, fontWeight: 700, fontSize: '1.1rem', fontVariantNumeric: 'tabular-nums' }}>
-      {pad(minutes)}:{pad(seconds)}
+    <span className={isUrgent ? 'countdown urgent' : 'countdown'} title="זמן עד המועד האחרון">
+      {pad2(minutes)}:{pad2(seconds)}
     </span>
   );
 }
