@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Alert, RefreshControl,
+  View, Text, FlatList, StyleSheet, Pressable, Alert, RefreshControl,
 } from 'react-native';
+import { Amount, BallFace, EmptyState, Loading } from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { walletApi } from '../../api/client.js';
 import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
@@ -18,10 +19,10 @@ interface TxRow {
 }
 
 const TX_COLORS: Record<string, string> = {
-  deposit: '#057a55',
-  winning: '#d97706',
-  charge: '#e02424',
-  refund: '#6b7280',
+  deposit: colors.ok,
+  winning: colors.plum,
+  charge: colors.danger,
+  refund: colors.muted,
 };
 
 export function WalletScreen() {
@@ -83,41 +84,55 @@ export function WalletScreen() {
     }
   });
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#1a56db" />;
+  if (loading) return <Loading />;
 
   return (
     <FlatList
       data={txs}
       keyExtractor={(t) => t.id}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+      style={styles.screen}
+      refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.pine} colors={[colors.pine]} onRefresh={() => { setRefreshing(true); load(); }} />}
       ListHeaderComponent={() => (
         <View>
           <View style={styles.balanceCard}>
+            <View style={styles.balanceDeco} pointerEvents="none">
+              <BallFace size={110} tone="sun" />
+            </View>
             <Text style={styles.balanceLabel}>יתרת ארנק</Text>
-            <Text style={styles.balance}>₪{user?.walletBalance ?? '0.00'}</Text>
+            <Amount value={`₪${user?.walletBalance ?? '0.00'}`} style={styles.balance} />
           </View>
+
           <Text style={styles.sectionTitle}>טען ארנק</Text>
           <View style={styles.presetRow}>
             {PRESET_AMOUNTS.map((amt) => (
-              <TouchableOpacity key={amt} style={[styles.presetBtn, paying && { opacity: 0.5 }]} disabled={paying} onPress={() => handleDeposit(amt)}>
-                <Text style={styles.presetText}>₪{amt}</Text>
-              </TouchableOpacity>
+              <Pressable
+                key={amt}
+                style={({ pressed }) => [styles.presetBtn, paying && styles.presetDisabled, pressed && !paying && styles.presetPressed]}
+                disabled={paying}
+                onPress={() => handleDeposit(amt)}
+                accessibilityRole="button"
+                accessibilityLabel={`טען ${amt} שקלים`}
+                accessibilityState={{ disabled: paying }}
+              >
+                <Amount value={`₪${amt}`} style={styles.presetText} />
+              </Pressable>
             ))}
           </View>
+
           <Text style={styles.sectionTitle}>היסטוריית עסקאות</Text>
         </View>
       )}
-      ListEmptyComponent={<Text style={styles.empty}>אין עסקאות עדיין</Text>}
+      ListEmptyComponent={<EmptyState text="אין עסקאות עדיין" />}
       contentContainerStyle={styles.list}
       renderItem={({ item }) => {
         const isCredit = item.type === 'deposit' || item.type === 'winning' || item.type === 'refund';
         return (
           <View style={styles.txRow}>
-            <View>
+            <View style={styles.txMain}>
               <Text style={styles.txDesc}>{item.description}</Text>
               <Text style={styles.txDate}>{new Date(item.createdAt).toLocaleDateString('he-IL')}</Text>
             </View>
-            <Text style={[styles.txAmount, { color: TX_COLORS[item.type] ?? '#374151' }]}>
+            <Text style={[styles.txAmount, { color: TX_COLORS[item.type] ?? colors.ink }]}>
               {isCredit ? '+' : '-'}₪{item.amount}
             </Text>
           </View>
@@ -128,26 +143,31 @@ export function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { padding: 12 },
+  screen: { backgroundColor: colors.paper },
+  list: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   balanceCard: {
-    backgroundColor: '#1a56db', borderRadius: 14, padding: 24,
-    alignItems: 'center', marginBottom: 16,
+    backgroundColor: colors.pine, borderRadius: radii.lg, paddingVertical: 26, paddingHorizontal: 22,
+    marginBottom: spacing.xl, overflow: 'hidden',
   },
-  balanceLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginBottom: 4 },
-  balance: { color: '#fff', fontSize: 36, fontWeight: '700' },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6b7280', marginBottom: 8, marginTop: 4 },
-  presetRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  balanceDeco: { position: 'absolute', top: -34, [rtl.physicalLeft]: -30 },
+  balanceLabel: { ...type.label, color: colors.onPineMuted, textAlign: rtl.textStart },
+  balance: { color: colors.brandInk, fontSize: 44, lineHeight: 52, textAlign: rtl.textStart },
+  sectionTitle: { ...type.h3, textAlign: rtl.textStart, marginBottom: 10 },
+  presetRow: { flexDirection: rtl.row, gap: 8, marginBottom: spacing.xl },
   presetBtn: {
-    flex: 1, padding: 12, backgroundColor: '#eff6ff',
-    borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#bfdbfe',
+    flex: 1, minHeight: 52, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.sun, borderBottomWidth: 3, borderBottomColor: colors.sunDeep,
   },
-  presetText: { fontSize: 16, fontWeight: '700', color: '#1a56db' },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 30 },
+  presetPressed: { backgroundColor: colors.sunHover, transform: [{ translateY: 1 }] },
+  presetDisabled: { backgroundColor: colors.disabledBg, borderBottomWidth: 0 },
+  presetText: { fontSize: 20, lineHeight: 24, color: colors.pineDeep },
   txRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f3f4f6',
+    flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8,
+    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.line,
   },
-  txDesc: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  txDate: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  txAmount: { fontSize: 16, fontWeight: '700' },
+  txMain: { flex: 1 },
+  txDesc: { ...type.body, fontSize: 15, lineHeight: 21, textAlign: rtl.textStart },
+  txDate: { ...type.caption, marginTop: 2, textAlign: rtl.textStart },
+  txAmount: { fontFamily: fonts.bodyBold, fontSize: 16, fontVariant: ['tabular-nums'] },
 });

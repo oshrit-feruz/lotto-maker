@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { BallFace, Button, Countdown, Perforation, ResponsibleNotice, Stub } from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
 import type { GameType } from '@lotto-maker/shared';
 import { drawsApi } from '../../api/client.js';
@@ -12,29 +14,8 @@ const GAME_DESCRIPTIONS: Record<GameType, string> = {
   one23: '3 מספרים מ-9',
 };
 
-const GAME_COLORS: Record<GameType, string> = {
-  lotto: '#1a56db',
-  chance: '#f97316',
-  seven77: '#7c3aed',
-  one23: '#059669',
-};
-
-const GAME_ICONS: Record<GameType, string> = {
-  lotto: '🎱',
-  chance: '🃏',
-  seven77: '7️⃣',
-  one23: '🔢',
-};
-
-function formatCountdown(ms: number): string {
-  if (ms <= 0) return 'מתחיל עכשיו';
-  const totalSec = Math.floor(ms / 1000);
-  const days = Math.floor(totalSec / 86400);
-  const hours = Math.floor((totalSec % 86400) / 3600);
-  const mins = Math.floor((totalSec % 3600) / 60);
-  const secs = totalSec % 60;
-  if (days > 0) return `${days}י ${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 interface Props {
@@ -70,99 +51,105 @@ export function GameSelectScreen({ onSelect }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={styles.title}>בחר משחק</Text>
-      <Text style={styles.subtitle}>הגרלות בימי שלישי ושבת, ולעיתים גם ביום נוסף</Text>
-      {games.map((game) => {
-        const draw = upcoming.find((u) => u.gameType === game);
-        const color = GAME_COLORS[game];
-        const isOpen = draw ? now < new Date(draw.hardCutoff).getTime() : false;
-        const msUntilDraw = draw ? new Date(draw.drawTime).getTime() - now : 0;
+      <View style={styles.hero}>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[styles.deco, { top: -30, [rtl.physicalLeft]: -36 }]}><BallFace size={120} tone="sun" /></View>
+          <View style={[styles.deco, { top: -18, [rtl.physicalLeft]: 70 }]}><BallFace size={64} tone="plum" /></View>
+          <View style={[styles.deco, { top: 92, [rtl.physicalLeft]: 34 }]}><BallFace size={34} tone="white" /></View>
+        </View>
+        <Text style={styles.title} accessibilityRole="header">בחר משחק</Text>
+        <Text style={styles.subtitle}>הגרלות בימי שלישי ושבת, ולעיתים גם ביום נוסף</Text>
 
-        return (
-          <TouchableOpacity
-            key={game}
-            style={[styles.card, { borderLeftColor: color, borderLeftWidth: 4 }]}
-            onPress={() => onSelect(game)}
-            activeOpacity={0.8}
-          >
-            {/* Header row */}
-            <View style={styles.cardHeader}>
-              <View style={styles.cardTitleRow}>
-                <Text style={styles.gameIcon}>{GAME_ICONS[game]}</Text>
-                <Text style={[styles.gameName, { color }]}>{GAME_DISPLAY_NAMES[game]}</Text>
+        {games.map((game) => {
+          const draw = upcoming.find((u) => u.gameType === game);
+          const isOpen = draw ? now < new Date(draw.hardCutoff).getTime() : false;
+          const msUntilDraw = draw ? new Date(draw.drawTime).getTime() - now : 0;
+
+          return (
+            <Stub key={game} raised bordered={false} style={styles.stub}>
+              {/* Game and open/closed */}
+              <View style={styles.metaRow}>
+                <Text style={styles.gameName}>{GAME_DISPLAY_NAMES[game]}</Text>
+                {loadingDraws ? (
+                  <ActivityIndicator size="small" color={colors.pine} />
+                ) : (
+                  <View style={[styles.statusBadge, isOpen ? styles.statusOpen : styles.statusClosed]}>
+                    <Text style={[styles.statusText, { color: isOpen ? colors.okInk : colors.dangerInk }]}>
+                      {isOpen ? 'פתוח ✓' : 'סגור'}
+                    </Text>
+                  </View>
+                )}
               </View>
-              {!loadingDraws && (
-                <View style={[styles.statusBadge, { backgroundColor: isOpen ? '#d1fae5' : '#fee2e2' }]}>
-                  <Text style={[styles.statusText, { color: isOpen ? '#065f46' : '#991b1b' }]}>
-                    {isOpen ? 'פתוח ✓' : 'סגור'}
-                  </Text>
-                </View>
-              )}
-              {loadingDraws && <ActivityIndicator size="small" color={color} />}
-            </View>
-
-            {/* Description + countdown row */}
-            <View style={styles.cardBody}>
               <Text style={styles.gameDesc}>{GAME_DESCRIPTIONS[game]}</Text>
               {draw && (
-                <View style={styles.countdownRow}>
+                <Text style={styles.drawMeta}>
+                  {draw.drawNumber ? `הגרלה מס׳ ${draw.drawNumber} · ` : ''}
+                  <Text style={styles.drawMetaStrong}>{formatWhen(draw.drawTime)}</Text>
+                </Text>
+              )}
+
+              {draw && (
+                <>
+                  <Perforation notchColor={colors.pine} bordered={false} />
                   <Text style={styles.countdownLabel}>
                     {msUntilDraw > 0 ? 'הגרלה בעוד' : 'הגרלה בקרוב'}
                   </Text>
-                  {msUntilDraw > 0 && (
-                    <Text style={[styles.countdownValue, { color }]}>
-                      {formatCountdown(msUntilDraw)}
-                    </Text>
-                  )}
-                </View>
+                  {msUntilDraw > 0 && <Countdown remainingMs={msUntilDraw} />}
+                  <Text style={styles.cutoffLine}>הזמנות נסגרות: {formatWhen(draw.hardCutoff)}</Text>
+                </>
               )}
-            </View>
 
-            {/* Price: depends on the tables chosen, shown live on the ticket screen */}
-            <View style={styles.cardFooter}>
+              {/* Price: depends on the tables chosen, shown live on the ticket screen */}
               <Text style={styles.priceLabel}>המחיר מחושב לפי מספר הטבלאות</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
+              <Button
+                label="למילוי טופס"
+                onPress={() => onSelect(game)}
+                variant="accent"
+                size="lg"
+                block
+                accessibilityLabel={`למילוי טופס ${GAME_DISPLAY_NAMES[game]}`}
+              />
+            </Stub>
+          );
+        })}
+      </View>
+
+      <ResponsibleNotice />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#f9fafb', flexGrow: 1, paddingBottom: 32 },
-  title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 4, marginTop: 8, color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 20 },
+  container: { padding: spacing.lg, backgroundColor: colors.paper, flexGrow: 1, paddingBottom: spacing.xxxl },
 
-  card: {
-    backgroundColor: '#fff', borderRadius: 12,
-    marginBottom: 14, elevation: 2,
-    shadowColor: '#000', shadowOpacity: 0.06,
-    shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+  hero: {
+    backgroundColor: colors.pine,
+    borderRadius: radii.lg,
+    paddingTop: 28,
+    paddingHorizontal: 18,
+    paddingBottom: 4,
+    marginBottom: spacing.lg,
     overflow: 'hidden',
   },
-  cardHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 6,
+  deco: { position: 'absolute' },
+  title: {
+    fontFamily: fonts.display, fontSize: 38, lineHeight: 42, color: colors.brandInk,
+    textAlign: rtl.textStart, marginBottom: 6,
   },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  gameIcon: { fontSize: 22 },
-  gameName: { fontSize: 20, fontWeight: '700' },
-  statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  statusText: { fontSize: 12, fontWeight: '700' },
+  subtitle: { ...type.body, color: colors.onPineMuted, textAlign: rtl.textStart, marginBottom: spacing.xxl, maxWidth: 260, alignSelf: rtl.alignStart },
 
-  cardBody: { paddingHorizontal: 14, paddingBottom: 8 },
-  gameDesc: { fontSize: 13, color: '#6b7280', marginBottom: 6 },
-  countdownRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  countdownLabel: { fontSize: 12, color: '#9ca3af' },
-  countdownValue: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  stub: { marginBottom: 18 },
+  metaRow: { flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  gameName: { ...type.h2, color: colors.pineDeep },
+  statusBadge: { borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 4 },
+  statusOpen: { backgroundColor: colors.okSoft },
+  statusClosed: { backgroundColor: colors.dangerSoft },
+  statusText: { fontFamily: fonts.bodyBold, fontSize: 13 },
+  gameDesc: { ...type.small, textAlign: rtl.textStart },
+  drawMeta: { ...type.small, textAlign: rtl.textStart, marginTop: 2 },
+  drawMetaStrong: { fontFamily: fonts.bodyMedium, color: colors.ink },
 
-  cardFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderTopWidth: 1, borderTopColor: '#f3f4f6',
-    backgroundColor: '#fafafa',
-  },
-  price: { fontSize: 20, fontWeight: '800' },
-  priceLabel: { fontSize: 12, color: '#9ca3af' },
+  countdownLabel: { ...type.label, textAlign: rtl.textStart, marginBottom: 8 },
+  cutoffLine: { ...type.caption, textAlign: rtl.textStart, marginTop: 10 },
+  priceLabel: { ...type.caption, textAlign: 'center', marginTop: 14, marginBottom: 10 },
 });

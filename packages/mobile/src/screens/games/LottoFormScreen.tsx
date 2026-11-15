@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Switch, ActivityIndicator,
+  View, Text, Pressable, StyleSheet, ScrollView, Alert, Switch, ActivityIndicator,
 } from 'react-native';
 import {
   GAME_DISPLAY_NAMES,
@@ -14,6 +14,10 @@ import {
 } from '@lotto-maker/shared';
 import type { TicketType } from '@lotto-maker/shared';
 import { NumberPicker } from '../../components/NumberPicker/NumberPicker.js';
+import {
+  Amount, BallFace, Button, Card, Notice, Perforation, ScreenTitle, Segmented, Stub,
+} from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, spacing, type as typo } from '../../theme/index.js';
 import { useCartStore } from '../../store/cart.store.js';
 import { ticketsApi } from '../../api/client.js';
 import type { TicketPayload, TicketPrice } from '../../api/client.js';
@@ -151,99 +155,130 @@ export function LottoFormScreen({ onAddedToCart }: Props) {
   }
 
   const current = tables[active] ?? emptyTable();
+  const canAdd = !!(price && payload && price.enoughDraws);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{GAME_DISPLAY_NAMES.lotto}</Text>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScreenTitle title={GAME_DISPLAY_NAMES.lotto} />
 
-      <View style={styles.segment}>
-        {(['regular', 'double'] as const).map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.segmentBtn, type === t && styles.segmentBtnOn]}
-            onPress={() => changeType(t)}
-          >
-            <Text style={[styles.segmentText, type === t && styles.segmentTextOn]}>{TICKET_TYPE_LABELS[t]}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <Card>
+        <Segmented
+          options={(['regular', 'double'] as const).map((t) => ({ value: t, label: TICKET_TYPE_LABELS[t] }))}
+          value={type}
+          onChange={changeType}
+          style={styles.segment}
+        />
 
-      <Stepper
-        label="מספר טבלאות (זוגי)"
-        value={tables.length}
-        onMinus={() => changeTableCount(-1)}
-        onPlus={() => changeTableCount(1)}
-        minusDisabled={tables.length <= limits.minTables}
-        plusDisabled={tables.length >= limits.maxTables}
-      />
-      <Stepper
-        label="מספר הגרלות"
-        value={drawCount}
-        onMinus={() => setDrawCount((d) => Math.max(1, d - 1))}
-        onPlus={() => setDrawCount((d) => Math.min(MAX_DRAW_COUNT, d + 1))}
-        minusDisabled={drawCount <= 1}
-        plusDisabled={drawCount >= MAX_DRAW_COUNT}
-      />
+        <Stepper
+          label="מספר טבלאות (זוגי)"
+          value={tables.length}
+          onMinus={() => changeTableCount(-1)}
+          onPlus={() => changeTableCount(1)}
+          minusDisabled={tables.length <= limits.minTables}
+          plusDisabled={tables.length >= limits.maxTables}
+        />
+        <Stepper
+          label="מספר הגרלות"
+          value={drawCount}
+          onMinus={() => setDrawCount((d) => Math.max(1, d - 1))}
+          onPlus={() => setDrawCount((d) => Math.min(MAX_DRAW_COUNT, d + 1))}
+          minusDisabled={drawCount <= 1}
+          plusDisabled={drawCount >= MAX_DRAW_COUNT}
+        />
 
-      <View style={styles.extraRow}>
-        <Text style={styles.extraLabel}>Extra</Text>
-        <Switch value={extra} onValueChange={setExtra} />
-      </View>
+        <View style={styles.extraRow}>
+          <Text style={styles.rowLabel}>Extra</Text>
+          <Switch
+            value={extra}
+            onValueChange={setExtra}
+            trackColor={{ false: colors.line, true: colors.pine }}
+            thumbColor={extra ? colors.sun : colors.surface}
+            accessibilityLabel="Extra"
+          />
+        </View>
 
-      <TouchableOpacity style={styles.lottomatBtn} onPress={lottomat} disabled={lottomatBusy}>
-        <Text style={styles.lottomatText}>{lottomatBusy ? 'מגריל...' : 'לוטומט — הגרל את כל הטבלאות 🎲'}</Text>
-      </TouchableOpacity>
+        <Button
+          label={lottomatBusy ? 'מגריל...' : 'לוטומט — הגרל את כל הטבלאות'}
+          onPress={lottomat}
+          disabled={lottomatBusy}
+          variant="ghost"
+          block
+          icon={<LottomatIcon />}
+        />
+      </Card>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {tables.map((t, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[styles.chip, active === i && styles.chipActive]}
-            onPress={() => setActive(i)}
-          >
-            <Text style={[styles.chipText, active === i && styles.chipTextActive]}>
-              {i + 1}{isComplete(t) ? ' ✓' : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+        style={styles.chipsScroll}
+      >
+        {tables.map((t, i) => {
+          const on = active === i;
+          const done = isComplete(t);
+          return (
+            <Pressable
+              key={i}
+              style={[styles.chip, done && styles.chipDone, on && styles.chipActive]}
+              onPress={() => setActive(i)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`טבלה ${i + 1}${done ? ', מלאה' : ''}`}
+            >
+              <Text style={[styles.chipText, on && styles.chipTextActive]}>{i + 1}</Text>
+              {done && (
+                <View style={[styles.chipDot, on && styles.chipDotActive]}>
+                  <Text style={[styles.chipDotText, on && styles.chipDotTextActive]}>✓</Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
-      <Text style={styles.instruction}>טבלה {active + 1}: בחר {LOTTO_PICK_COUNT} מספרים מ-1 עד {LOTTO_NUMBER_MAX}</Text>
-      <NumberPicker
-        poolSize={LOTTO_NUMBER_MAX}
-        selected={current.numbers}
-        maxPick={LOTTO_PICK_COUNT}
-        onToggle={toggleNumber}
-      />
+      <View style={[styles.tableCard, isComplete(current) && styles.tableCardDone]}>
+        <View style={styles.pickerLabel}>
+          <Text style={styles.tableTitle}>טבלה {active + 1}</Text>
+          <Text style={styles.pickerCount}>{current.numbers.length}/{LOTTO_PICK_COUNT}</Text>
+        </View>
+        <Text style={styles.instruction}>בחר {LOTTO_PICK_COUNT} מספרים מ-1 עד {LOTTO_NUMBER_MAX}</Text>
+        <NumberPicker
+          poolSize={LOTTO_NUMBER_MAX}
+          selected={current.numbers}
+          maxPick={LOTTO_PICK_COUNT}
+          onToggle={toggleNumber}
+        />
 
-      <Text style={[styles.instruction, { marginTop: 16 }]}>מספר חזק מ-1 עד {LOTTO_STRONG_MAX}</Text>
-      <View style={styles.strongRow}>
-        {Array.from({ length: LOTTO_STRONG_MAX }, (_, i) => i + 1).map((n) => (
-          <TouchableOpacity
-            key={n}
-            onPress={() => setStrong(n)}
-            style={[styles.strongBall, current.strong === n && styles.strongBallSelected]}
-          >
-            <Text style={[styles.strongText, current.strong === n && styles.strongTextSelected]}>{n}</Text>
-          </TouchableOpacity>
-        ))}
+        <View style={[styles.pickerLabel, styles.strongLabel]}>
+          <Text style={styles.strongTitle}>מספר חזק מ-1 עד {LOTTO_STRONG_MAX}</Text>
+          <Text style={[styles.pickerCount, { color: colors.plum }]}>{current.strong !== null ? 1 : 0}/1</Text>
+        </View>
+        <NumberPicker
+          poolSize={LOTTO_STRONG_MAX}
+          selected={current.strong !== null ? [current.strong] : []}
+          maxPick={LOTTO_STRONG_MAX}
+          onToggle={setStrong}
+          strong
+        />
       </View>
 
       {duplicateDraws.length > 0 && (
-        <View style={styles.warning}>
-          <Text style={styles.warningText}>
-            שים לב: כבר הזמנת את אותם מספרים בהגרלה {duplicateDraws.join(', ')}. אפשר להמשיך.
-          </Text>
-        </View>
+        <Notice tone="warn">
+          {`שים לב: כבר הזמנת את אותם מספרים בהגרלה ${duplicateDraws.join(', ')}. אפשר להמשיך.`}
+        </Notice>
       )}
 
-      <View style={styles.priceBox}>
-        {pricing && <ActivityIndicator color="#1a56db" />}
+      <Stub>
+        {pricing && <ActivityIndicator color={colors.pine} style={{ marginVertical: 8 }} />}
         {!pricing && price && (
           <>
             <PriceLine label="מחיר פיס" value={(Number(price.perOrder.paisPrice) + Number(price.perOrder.extraPrice)) * drawCount} />
             <PriceLine label="עמלת שירות" value={Number(price.perOrder.fee) * drawCount} />
-            <PriceLine label={`סה"כ (${drawCount} הגרלות)`} value={Number(price.total)} bold />
+            <Perforation />
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>{`סה"כ (${drawCount} הגרלות)`}</Text>
+              <Amount value={`₪${Number(price.total).toFixed(2)}`} style={styles.totalValue} />
+            </View>
             {!price.enoughDraws && (
               <Text style={styles.warningText}>פורסמו רק {price.draws.length} הגרלות קרובות.</Text>
             )}
@@ -253,18 +288,28 @@ export function LottoFormScreen({ onAddedToCart }: Props) {
           <Text style={styles.priceHint}>{allComplete ? 'מחשב מחיר...' : 'השלם את כל הטבלאות כדי לראות מחיר'}</Text>
         )}
         {priceError && <Text style={styles.errorText}>{priceError}</Text>}
-      </View>
 
-      <TouchableOpacity
-        style={[styles.addBtn, !(price && payload && price.enoughDraws) && styles.addBtnDisabled]}
-        onPress={handleAddToCart}
-        disabled={!(price && payload && price.enoughDraws)}
-      >
-        <Text style={styles.addBtnText}>
-          {price ? `הוסף לעגלה — ₪${Number(price.total).toFixed(2)}` : 'הוסף לעגלה'}
-        </Text>
-      </TouchableOpacity>
+        <Button
+          label={price ? `הוסף לעגלה — ₪${Number(price.total).toFixed(2)}` : 'הוסף לעגלה'}
+          onPress={handleAddToCart}
+          disabled={!canAdd}
+          variant="accent"
+          size="lg"
+          block
+          style={styles.addBtn}
+        />
+      </Stub>
     </ScrollView>
+  );
+}
+
+/** Two small balls, sun and plum: the lottomat (random pick) mark. */
+function LottomatIcon() {
+  return (
+    <View style={styles.lottomatIcon}>
+      <BallFace size={14} tone="sun" />
+      <BallFace size={14} tone="plum" />
+    </View>
   );
 }
 
@@ -274,67 +319,103 @@ function Stepper(props: {
 }) {
   return (
     <View style={styles.stepperRow}>
-      <Text style={styles.stepperLabel}>{props.label}</Text>
+      <Text style={styles.rowLabel}>{props.label}</Text>
       <View style={styles.stepper}>
-        <TouchableOpacity onPress={props.onMinus} disabled={props.minusDisabled} style={[styles.stepBtn, props.minusDisabled && styles.addBtnDisabled]}>
-          <Text style={styles.stepBtnText}>−</Text>
-        </TouchableOpacity>
+        <StepButton glyph="+" label={`הוסף: ${props.label}`} onPress={props.onPlus} disabled={props.plusDisabled} />
         <Text style={styles.stepValue}>{props.value}</Text>
-        <TouchableOpacity onPress={props.onPlus} disabled={props.plusDisabled} style={[styles.stepBtn, props.plusDisabled && styles.addBtnDisabled]}>
-          <Text style={styles.stepBtnText}>+</Text>
-        </TouchableOpacity>
+        <StepButton glyph="−" label={`הפחת: ${props.label}`} onPress={props.onMinus} disabled={props.minusDisabled} />
       </View>
     </View>
   );
 }
 
-function PriceLine({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+function StepButton({ glyph, label, onPress, disabled }: { glyph: string; label: string; onPress: () => void; disabled: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [styles.stepBtn, disabled && styles.stepBtnDisabled, pressed && !disabled && styles.stepBtnPressed]}
+    >
+      <Text style={[styles.stepBtnText, disabled && { color: colors.faint }]}>{glyph}</Text>
+    </Pressable>
+  );
+}
+
+function PriceLine({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.priceLine}>
-      <Text style={[styles.priceText, bold && styles.priceBold]}>{label}</Text>
-      <Text style={[styles.priceText, bold && styles.priceBold]}>₪{value.toFixed(2)}</Text>
+      <Text style={styles.priceText}>{label}</Text>
+      <Text style={[styles.priceText, styles.priceNum]}>₪{value.toFixed(2)}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#fff', flexGrow: 1 },
-  title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 12 },
-  instruction: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 12 },
-  segment: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: '#1a56db', overflow: 'hidden', marginBottom: 12 },
-  segmentBtn: { flex: 1, padding: 12, alignItems: 'center' },
-  segmentBtnOn: { backgroundColor: '#1a56db' },
-  segmentText: { color: '#1a56db', fontWeight: '600' },
-  segmentTextOn: { color: '#fff' },
-  stepperRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  stepperLabel: { fontSize: 15, color: '#374151' },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#1a56db', alignItems: 'center', justifyContent: 'center' },
-  stepBtnText: { fontSize: 20, color: '#1a56db', fontWeight: '700' },
-  stepValue: { fontSize: 18, fontWeight: '700', minWidth: 24, textAlign: 'center' },
-  extraRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  extraLabel: { fontSize: 15, color: '#374151' },
-  lottomatBtn: { borderWidth: 1, borderColor: '#1a56db', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 12 },
-  lottomatText: { color: '#1a56db', fontSize: 15, fontWeight: '600' },
-  chips: { gap: 8, paddingVertical: 8 },
-  chip: { minWidth: 44, paddingHorizontal: 10, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center' },
-  chipActive: { backgroundColor: '#1a56db', borderColor: '#1a56db' },
-  chipText: { color: '#374151', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  strongRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 16 },
-  strongBall: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: '#f59e0b', alignItems: 'center', justifyContent: 'center' },
-  strongBallSelected: { backgroundColor: '#f59e0b' },
-  strongText: { fontSize: 15, fontWeight: '700', color: '#92400e' },
-  strongTextSelected: { color: '#fff' },
-  warning: { backgroundColor: '#fef3c7', borderRadius: 8, padding: 12, marginBottom: 12 },
-  warningText: { color: '#92400e', textAlign: 'right' },
-  errorText: { color: '#e02424', textAlign: 'right' },
-  priceBox: { backgroundColor: '#f9fafb', borderRadius: 8, padding: 12, marginBottom: 12, minHeight: 56, justifyContent: 'center' },
-  priceHint: { color: '#9ca3af', textAlign: 'center' },
-  priceLine: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  priceText: { fontSize: 15, color: '#374151' },
-  priceBold: { fontWeight: '700', fontSize: 17 },
-  addBtn: { backgroundColor: '#1a56db', borderRadius: 10, padding: 16, alignItems: 'center' },
-  addBtnDisabled: { opacity: 0.5 },
-  addBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  container: { padding: spacing.lg, backgroundColor: colors.paper, flexGrow: 1, paddingBottom: spacing.xxxl },
+  segment: { marginBottom: spacing.md },
+  rowLabel: { ...typo.label, textAlign: rtl.textStart, flexShrink: 1 },
+  stepperRow: {
+    flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.line,
+  },
+  stepper: { flexDirection: rtl.row, alignItems: 'center', gap: 10 },
+  stepBtn: {
+    width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: colors.line,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface,
+  },
+  stepBtnPressed: { backgroundColor: colors.brandSoft },
+  stepBtnDisabled: { opacity: 0.55 },
+  stepBtnText: { fontFamily: fonts.bodyBold, fontSize: 22, lineHeight: 26, color: colors.pine },
+  stepValue: { fontFamily: fonts.display, fontSize: 22, minWidth: 28, textAlign: 'center', color: colors.pineDeep },
+  extraRow: {
+    flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center',
+    minHeight: 56, marginBottom: spacing.md,
+  },
+  lottomatIcon: { flexDirection: 'row', gap: 2 },
+
+  chipsScroll: { flexGrow: 0, marginBottom: spacing.sm },
+  chips: { flexDirection: rtl.row, gap: 8, paddingVertical: 4, flexGrow: 1 },
+  chip: {
+    minWidth: 48, minHeight: 44, paddingHorizontal: 12, borderRadius: radii.pill,
+    borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface,
+    flexDirection: rtl.row, alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  chipDone: { borderColor: colors.pine2 },
+  chipActive: { backgroundColor: colors.pine, borderColor: colors.pine },
+  chipText: { fontFamily: fonts.display, fontSize: 18, color: colors.pine },
+  chipTextActive: { color: colors.brandInk },
+  chipDot: {
+    width: 20, height: 20, borderRadius: 10, backgroundColor: colors.pine,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  chipDotActive: { backgroundColor: colors.sun },
+  chipDotText: { color: colors.sun, fontSize: 11, fontFamily: fonts.bodyBold },
+  chipDotTextActive: { color: colors.pineDeep },
+
+  tableCard: {
+    borderWidth: 1.5, borderColor: colors.line, borderRadius: radii.md,
+    paddingTop: 12, paddingHorizontal: 10, paddingBottom: 16,
+    backgroundColor: colors.surface, marginBottom: spacing.lg,
+  },
+  tableCardDone: { borderColor: colors.pine2 },
+  pickerLabel: { flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'baseline' },
+  strongLabel: { marginTop: 18, marginBottom: 8 },
+  tableTitle: { fontFamily: fonts.display, fontSize: 20, color: colors.pineDeep },
+  strongTitle: { ...typo.label, color: colors.plum, fontFamily: fonts.bodyBold },
+  pickerCount: { fontFamily: fonts.display, fontSize: 16, color: colors.pine2 },
+  instruction: { ...typo.small, textAlign: rtl.textStart, marginBottom: 10 },
+
+  warningText: { ...typo.small, color: colors.warnInk, textAlign: rtl.textStart, marginTop: 6 },
+  errorText: { ...typo.small, color: colors.danger, textAlign: rtl.textStart, fontFamily: fonts.bodyBold },
+  priceHint: { ...typo.small, textAlign: 'center', paddingVertical: 6 },
+  priceLine: { flexDirection: rtl.row, justifyContent: 'space-between', paddingVertical: 3 },
+  priceText: { ...typo.body, fontSize: 15 },
+  priceNum: { fontVariant: ['tabular-nums'] },
+  totalRow: { flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'baseline' },
+  totalLabel: { ...typo.bodyStrong },
+  totalValue: { fontSize: 32, lineHeight: 38 },
+  addBtn: { marginTop: spacing.lg },
 });

@@ -4,9 +4,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { BallRow, Button, Card, ResponsibleNotice, ScreenTitle } from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
 import type { GameType } from '@lotto-maker/shared';
 import { resultsApi, drawsApi } from '../../api/client.js';
@@ -14,49 +15,6 @@ import type { DrawResultResponse, UpcomingDraw } from '../../api/client.js';
 
 // Games that have numeric results (Chance is a card game — not yet supported)
 const RESULT_GAMES: GameType[] = ['lotto', 'seven77', 'one23'];
-
-const GAME_COLORS: Record<GameType, string> = {
-  lotto: '#1a56db',
-  chance: '#f97316',
-  seven77: '#7c3aed',
-  one23: '#059669',
-};
-
-const GAME_ICONS: Record<GameType, string> = {
-  lotto: '🎱',
-  chance: '🃏',
-  seven77: '7️⃣',
-  one23: '🔢',
-};
-
-function NumberBall({
-  n,
-  color,
-  size = 36,
-  isStrong = false,
-}: {
-  n: number;
-  color: string;
-  size?: number;
-  isStrong?: boolean;
-}) {
-  const bg = isStrong ? '#e02424' : color;
-  return (
-    <View
-      style={[
-        styles.ball,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: bg,
-        },
-      ]}
-    >
-      <Text style={[styles.ballText, { fontSize: size < 32 ? 11 : 14 }]}>{n}</Text>
-    </View>
-  );
-}
 
 function formatCountdown(ms: number): string {
   if (ms <= 0) return 'עכשיו';
@@ -84,23 +42,18 @@ interface GameCardProps {
 }
 
 function GameCard({ gameType, result, error, loading, upcoming, now }: GameCardProps) {
-  const color = GAME_COLORS[gameType];
-  const icon = GAME_ICONS[gameType];
   const name = GAME_DISPLAY_NAMES[gameType];
 
   const msUntilDraw = upcoming ? new Date(upcoming.drawTime).getTime() - now : 0;
   const isOpen = upcoming ? now < new Date(upcoming.hardCutoff).getTime() : false;
 
   return (
-    <View style={[styles.card, { borderTopColor: color }]}>
+    <Card style={styles.card}>
       {/* Header */}
       <View style={styles.cardHeader}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardIcon}>{icon}</Text>
-          <Text style={[styles.cardName, { color }]}>{name}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: isOpen ? '#d1fae5' : '#fee2e2' }]}>
-          <Text style={[styles.statusText, { color: isOpen ? '#065f46' : '#991b1b' }]}>
+        <Text style={styles.cardName}>{name}</Text>
+        <View style={[styles.statusBadge, isOpen ? styles.statusOpen : styles.statusClosed]}>
+          <Text style={[styles.statusText, { color: isOpen ? colors.okInk : colors.dangerInk }]}>
             {isOpen ? 'פתוח' : 'סגור'}
           </Text>
         </View>
@@ -110,7 +63,7 @@ function GameCard({ gameType, result, error, loading, upcoming, now }: GameCardP
       {upcoming && (
         <View style={styles.countdownRow}>
           <Text style={styles.countdownLabel}>הגרלה הבאה בעוד</Text>
-          <Text style={[styles.countdownValue, { color }]}>
+          <Text style={styles.countdownValue}>
             {formatCountdown(msUntilDraw)}
           </Text>
         </View>
@@ -120,7 +73,7 @@ function GameCard({ gameType, result, error, loading, upcoming, now }: GameCardP
       <View style={styles.resultsSection}>
         <Text style={styles.resultsSectionTitle}>תוצאות אחרונות</Text>
         {loading && (
-          <ActivityIndicator color={color} style={{ marginVertical: 12 }} />
+          <ActivityIndicator color={colors.pine} style={{ marginVertical: 12 }} />
         )}
         {!loading && error && (
           <Text style={styles.errorText}>לא ניתן לטעון תוצאות כרגע</Text>
@@ -128,24 +81,18 @@ function GameCard({ gameType, result, error, loading, upcoming, now }: GameCardP
         {!loading && !error && result && (
           <>
             <Text style={styles.drawMeta}>הגרלה #{result.drawNumber} · {formatDate(result.drawDate)}</Text>
-            <View style={styles.numbersRow}>
-              {result.winningNumbers.map((n) => (
-                <NumberBall key={n} n={n} color={color} />
-              ))}
-              {result.strongNumber !== null && result.strongNumber !== undefined && (
-                <>
-                  <Text style={styles.plus}>+</Text>
-                  <NumberBall n={result.strongNumber} color={color} isStrong />
-                </>
-              )}
-            </View>
+            <BallRow
+              numbers={result.winningNumbers}
+              strong={result.strongNumber !== null && result.strongNumber !== undefined ? [result.strongNumber] : []}
+              size={38}
+            />
           </>
         )}
         {!loading && !error && !result && (
           <Text style={styles.errorText}>תוצאות טרם פורסמו</Text>
         )}
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -198,13 +145,18 @@ export function ResultsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>תוצאות הגרלה</Text>
-        <TouchableOpacity onPress={() => { void loadResults(); void loadUpcoming(); }}>
-          <Text style={styles.refreshBtn}>רענן</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.subtitle}>נתונים ממפעל הפיס</Text>
+      <ScreenTitle
+        title="תוצאות הגרלה"
+        subtitle="נתונים ממפעל הפיס"
+        end={(
+          <Button
+            label="רענן"
+            onPress={() => { void loadResults(); void loadUpcoming(); }}
+            variant="ghost"
+            size="sm"
+          />
+        )}
+      />
 
       {RESULT_GAMES.map((game) => (
         <GameCard
@@ -221,59 +173,41 @@ export function ResultsScreen() {
       <Text style={styles.footer}>
         ©️ נתונים מסופקים על-ידי מפעל הפיס. האפליקציה אינה קשורה למפעל הפיס.
       </Text>
+
+      <ResponsibleNotice />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#f9fafb', paddingBottom: 32 },
-  headerRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 2, marginTop: 8,
-  },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  refreshBtn: { fontSize: 14, color: '#1a56db', fontWeight: '600' },
-  subtitle: { fontSize: 13, color: '#6b7280', marginBottom: 16 },
+  container: { padding: spacing.lg, backgroundColor: colors.paper, paddingBottom: spacing.xxxl },
 
-  card: {
-    backgroundColor: '#fff', borderRadius: 12, marginBottom: 14,
-    borderTopWidth: 4, overflow: 'hidden',
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.07,
-    shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
-  },
+  card: { padding: 0, overflow: 'hidden' },
   cardHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4,
+    flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
   },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  cardIcon: { fontSize: 20 },
-  cardName: { fontSize: 18, fontWeight: '700' },
-  statusBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 11, fontWeight: '600' },
+  cardName: { ...type.h2, color: colors.pineDeep },
+  statusBadge: { borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 3 },
+  statusOpen: { backgroundColor: colors.okSoft },
+  statusClosed: { backgroundColor: colors.dangerSoft },
+  statusText: { fontFamily: fonts.bodyBold, fontSize: 13 },
 
   countdownRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 6,
-    backgroundColor: '#f9fafb', borderTopWidth: 1, borderTopColor: '#f3f4f6',
+    flexDirection: rtl.row, alignItems: 'center', justifyContent: 'space-between', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: colors.pine,
   },
-  countdownLabel: { fontSize: 12, color: '#6b7280' },
-  countdownValue: { fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  countdownLabel: { ...type.small, color: colors.onPineMuted },
+  countdownValue: { fontFamily: fonts.display, fontSize: 20, lineHeight: 26, color: colors.sun, fontVariant: ['tabular-nums'] },
 
-  resultsSection: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 8 },
-  resultsSectionTitle: { fontSize: 11, color: '#9ca3af', fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 },
-  drawMeta: { fontSize: 12, color: '#6b7280', marginBottom: 10 },
+  resultsSection: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 12 },
+  resultsSectionTitle: { ...type.label, color: colors.muted, marginBottom: 4, textAlign: rtl.textStart },
+  drawMeta: { ...type.small, marginBottom: 10, textAlign: rtl.textStart },
 
-  numbersRow: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 6,
-    alignItems: 'center',
-  },
-  ball: { justifyContent: 'center', alignItems: 'center' },
-  ballText: { color: '#fff', fontWeight: '700' },
-  plus: { fontSize: 18, color: '#9ca3af', marginHorizontal: 2 },
-
-  errorText: { fontSize: 13, color: '#9ca3af', marginVertical: 8 },
+  errorText: { ...type.small, marginVertical: 8, textAlign: rtl.textStart },
   footer: {
-    fontSize: 11, color: '#9ca3af', textAlign: 'center',
-    marginTop: 8, lineHeight: 16,
+    ...type.caption, textAlign: 'center',
+    marginTop: 4, marginBottom: spacing.md,
   },
 });

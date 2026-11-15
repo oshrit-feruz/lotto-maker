@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { BlurredScan } from '../../components/BlurredScan/BlurredScan.js';
 import {
-  View, Text, StyleSheet, ActivityIndicator, ScrollView,
-} from 'react-native';
-import { Image } from 'expo-image';
+  Amount, BallFace, BallRow, Card, Loading, Notice, Perforation, Stub,
+} from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 import { ordersApi } from '../../api/client.js';
 import { OrderStatusBadge } from '../../components/OrderStatusBadge/OrderStatusBadge.js';
 import { ORDER_STATUS_LABELS, TICKET_TYPE_LABELS } from '@lotto-maker/shared';
 import type { OrderStatus, TicketType } from '@lotto-maker/shared';
 
 const STATUS_STEPS: OrderStatus[] = ['pending', 'in_queue', 'keyed', 'scanned', 'won'];
-const COLOR = '#1a56db';
 
 interface TableView {
   numbers: number[];
@@ -47,19 +48,6 @@ function tierLabel(game: 'lotto' | 'double' | 'extra', tier: string): string {
   return tier.endsWith('+s') ? `${tier.slice(0, -2)} + חזק` : tier;
 }
 
-function Ball({ n, matched, strong, size = 34 }: { n: number; matched?: boolean; strong?: boolean; size?: number }) {
-  const on = strong ? '#e02424' : COLOR;
-  return (
-    <View style={[
-      styles.ball,
-      { width: size, height: size, borderRadius: size / 2 },
-      matched ? { backgroundColor: on, borderColor: on } : styles.ballUnmatched,
-    ]}>
-      <Text style={[styles.ballText, matched && styles.ballTextMatched]}>{n}</Text>
-    </View>
-  );
-}
-
 interface Props {
   orderId: string;
 }
@@ -82,7 +70,7 @@ export function OrderDetailScreen({ orderId }: Props) {
     }).catch(console.error);
   }, [orderId]);
 
-  if (!order) return <ActivityIndicator style={{ flex: 1 }} size="large" color={COLOR} />;
+  if (!order) return <Loading />;
 
   const tables: TableView[] = order.ticket?.tables
     ?? (order.numbers ? [{ numbers: order.numbers, strongNumbers: order.strongNumber ? [order.strongNumber] : [] }] : []);
@@ -97,11 +85,13 @@ export function OrderDetailScreen({ orderId }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={[styles.title, { color: COLOR }]}>
-        {order.ticket ? TICKET_TYPE_LABELS[order.ticket.type] : 'לוטו'}
-        {order.ticket?.extra ? ' + Extra' : ''}
-      </Text>
-      <OrderStatusBadge status={order.status} />
+      <View style={styles.titleRow}>
+        <Text style={styles.title} accessibilityRole="header">
+          {order.ticket ? TICKET_TYPE_LABELS[order.ticket.type] : 'לוטו'}
+          {order.ticket?.extra ? ' + Extra' : ''}
+        </Text>
+        <OrderStatusBadge status={order.status} />
+      </View>
 
       {order.draw && (
         <Text style={styles.drawLine}>
@@ -109,50 +99,64 @@ export function OrderDetailScreen({ orderId }: Props) {
         </Text>
       )}
 
-      {/* Winning numbers, once confirmed */}
-      {confirmed && order.draw && (
-        <View style={[styles.section, { borderLeftColor: '#e02424' }]}>
-          <Text style={styles.sectionLabel}>המספרים הזוכים</Text>
-          <View style={styles.ballsRow}>
-            {order.draw.numbers.map((n) => <Ball key={n} n={n} matched size={32} />)}
-            {order.draw.strong !== null && (
-              <>
-                <Text style={styles.plus}>+</Text>
-                <Ball n={order.draw.strong} matched strong size={32} />
-              </>
+      <Stub>
+        {/* Winning numbers, once confirmed */}
+        {confirmed && order.draw && (
+          <>
+            <Text style={styles.sectionLabel}>המספרים הזוכים</Text>
+            <BallRow
+              numbers={order.draw.numbers}
+              strong={order.draw.strong !== null ? [order.draw.strong] : []}
+              size={34}
+            />
+            {order.ticket?.extra && order.draw.extraDigits.length > 0 && (
+              <Text style={styles.extraLine}>Extra: {order.draw.extraDigits.join(' ')}</Text>
             )}
-          </View>
-          {order.ticket?.extra && order.draw.extraDigits.length > 0 && (
-            <Text style={styles.extraLine}>Extra: {order.draw.extraDigits.join(' ')}</Text>
-          )}
-        </View>
-      )}
+            <Perforation />
+          </>
+        )}
 
-      {/* Tables */}
-      {tables.map((t, i) => (
-        <View key={i} style={[styles.section, { borderLeftColor: COLOR }]}>
-          <Text style={styles.sectionLabel}>
-            טבלה {i + 1}{order.ticket?.systematicType ? ` · ${order.ticket.systematicType}` : ''}
-          </Text>
-          <View style={styles.ballsRow}>
-            {t.numbers.map((n) => (
-              <Ball key={n} n={n} matched={confirmed ? drawNumbers.has(n) : undefined} />
-            ))}
-            {t.strongNumbers.length > 0 && <Text style={styles.plus}>+</Text>}
-            {t.strongNumbers.map((n) => (
-              <Ball key={`s${n}`} n={n} strong matched={confirmed ? n === drawStrong : undefined} />
-            ))}
+        {/* Tables */}
+        <Text style={styles.sectionLabel}>
+          {confirmed ? 'הטבלאות שלך: מספר שעלה בהגרלה מסומן בצהוב' : 'הטבלאות שלך'}
+        </Text>
+        {tables.map((t, i) => (
+          <View key={i} style={[styles.tableRow, i > 0 && styles.tableDivider]}>
+            <Text style={styles.tableIndex}>
+              {i + 1}
+            </Text>
+            <View style={styles.tableBalls}>
+              <BallRow
+                numbers={t.numbers}
+                strong={t.strongNumbers}
+                size={32}
+                gap={5}
+                matched={confirmed ? drawNumbers : undefined}
+                strongMatched={drawStrong}
+              />
+            </View>
           </View>
+        ))}
+        {order.ticket?.systematicType ? <Text style={styles.extraLine}>{order.ticket.systematicType}</Text> : null}
+        {order.ticket?.extra && order.extraDigits.length > 0 && (
+          <Text style={styles.extraLine}>ספרות Extra שלך: {order.extraDigits.join(' ')}</Text>
+        )}
+
+        <Perforation />
+        <View style={styles.metaRow}>
+          <Text style={styles.meta}>תאריך הגרלה</Text>
+          <Text style={styles.metaValue}>{new Date(order.drawDate).toLocaleDateString('he-IL')}</Text>
         </View>
-      ))}
-      {order.ticket?.extra && order.extraDigits.length > 0 && (
-        <Text style={styles.extraLine}>ספרות Extra שלך: {order.extraDigits.join(' ')}</Text>
-      )}
+        <View style={styles.metaRow}>
+          <Text style={styles.meta}>שולם</Text>
+          <Text style={styles.metaValue}>₪{order.totalCharged}</Text>
+        </View>
+      </Stub>
 
       {/* Win per order */}
       {order.wins.length > 0 && (
-        <View style={[styles.section, { borderLeftColor: '#059669' }]}>
-          <Text style={styles.sectionLabel}>הזכייה שלך</Text>
+        <View style={styles.winCard}>
+          <Text style={styles.winTitle}>הזכייה שלך</Text>
           {order.wins.map((w) => (
             <View key={`${w.game}-${w.tier}`} style={styles.winRow}>
               <Text style={styles.winText}>
@@ -161,99 +165,90 @@ export function OrderDetailScreen({ orderId }: Props) {
               <Text style={styles.winText}>₪{Number(w.amount).toLocaleString('he-IL')}</Text>
             </View>
           ))}
-          <View style={styles.winRow}>
-            <Text style={[styles.winText, styles.winTotal]}>סה"כ</Text>
-            <Text style={[styles.winText, styles.winTotal]}>₪{totalWon.toLocaleString('he-IL')}</Text>
+          <View style={[styles.winRow, styles.winTotalRow]}>
+            <Text style={styles.winTotalLabel}>סה"כ</Text>
+            <Amount value={`₪${totalWon.toLocaleString('he-IL')}`} style={styles.winTotal} />
           </View>
         </View>
       )}
 
       {/* Claim status: big prizes are collected in person */}
       {order.prizeClaim && (
-        <View style={styles.claimBox}>
-          {order.prizeClaim.status === 'awaiting_pickup' ? (
-            <Text style={styles.claimText}>
-              הפרס (₪{Number(order.prizeClaim.amount).toLocaleString('he-IL')}) לא הועבר לארנק.
-              {'\n'}לאיסוף יש להגיע עם טופס המקור ותעודת זהות.
-            </Text>
-          ) : (
-            <Text style={styles.claimText}>הפרס נאסף. ✓</Text>
-          )}
-        </View>
+        order.prizeClaim.status === 'awaiting_pickup' ? (
+          <Notice tone="warn">
+            {`הפרס (₪${Number(order.prizeClaim.amount).toLocaleString('he-IL')}) לא הועבר לארנק.\nלאיסוף יש להגיע עם טופס המקור ותעודת זהות.`}
+          </Notice>
+        ) : (
+          <Notice tone="ok">הפרס נאסף. ✓</Notice>
+        )
       )}
 
       {/* Status timeline */}
-      <View style={styles.timeline}>
-        {STATUS_STEPS.filter((s) => s !== 'won').map((step, idx) => {
+      <Card>
+        {STATUS_STEPS.filter((s) => s !== 'won').map((step, idx, all) => {
           const done = idx <= currentStep;
+          const last = idx === all.length - 1;
           return (
             <View key={step} style={styles.timelineRow}>
-              <View style={[styles.dot, done && { backgroundColor: COLOR, borderColor: COLOR }]} />
+              <View style={styles.dotCol}>
+                {done ? <BallFace size={20} tone="sun" /> : <View style={styles.dot} />}
+                {!last && <View style={[styles.track, done && idx < currentStep && styles.trackDone]} />}
+              </View>
               <Text style={[styles.stepLabel, done && styles.stepLabelDone]}>
                 {ORDER_STATUS_LABELS[step] ?? step}
               </Text>
             </View>
           );
         })}
-      </View>
+      </Card>
 
       {/* Ticket scan */}
       {scanUrl && (
         <View style={styles.scanSection}>
           <Text style={styles.scanLabel}>הטופס המקורי</Text>
-          <Image
-            source={scanUrl}
-            cachePolicy="none"
-            style={styles.scanImage}
-            contentFit="contain"
-            transition={300}
-          />
+          <BlurredScan url={scanUrl} />
         </View>
       )}
-
-      <Text style={styles.meta}>
-        תאריך הגרלה: {new Date(order.drawDate).toLocaleDateString('he-IL')}
-        {'\n'}שולם: ₪{order.totalCharged}
-      </Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#fff', flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
-  drawLine: { fontSize: 14, color: '#374151', marginTop: 8 },
+  container: { padding: spacing.lg, backgroundColor: colors.paper, flexGrow: 1, paddingBottom: spacing.xxxl },
+  titleRow: { flexDirection: rtl.row, alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 },
+  title: { ...type.h1, fontSize: 28, lineHeight: 34, color: colors.pineDeep, textAlign: rtl.textStart, flexShrink: 1 },
+  drawLine: { ...type.small, textAlign: rtl.textStart, marginBottom: spacing.lg },
 
-  section: {
-    borderRadius: 10, padding: 14, marginVertical: 8,
-    borderLeftWidth: 4, backgroundColor: '#f9fafb',
+  sectionLabel: { ...type.label, color: colors.muted, marginBottom: 10, textAlign: rtl.textStart },
+  tableRow: { flexDirection: rtl.row, alignItems: 'center', gap: 10, paddingVertical: 8 },
+  tableDivider: { borderTopWidth: 1, borderTopColor: colors.line },
+  tableIndex: { fontFamily: fonts.display, fontSize: 18, color: colors.muted, minWidth: 16, textAlign: 'center' },
+  tableBalls: { flex: 1, alignItems: rtl.alignEnd },
+  extraLine: { ...type.small, color: colors.ink, marginTop: 8, textAlign: rtl.textStart },
+
+  metaRow: { flexDirection: rtl.row, justifyContent: 'space-between', paddingVertical: 2 },
+  meta: { ...type.small },
+  metaValue: { ...type.smallStrong, fontVariant: ['tabular-nums'] },
+
+  winCard: {
+    backgroundColor: colors.okSoft, borderRadius: radii.md, borderWidth: 1, borderColor: colors.okLine,
+    padding: 16, marginBottom: spacing.lg,
   },
-  sectionLabel: { fontSize: 12, color: '#6b7280', fontWeight: '600', marginBottom: 10 },
-  ballsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
-  ball: { justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
-  ballUnmatched: { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' },
-  ballText: { fontWeight: '700', color: '#9ca3af', fontSize: 13 },
-  ballTextMatched: { color: '#fff' },
-  plus: { fontSize: 18, color: '#9ca3af', marginHorizontal: 2 },
-  extraLine: { fontSize: 13, color: '#374151', marginTop: 6, direction: 'ltr', textAlign: 'right' },
+  winTitle: { ...type.h3, color: colors.okInk, textAlign: rtl.textStart, marginBottom: 8 },
+  winRow: { flexDirection: rtl.row, justifyContent: 'space-between', marginBottom: 4 },
+  winText: { ...type.body, fontSize: 15 },
+  winTotalRow: { marginTop: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.okLine, alignItems: 'baseline' },
+  winTotalLabel: { ...type.bodyStrong },
+  winTotal: { fontSize: 26, lineHeight: 32, color: colors.okInk },
 
-  winRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  winText: { fontSize: 14, color: '#374151' },
-  winTotal: { fontWeight: '700' },
-  claimBox: { backgroundColor: '#fef3c7', borderRadius: 10, padding: 14, marginVertical: 8 },
-  claimText: { color: '#92400e', fontSize: 14, textAlign: 'right', lineHeight: 20 },
+  timelineRow: { flexDirection: rtl.row, alignItems: 'flex-start', gap: 12 },
+  dotCol: { width: 20, alignItems: 'center' },
+  dot: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.emptyRing, backgroundColor: colors.surface },
+  track: { width: 2, height: 18, backgroundColor: colors.line, marginVertical: 2 },
+  trackDone: { backgroundColor: colors.sunDeep },
+  stepLabel: { ...type.body, fontSize: 15, lineHeight: 20, color: colors.muted },
+  stepLabelDone: { color: colors.ink, fontFamily: fonts.bodyMedium },
 
-  timeline: { marginBottom: 20, marginTop: 12 },
-  timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  dot: {
-    width: 12, height: 12, borderRadius: 6,
-    borderWidth: 2, borderColor: '#d1d5db', marginLeft: 12, marginRight: 8,
-  },
-  stepLabel: { fontSize: 14, color: '#9ca3af' },
-  stepLabelDone: { color: '#374151', fontWeight: '600' },
-
-  scanSection: { marginBottom: 16 },
-  scanLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  scanImage: { width: '100%', height: 280, borderRadius: 8, backgroundColor: '#f3f4f6' },
-  meta: { fontSize: 13, color: '#9ca3af', lineHeight: 20, textAlign: 'right' },
+  scanSection: { marginBottom: spacing.lg },
+  scanLabel: { ...type.h3, textAlign: rtl.textStart, marginBottom: 8 },
 });
