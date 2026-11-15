@@ -170,9 +170,10 @@ export interface NextLotteryInfo {
   /** Announced first prize in ILS with 2 decimals, or null if missing / unparseable. */
   firstPrize: string | null;
   /**
-   * Announced double-lotto first prize. pais does not send it in this response, so this is always
-   * null for now. pais's `secondPrize` is NOT the double prize (a real response had firstPrize
-   * 8,000,000 and secondPrize 750,000); it is kept as raw text only until its meaning is confirmed.
+   * Announced double-lotto first prize. pais does not send it, but the double first prize is always
+   * twice the lotto first prize (owner, 15/11/2026), so it is derived from firstPrize.
+   * pais's `secondPrize` is a different value (750,000 next to an 8,000,000 first prize) whose
+   * meaning is unconfirmed; it is kept as raw text only.
    */
   doublePrize: string | null;
   /** `firstPrize` exactly as pais sent it (as text), or null when absent. */
@@ -248,7 +249,7 @@ export function parseNextLotteryResponse(json: unknown): NextLotteryInfo {
     salesCloseAt,
     drawAt: new Date(salesCloseAt.getTime() + DRAW_AFTER_CLOSE_MINUTES * 60_000),
     firstPrize: first.value,
-    doublePrize: null,
+    doublePrize: first.value === null ? null : (Number(first.value) * 2).toFixed(2),
     firstPrizeRaw: first.raw,
     doublePrizeRaw: second.raw,
   };

@@ -24,15 +24,15 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('syncUpcomingDraws: announced prizes', () => {
   // Shape of a real pais response (15/11/2026): prizes are numbers in shekels, and secondPrize is
-  // not the double-lotto prize, so only its raw text is stored.
-  it('stores the first prize in shekels and secondPrize as raw text only', async () => {
+  // not the double-lotto prize, so only its raw text is stored. The double prize is twice the first.
+  it('stores the first prize in shekels, the double prize as twice it, and secondPrize as raw text', async () => {
     axiosGet.mockResolvedValue(pais());
     db.findUnique.mockResolvedValue(null);
     await syncUpcomingDraws();
     expect(db.create.mock.calls[0][0].data).toMatchObject({
       drawNumber: 3984,
       announcedFirstPrize: '8000000.00',
-      announcedDoublePrize: null,
+      announcedDoublePrize: '16000000.00',
       announcedFirstPrizeRaw: '8000000',
       announcedDoublePrizeRaw: '750000',
     });
@@ -46,7 +46,7 @@ describe('syncUpcomingDraws: announced prizes', () => {
       salesCloseAt: new Date('2026-11-14T20:45:00Z'),
       drawAt: new Date('2026-11-14T21:00:00Z'),
       announcedFirstPrize: new Decimal('8000000'),
-      announcedDoublePrize: null,
+      announcedDoublePrize: new Decimal('16000000'),
     });
     await syncUpcomingDraws();
     expect(db.update.mock.calls[0][0].data).toMatchObject({ announcedFirstPrize: '9000000.00' });
@@ -60,7 +60,7 @@ describe('syncUpcomingDraws: announced prizes', () => {
       salesCloseAt: new Date('2026-11-14T20:45:00Z'),
       drawAt: new Date('2026-11-14T21:00:00Z'),
       announcedFirstPrize: new Decimal('8000000'),
-      announcedDoublePrize: null,
+      announcedDoublePrize: new Decimal('16000000'),
       announcedFirstPrizeRaw: '8000000',
       announcedDoublePrizeRaw: '750000',
     });
