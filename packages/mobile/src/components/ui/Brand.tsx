@@ -7,7 +7,7 @@ import { colors, fonts, rtl, spacing, type } from '../../theme/index.js';
 import { BRAND_NAME } from '../../config.js';
 
 /** Two overlapping balls, sun and plum: the brand mark. */
-export function BrandMark({ size = 22, ring = colors.pine }: { size?: number; ring?: string }) {
+export function BrandMark({ size = 22, ring = colors.pine }: Readonly<{ size?: number; ring?: string }>) {
   return (
     <View style={{ width: size * 1.45, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <View style={{ position: 'absolute', top: 0, [rtl.physicalLeft]: 0 }}>
@@ -26,7 +26,7 @@ export function BrandMark({ size = 22, ring = colors.pine }: { size?: number; ri
 }
 
 /** The pine app bar, under the status bar. */
-export function AppHeader({ end }: { end?: ReactNode }) {
+export function AppHeader({ end }: Readonly<{ end?: ReactNode }>) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -40,7 +40,7 @@ export function AppHeader({ end }: { end?: ReactNode }) {
 }
 
 /** A screen title in the display face, with an optional line under it. */
-export function ScreenTitle({ title, subtitle, end, style }: { title: string; subtitle?: string; end?: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function ScreenTitle({ title, subtitle, end, style }: Readonly<{ title: string; subtitle?: string; end?: ReactNode; style?: StyleProp<ViewStyle> }>) {
   return (
     <View style={[styles.titleWrap, style]}>
       <View style={styles.titleRow}>
@@ -56,14 +56,20 @@ export function ScreenTitle({ title, subtitle, end, style }: { title: string; su
  * A shekel amount in the display face. Secular One draws ₪ as two letters,
  * so the sign alone is set in Rubik (the web does the same with unicode-range).
  */
-export function Amount({ value, style }: { value: string; style?: StyleProp<TextStyle> }) {
-  const parts = value.split('₪');
+export function Amount({ value, style }: Readonly<{ value: string; style?: StyleProp<TextStyle> }>) {
+  // Each piece is keyed by where it starts in the string, which is stable for a given value.
+  const pieces: Array<{ at: number; text: string; shekel: boolean }> = [];
+  let at = 0;
+  for (const text of value.split('₪')) {
+    pieces.push({ at, text, shekel: at > 0 });
+    at += text.length + 1;
+  }
   return (
     <Text style={[styles.amount, style]}>
-      {parts.map((p, i) => (
-        <Text key={i}>
-          {i > 0 ? <Text style={styles.shekel}>₪</Text> : null}
-          {p}
+      {pieces.map((p) => (
+        <Text key={`at${p.at}`}>
+          {p.shekel ? <Text style={styles.shekel}>₪</Text> : null}
+          {p.text}
         </Text>
       ))}
     </Text>

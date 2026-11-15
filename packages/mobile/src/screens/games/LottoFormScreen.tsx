@@ -40,7 +40,7 @@ function resize(tables: TableState[], count: number): TableState[] {
 }
 
 // Systematic forms are not offered in the app yet: their rules are unverified (see packages/shared).
-export function LottoFormScreen({ onAddedToCart }: Props) {
+export function LottoFormScreen({ onAddedToCart }: Readonly<Props>) {
   const addItem = useCartStore((s) => s.addItem);
 
   const [type, setType] = useState<TicketType>('regular');
@@ -313,10 +313,10 @@ function LottomatIcon() {
   );
 }
 
-function Stepper(props: {
+function Stepper(props: Readonly<{
   label: string; value: number; onMinus: () => void; onPlus: () => void;
   minusDisabled: boolean; plusDisabled: boolean;
-}) {
+}>) {
   return (
     <View style={styles.stepperRow}>
       <Text style={styles.rowLabel}>{props.label}</Text>
@@ -329,7 +329,7 @@ function Stepper(props: {
   );
 }
 
-function StepButton({ glyph, label, onPress, disabled }: { glyph: string; label: string; onPress: () => void; disabled: boolean }) {
+function StepButton({ glyph, label, onPress, disabled }: Readonly<{ glyph: string; label: string; onPress: () => void; disabled: boolean }>) {
   return (
     <Pressable
       onPress={onPress}
@@ -344,7 +344,7 @@ function StepButton({ glyph, label, onPress, disabled }: { glyph: string; label:
   );
 }
 
-function PriceLine({ label, value }: { label: string; value: number }) {
+function PriceLine({ label, value }: Readonly<{ label: string; value: number }>) {
   return (
     <View style={styles.priceLine}>
       <Text style={styles.priceText}>{label}</Text>

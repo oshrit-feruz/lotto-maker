@@ -17,6 +17,17 @@ interface TableView {
   strongNumbers: number[];
 }
 
+/** Keys a table by its numbers; a repeated table gets a running count so keys stay unique. */
+function withTableKeys(tables: TableView[]): Array<{ table: TableView; key: string }> {
+  const seen = new Map<string, number>();
+  return tables.map((table) => {
+    const base = `${table.numbers.join('-')}|${table.strongNumbers.join('-')}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return { table, key: `${base}#${n}` };
+  });
+}
+
 interface OrderDetail {
   id: string;
   status: OrderStatus;
@@ -120,8 +131,8 @@ export function OrderDetailScreen({ orderId }: Props) {
         <Text style={styles.sectionLabel}>
           {confirmed ? 'הטבלאות שלך: מספר שעלה בהגרלה מסומן בצהוב' : 'הטבלאות שלך'}
         </Text>
-        {tables.map((t, i) => (
-          <View key={i} style={[styles.tableRow, i > 0 && styles.tableDivider]}>
+        {withTableKeys(tables).map(({ table: t, key }, i) => (
+          <View key={key} style={[styles.tableRow, i > 0 && styles.tableDivider]}>
             <Text style={styles.tableIndex}>
               {i + 1}
             </Text>

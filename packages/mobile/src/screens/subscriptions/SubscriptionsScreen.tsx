@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, StyleSheet,
   Alert, RefreshControl,
 } from 'react-native';
-import { BallRow, Button, Card, EmptyState, Loading, ScreenTitle } from '../../components/ui/index.js';
+import { BallRow, Button, Card, EmptyState, Loading, Notice, ScreenTitle } from '../../components/ui/index.js';
 import { colors, fonts, rtl, spacing, type } from '../../theme/index.js';
 import { subscriptionsApi } from '../../api/client.js';
 import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
@@ -26,11 +26,15 @@ export function SubscriptionsScreen() {
   const [subs, setSubs] = useState<Sub[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const data = await subscriptionsApi.list();
       setSubs(data as Sub[]);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -46,11 +50,20 @@ export function SubscriptionsScreen() {
         text: 'כן, בטל',
         style: 'destructive',
         onPress: async () => {
-          await subscriptionsApi.cancel(id);
-          setSubs((s) => s.filter((x) => x.id !== id));
+          try {
+            await subscriptionsApi.cancel(id);
+            setSubs((s) => s.filter((x) => x.id !== id));
+          } catch {
+            Alert.alert('שגיאה', 'לא הצלחנו לבטל את המנוי. נסה שנית.');
+          }
         },
       },
     ]);
+  }
+
+  function retry() {
+    setLoading(true);
+    load();
   }
 
   if (loading) return <Loading />;
@@ -62,8 +75,18 @@ export function SubscriptionsScreen() {
       style={styles.screen}
       contentContainerStyle={styles.list}
       refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.pine} colors={[colors.pine]} onRefresh={() => { setRefreshing(true); load(); }} />}
-      ListHeaderComponent={<ScreenTitle title="מנויים" />}
-      ListEmptyComponent={<EmptyState text="אין מנויים פעילים" />}
+      ListHeaderComponent={
+        <>
+          <ScreenTitle title="מנויים" />
+          {error && (
+            <Notice tone="error">
+              <Text style={styles.errorText}>לא הצלחנו לטעון את המנויים.</Text>
+              <Button label="נסה שוב" onPress={retry} variant="ghost" size="sm" style={styles.retryBtn} />
+            </Notice>
+          )}
+        </>
+      }
+      ListEmptyComponent={error ? null : <EmptyState text="אין מנויים פעילים" />}
       renderItem={({ item }) => (
         <Card>
           <View style={styles.cardTop}>
@@ -109,4 +132,6 @@ const styles = StyleSheet.create({
   dayText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.pine },
   nextDraw: { ...type.caption, marginBottom: 8, textAlign: rtl.textStart },
   cancelBtn: { alignSelf: rtl.alignEnd, marginTop: 4 },
+  errorText: { ...type.small, color: colors.dangerInk, textAlign: rtl.textStart },
+  retryBtn: { alignSelf: rtl.alignStart, marginTop: 10 },
 });

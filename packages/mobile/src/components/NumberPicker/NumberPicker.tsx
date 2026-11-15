@@ -18,7 +18,7 @@ const GAP = 4;
  * The ball grid, read left to right like the paper form. Seven balls a row
  * when each can be at least 44pt, otherwise six.
  */
-export function NumberPicker({ poolSize, selected, maxPick, onToggle, strong = false }: Props) {
+export function NumberPicker({ poolSize, selected, maxPick, onToggle, strong = false }: Readonly<Props>) {
   const [width, setWidth] = useState(0);
   const numbers = Array.from({ length: poolSize }, (_, i) => i + 1);
   const isComplete = selected.length >= maxPick;

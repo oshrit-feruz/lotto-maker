@@ -4,13 +4,18 @@ import { OTPScreen } from '../screens/onboarding/OTPScreen.js';
 import { KYCScreen } from '../screens/onboarding/KYCScreen.js';
 import { WalletLoadScreen } from '../screens/onboarding/WalletLoadScreen.js';
 import { useAuthStore } from '../store/auth.store.js';
+import { postOtpStep } from '../lib/onboarding.js';
 
+/**
+ * Onboarding as a small state machine: phone → OTP → KYC → wallet load.
+ * A verified user goes from the OTP straight to the app; anyone else goes
+ * through KYC and then the (skippable) wallet load. Only signIn() switches
+ * RootNavigator to the app.
+ */
 export function AuthStack() {
   const [phone, setPhone] = useState('');
-  const [isNewUser, setIsNewUser] = useState(false);
-
-  // Inline navigator using state machine pattern
   const [step, setStep] = useState<'phone' | 'otp' | 'kyc' | 'wallet'>('phone');
+  const signIn = useAuthStore((s) => s.signIn);
 
   if (step === 'phone') {
     return <PhoneScreen onOtpSent={(p) => { setPhone(p); setStep('otp'); }} />;
@@ -19,9 +24,9 @@ export function AuthStack() {
     return (
       <OTPScreen
         phone={phone}
-        onVerified={(newUser) => {
-          setIsNewUser(newUser);
-          setStep(newUser ? 'kyc' : 'wallet');
+        onVerified={(user) => {
+          if (postOtpStep(user) === 'home') signIn();
+          else setStep('kyc');
         }}
       />
     );
@@ -29,9 +34,5 @@ export function AuthStack() {
   if (step === 'kyc') {
     return <KYCScreen onVerified={() => setStep('wallet')} />;
   }
-  // wallet step — after this, the auth store has isAuthenticated=true and RootNavigator switches to AppStack
-  return <WalletLoadScreen onContinue={() => {
-    // Setting verifiedAdult is enough; RootNavigator observes isAuthenticated
-    useAuthStore.setState((s) => ({ ...s, isAuthenticated: true }));
-  }} />;
+  return <WalletLoadScreen onContinue={signIn} />;
 }

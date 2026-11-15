@@ -27,12 +27,14 @@ jobs:
         working-directory: packages/mobile
         env:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || '' }}
+          # Pages serves the site at /<repo>/: Expo prefixes the bundle and every
+          # asset (fonts under /assets/ included) with this. See app.config.js.
+          EXPO_BASE_URL: /${{ github.event.repository.name }}
 
-      - name: Fix asset paths and set entry page
+      - name: Set entry page
         env:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || '' }}
         run: |
-          sed -i 's|src="/_expo/|src="./_expo/|g' packages/mobile/dist/index.html
           touch packages/mobile/dist/.nojekyll
           cp demo/mobile-mockup.html packages/mobile/dist/demo.html
           # If a live backend URL is configured, Expo app is the main page;
