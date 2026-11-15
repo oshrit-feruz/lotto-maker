@@ -9,7 +9,7 @@ interface Props {
   onVerified: () => void;
 }
 
-export function KYCScreen({ onVerified }: Props) {
+export function KYCScreen({ onVerified }: Readonly<Props>) {
   const [fullName, setFullName] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const [dob, setDob] = useState('');
@@ -42,6 +42,9 @@ export function KYCScreen({ onVerified }: Props) {
         Alert.alert('תעודת זהות שגויה', 'מספר תעודת הזהות אינו תקין. בדוק את המספר ונסה שנית.');
       } else if (e.code === 'INVALID_DATE_OF_BIRTH') {
         Alert.alert('תאריך שגוי', 'תאריך הלידה אינו תקין.');
+      } else if (e.code === 'KYC_PENDING') {
+        // A returning user whose earlier check is waiting for manual review: let them in.
+        Alert.alert('האימות בבדיקה', 'בדיקת הזהות שלך ממתינה לאישור. נעדכן כשתאושר.', [{ text: 'המשך', onPress: onVerified }]);
       } else if (e.code === 'ID_NUMBER_ALREADY_USED') {
         Alert.alert('תעודת זהות בשימוש', 'מספר תעודת הזהות כבר רשום בחשבון אחר.');
       } else {

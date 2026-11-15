@@ -10,10 +10,11 @@ import { useAuthStore } from '../../store/auth.store.js';
 
 interface Props {
   phone: string;
-  onVerified: (isNewUser: boolean) => void;
+  /** Called with the loaded profile; the caller decides where onboarding goes next. */
+  onVerified: (user: { verifiedAdult: boolean }) => void;
 }
 
-export function OTPScreen({ phone, onVerified }: Props) {
+export function OTPScreen({ phone, onVerified }: Readonly<Props>) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -30,11 +31,11 @@ export function OTPScreen({ phone, onVerified }: Props) {
     if (enteredCode.length !== 6) return;
     setLoading(true);
     try {
-      const { accessToken, refreshToken, isNewUser } = await authApi.verifyOtp(phone, enteredCode);
+      const { accessToken, refreshToken } = await authApi.verifyOtp(phone, enteredCode);
       await Promise.all([setToken(accessToken), setRefreshToken(refreshToken)]);
       const user = await usersApi.getMe();
       setUser(user);
-      onVerified(isNewUser);
+      onVerified(user);
     } catch {
       Alert.alert('קוד שגוי', 'הקוד שהזנת שגוי. נסה שנית.');
       setCode('');
