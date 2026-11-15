@@ -9,3 +9,4 @@ export * from './constants/lotto.js';
 export * from './constants/systematic.js';
 export * from './constants/notification-templates.js';
 export * from './validation/index.js';
+export * from './design/tokens.js';
