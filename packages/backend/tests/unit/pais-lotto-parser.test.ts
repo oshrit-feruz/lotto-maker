@@ -109,8 +109,8 @@ describe('parseNextLotteryResponse', () => {
       { displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: '5,000,000', secondPrize: 10 },
     ]);
     expect(info.firstPrize).toBe('5000000.00');
-    // secondPrize is not the double-lotto prize; only its raw text is kept.
-    expect(info.doublePrize).toBeNull();
+    // The double prize is twice the first prize; secondPrize is kept as raw text only.
+    expect(info.doublePrize).toBe('10000000.00');
     expect(info.doublePrizeRaw).toBe('10');
   });
   it('leaves the prizes null when missing or unparseable', () => {
@@ -143,7 +143,7 @@ describe('parseNextLotteryResponse', () => {
     expect(info).toMatchObject({
       drawNumber: 3985,
       firstPrize: '8000000.00',
-      doublePrize: null,
+      doublePrize: '16000000.00',
       firstPrizeRaw: '8000000',
       doublePrizeRaw: '750000',
     });

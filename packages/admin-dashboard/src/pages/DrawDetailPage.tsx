@@ -6,6 +6,7 @@ import { confirmDraw, editDrawResults, getDraw } from '../api/draws';
 import { errorText } from '../api/errors';
 import type { DrawDetail, EditResultsBody } from '../api/types';
 import ConfirmDrawDialog from '../components/ConfirmDrawDialog';
+import { Balls, ExtraDigits } from '../components/Balls';
 import { Badge, QueryState } from '../components/ui';
 import { isDrawReadOnly, tierId, toBody, toForm, type DrawForm } from '../lib/drawForm';
 import { formatDate } from '../lib/format';
@@ -82,7 +83,7 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
     save.mutate(body);
   };
 
-  const numInput = (value: string, onChange: (v: string) => void, label: string) => (
+  const numInput = (value: string, onChange: (v: string) => void, label: string, className?: string) => (
     <input
       key={label}
       aria-label={label}
@@ -90,6 +91,7 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
       disabled={inputsDisabled}
       inputMode="numeric"
       onChange={(e) => onChange(e.target.value)}
+      {...(className ? { className, placeholder: '–' } : {})}
     />
   );
 
@@ -117,19 +119,29 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
         <p className="muted">הסילוק נכשל – ניתן לתקן את התוצאות ולשמור, והמערכת תנסה לסלק שוב.</p>
       )}
 
-      <div className="card ltr">
-        <h2>תוצאות</h2>
-        <div className="nums">
+      {draw.numbers.length > 0 && (
+        <div className="card">
+          <h2>{readOnly ? 'התוצאות שאושרו' : 'התוצאות השמורות'}</h2>
+          <div className="results-line">
+            <Balls numbers={draw.numbers} strong={draw.strong} />
+            <ExtraDigits digits={draw.extraDigits} />
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <h2>{readOnly ? 'תוצאות' : 'עריכת תוצאות'}</h2>
+        <div className="nums" dir="ltr">
           {form.numbers.map((v, i) =>
-            numInput(v, (x) => set((f) => ({ ...f, numbers: f.numbers.map((o, j) => (j === i ? x : o)) })), `מספר ${i + 1}`),
+            numInput(v, (x) => set((f) => ({ ...f, numbers: f.numbers.map((o, j) => (j === i ? x : o)) })), `מספר ${i + 1}`, 'ball-input'),
           )}
-          <span>+</span>
-          {numInput(form.strong, (x) => set((f) => ({ ...f, strong: x })), 'מספר חזק')}
+          <span className="nums-sep" aria-hidden="true">+</span>
+          {numInput(form.strong, (x) => set((f) => ({ ...f, strong: x })), 'מספר חזק', 'ball-input strong')}
         </div>
         <h3>אקסטרה</h3>
-        <div className="nums">
+        <div className="nums" dir="ltr">
           {form.extraDigits.map((v, i) =>
-            numInput(v, (x) => set((f) => ({ ...f, extraDigits: f.extraDigits.map((o, j) => (j === i ? x : o)) })), `ספרת אקסטרה ${i + 1}`),
+            numInput(v, (x) => set((f) => ({ ...f, extraDigits: f.extraDigits.map((o, j) => (j === i ? x : o)) })), `ספרת אקסטרה ${i + 1}`, 'digit-input'),
           )}
         </div>
       </div>
@@ -176,6 +188,7 @@ export function DrawEditor({ draw }: { draw: DrawDetail }) {
             {save.isPending ? 'שומר…' : 'שמור שינויים'}
           </button>
           <button
+            className="accent"
             onClick={() => {
               setStaleNotice(null);
               confirm.reset();

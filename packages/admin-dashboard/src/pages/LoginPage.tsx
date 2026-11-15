@@ -32,7 +32,12 @@ export default function LoginPage() {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
+        <div className="login-brand">
+          <span className="brand-mark" aria-hidden="true" />
+          ניהול
+        </div>
         <h1>כניסת מנהל</h1>
+        <div className="perf" aria-hidden="true" />
         {step === 'phone' ? (
           <label>
             טלפון

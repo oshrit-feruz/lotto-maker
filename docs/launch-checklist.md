@@ -40,7 +40,8 @@ Mark each item with the date and who confirmed it.
       `packages/shared` pricing.
 - [x] **Pais prize units** confirmed on 15/11/2026 from a real `getNextLotteryDate` response:
       `firstPrize` is in shekels (8000000 for an 8 million prize). Its `secondPrize` (750000) is
-      not the double-lotto prize; only its raw text is stored, until its meaning is confirmed.
+      not the double-lotto prize; only its raw text is stored. The double-lotto first prize is always
+      twice the lotto first prize, so it is derived from `firstPrize`.
 - [ ] **App-store policy** (owner action). Apple and Google restrict real-money gambling apps
       (licence / geo-restriction requirements). Confirm the mobile app qualifies, or launch web-only.
 
