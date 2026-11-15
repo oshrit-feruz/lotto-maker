@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GameSelectScreen } from '../screens/games/GameSelectScreen.js';
 import { LottoFormScreen } from '../screens/games/LottoFormScreen.js';
 import { CartScreen } from '../screens/cart/CartScreen.js';
@@ -9,6 +10,9 @@ import { SubscriptionsScreen } from '../screens/subscriptions/SubscriptionsScree
 import { WalletScreen } from '../screens/wallet/WalletScreen.js';
 import { ResultsScreen } from '../screens/results/ResultsScreen.js';
 import { useCartStore } from '../store/cart.store.js';
+import { useAuthStore } from '../store/auth.store.js';
+import { AppHeader } from '../components/ui/index.js';
+import { colors, fonts, radii, rtl, shadows } from '../theme/index.js';
 import type { GameType } from '@lotto-maker/shared';
 
 type Tab = 'home' | 'results' | 'orders' | 'subscriptions' | 'wallet';
@@ -48,58 +52,85 @@ export function AppStack() {
     );
   }
 
+  const balance = useAuthStore((s) => s.user?.walletBalance);
+  const insets = useSafeAreaInsets();
+
   return (
     <View style={styles.container}>
+      <AppHeader
+        end={balance !== undefined ? (
+          <View style={styles.balanceChip} accessible accessibilityLabel={`יתרת ארנק ${balance} שקלים`}>
+            <Text style={styles.balanceText}>₪{balance}</Text>
+          </View>
+        ) : null}
+      />
       <View style={styles.content}>
         {renderContent()}
       </View>
 
       {/* Bottom tab bar */}
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]} accessibilityRole="tablist">
         {([
-          { id: 'home', label: 'בית', icon: '🏠' },
-          { id: 'results', label: 'תוצאות', icon: '🎱' },
-          { id: 'orders', label: 'הזמנות', icon: '📋' },
-          { id: 'subscriptions', label: 'מנויים', icon: '🔄' },
-          { id: 'wallet', label: 'ארנק', icon: '💳' },
-        ] as const).map(({ id, label, icon }) => (
-          <TouchableOpacity
-            key={id}
-            style={styles.tab}
-            onPress={() => {
-              setTab(id);
-              if (id !== 'orders') setSelectedOrderId(null);
-              if (id !== 'home') { setHomeStep('select'); }
-            }}
-          >
-            <Text style={styles.tabIcon}>{icon}</Text>
-            {id === 'home' && cartCount > 0 && (
-              <View style={styles.badge}><Text style={styles.badgeText}>{cartCount}</Text></View>
-            )}
-            <Text style={[styles.tabLabel, tab === id && styles.tabLabelActive]}>{label}</Text>
-          </TouchableOpacity>
-        ))}
+          { id: 'home', label: 'בית' },
+          { id: 'results', label: 'תוצאות' },
+          { id: 'orders', label: 'הזמנות' },
+          { id: 'subscriptions', label: 'מנויים' },
+          { id: 'wallet', label: 'ארנק' },
+        ] as const).map(({ id, label }) => {
+          const on = tab === id;
+          return (
+            <Pressable
+              key={id}
+              style={styles.tab}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={id === 'home' && cartCount > 0 ? `${label}, ${cartCount} בעגלה` : label}
+              onPress={() => {
+                setTab(id);
+                if (id !== 'orders') setSelectedOrderId(null);
+                if (id !== 'home') { setHomeStep('select'); }
+              }}
+            >
+              <View style={[styles.tabPill, on && styles.tabPillOn]}>
+                <Text style={[styles.tabLabel, on && styles.tabLabelOn]}>{label}</Text>
+                {id === 'home' && cartCount > 0 && (
+                  <View style={styles.badge}><Text style={styles.badgeText}>{cartCount}</Text></View>
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1, backgroundColor: colors.paper },
   content: { flex: 1 },
+  balanceChip: {
+    minHeight: 32, paddingHorizontal: 12, borderRadius: radii.pill,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)', justifyContent: 'center',
+  },
+  balanceText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.brandInk, fontVariant: ['tabular-nums'] },
   tabBar: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    borderTopWidth: 1, borderTopColor: '#e5e7eb',
-    paddingBottom: 8,
+    flexDirection: rtl.row,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1, borderTopColor: colors.line,
+    paddingTop: 6, paddingHorizontal: 6,
+    ...shadows.bar,
   },
-  tab: { flex: 1, alignItems: 'center', paddingTop: 8 },
-  tabIcon: { fontSize: 22 },
-  tabLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  tabLabelActive: { color: '#1a56db', fontWeight: '700' },
+  tab: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  tabPill: {
+    flexDirection: rtl.row, alignItems: 'center', gap: 4,
+    minHeight: 40, paddingHorizontal: 10, borderRadius: radii.pill,
+  },
+  tabPillOn: { backgroundColor: colors.pine },
+  tabLabel: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.pine },
+  tabLabelOn: { fontFamily: fonts.bodyBold, color: colors.brandInk },
   badge: {
-    position: 'absolute', top: 0, right: 12,
-    backgroundColor: '#e02424', borderRadius: 8,
-    paddingHorizontal: 4, paddingVertical: 1,
+    minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5,
+    backgroundColor: colors.sun, alignItems: 'center', justifyContent: 'center',
   },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  badgeText: { fontFamily: fonts.bodyBold, color: colors.pineDeep, fontSize: 11 },
 });

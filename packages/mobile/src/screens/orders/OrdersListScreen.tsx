@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl,
+  View, Text, FlatList, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
+import { EmptyState, Loading, ScreenTitle } from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, shadows, spacing, type } from '../../theme/index.js';
 import { ordersApi } from '../../api/client.js';
 import { OrderStatusBadge } from '../../components/OrderStatusBadge/OrderStatusBadge.js';
 import { GAME_DISPLAY_NAMES } from '@lotto-maker/shared';
@@ -40,17 +42,23 @@ export function OrdersListScreen({ onSelectOrder }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#1a56db" />;
+  if (loading) return <Loading />;
 
   return (
     <FlatList
       data={orders}
       keyExtractor={(o) => o.id}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+      style={styles.screen}
+      refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.pine} colors={[colors.pine]} onRefresh={() => { setRefreshing(true); load(); }} />}
       contentContainerStyle={styles.list}
-      ListEmptyComponent={<Text style={styles.empty}>אין הזמנות עדיין</Text>}
+      ListHeaderComponent={<ScreenTitle title="הזמנות" />}
+      ListEmptyComponent={<EmptyState text="אין הזמנות עדיין" />}
       renderItem={({ item }) => (
-        <TouchableOpacity style={styles.card} onPress={() => onSelectOrder(item.id)}>
+        <Pressable
+          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+          onPress={() => onSelectOrder(item.id)}
+          accessibilityRole="button"
+        >
           <View style={styles.cardTop}>
             <Text style={styles.gameName}>{GAME_DISPLAY_NAMES[item.gameType]}</Text>
             <OrderStatusBadge status={item.status} />
@@ -62,25 +70,32 @@ export function OrdersListScreen({ onSelectOrder }: Props) {
           </Text>
           <View style={styles.cardBottom}>
             <Text style={styles.date}>{new Date(item.drawDate).toLocaleDateString('he-IL')}</Text>
-            <Text style={styles.price}>₪{item.totalCharged}</Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>₪{item.totalCharged}</Text>
+              <Text style={styles.chevron} accessibilityElementsHidden importantForAccessibility="no">‹</Text>
+            </View>
           </View>
-        </TouchableOpacity>
+        </Pressable>
       )}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  list: { padding: 12 },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 60, fontSize: 16 },
+  screen: { backgroundColor: colors.paper },
+  list: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   card: {
-    backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 10,
-    elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
+    backgroundColor: colors.surface, borderRadius: radii.md, padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: colors.line, minHeight: 44,
+    ...shadows.card,
   },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  gameName: { fontSize: 16, fontWeight: '700', color: '#1a56db' },
-  numbers: { fontSize: 15, color: '#374151', fontVariant: ['tabular-nums'], marginBottom: 6 },
-  cardBottom: { flexDirection: 'row', justifyContent: 'space-between' },
-  date: { fontSize: 13, color: '#9ca3af' },
-  price: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  cardPressed: { borderColor: colors.pine2 },
+  cardTop: { flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  gameName: { fontFamily: fonts.display, fontSize: 20, lineHeight: 25, color: colors.pineDeep },
+  numbers: { ...type.body, fontSize: 15, fontVariant: ['tabular-nums'], marginBottom: 8, textAlign: rtl.textStart },
+  cardBottom: { flexDirection: rtl.row, justifyContent: 'space-between', alignItems: 'center' },
+  date: { ...type.small },
+  priceRow: { flexDirection: rtl.row, alignItems: 'center', gap: 10 },
+  price: { ...type.smallStrong, fontVariant: ['tabular-nums'] },
+  chevron: { fontFamily: fonts.bodyBold, fontSize: 22, lineHeight: 24, color: colors.pine2 },
 });
