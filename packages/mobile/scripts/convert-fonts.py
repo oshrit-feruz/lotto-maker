@@ -5,16 +5,21 @@
 - Each family ships as a Hebrew and a Latin subset; RN has no per-glyph font
   stack, so the two subsets are merged into one TTF per face.
 
-Usage (needs `pip install fonttools brotli`):
-  python3 scripts/convert-fonts.py <dir with packages/web/src/fonts/*.woff2> assets/fonts
-The woff2 files are the Google Fonts files the website self-hosts (via @fontsource).
+Usage (needs `pip install fonttools brotli`), from anywhere:
+  python3 packages/mobile/scripts/convert-fonts.py
+It reads packages/admin-dashboard/src/fonts/*.woff2 (the Google Fonts files the apps
+self-host via @fontsource) and writes packages/mobile/assets/fonts/*.ttf.
+The paths are fixed relative to this file, so no argument can point it at
+another directory.
 """
-import sys, os, tempfile
+import os, tempfile
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 from fontTools.merge import Merger
 
-src, out = sys.argv[1], sys.argv[2]
+HERE = os.path.dirname(os.path.abspath(__file__))
+src = os.path.normpath(os.path.join(HERE, '..', '..', 'admin-dashboard', 'src', 'fonts'))
+out = os.path.normpath(os.path.join(HERE, '..', 'assets', 'fonts'))
 os.makedirs(out, exist_ok=True)
 tmp = tempfile.mkdtemp()
 
@@ -27,7 +32,7 @@ def load(name):
 
 def set_names(font, family, style, ps):
     name = font['name']
-    for rec in list(name.names):
+    for rec in name.names[:]:
         if rec.nameID in (1, 2, 3, 4, 6, 16, 17):
             name.removeNames(nameID=rec.nameID)
     full = f'{family} {style}' if style != 'Regular' else family
