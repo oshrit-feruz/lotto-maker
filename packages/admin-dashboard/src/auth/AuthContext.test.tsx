@@ -48,6 +48,17 @@ describe('AuthProvider', () => {
     expect(hasSession()).toBe(false);
   });
 
+  it('logs in with the admin audience and shows the backend refusal in Hebrew', async () => {
+    setup();
+    fetchMock.mockResolvedValueOnce(json(403, { error: 'NOT_AN_ADMIN', message: 'This phone is not an active admin' }));
+    await expect(act(() => auth.login('+972500000000', '123456'))).rejects.toThrow('המספר הזה לא רשום כמנהל');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toMatch(/\/auth\/verify-otp$/);
+    expect(JSON.parse(String(init.body))).toEqual({ phone: '+972500000000', code: '123456', audience: 'admin' });
+    expect(screen.getByTestId('status')).toHaveTextContent('out');
+    expect(hasSession()).toBe(false);
+  });
+
   it('drops all cached queries on logout', async () => {
     const qc = setup();
     fetchMock.mockResolvedValueOnce(json(200, { accessToken: jwt({ type: 'admin' }), refreshToken: 'r', isNewUser: false }));

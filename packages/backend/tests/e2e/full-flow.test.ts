@@ -81,6 +81,7 @@ describe.skipIf(skip)('Full e2e flow', () => {
     await prisma.order.deleteMany();
     await prisma.ticket.deleteMany(); // tables cascade
     await prisma.draw.deleteMany(); // prize tiers cascade
+    await prisma.admin.deleteMany(); // after draws (confirmedBy)
     await prisma.subscription.deleteMany();
     await prisma.deviceToken.deleteMany();
     await prisma.kycCheck.deleteMany();
@@ -233,6 +234,29 @@ describe.skipIf(skip)('Full e2e flow', () => {
       payload: { refreshToken: original },
     });
     expect(r2.statusCode).toBe(401);
+  });
+
+  it('issues the token type the app asks for, for a phone that is admin + operator + customer', async () => {
+    const phone = '+972509999998';
+    await prisma.admin.create({ data: { name: 'Staff Admin', phone } });
+    // Its own inactive location, so this operator never takes part in the queue/capacity steps
+    const staffLocation = await prisma.location.create({
+      data: { name: 'Staff Branch', address: '2 Test St', activeHours: { open: '08:00', close: '22:00' }, active: false },
+    });
+    await prisma.operator.create({ data: { name: 'Staff Op', phone, locationId: staffLocation.id } });
+    const { storeOtp } = await import('../../src/modules/auth/otp.store.js');
+
+    const loginAs = async (audience?: 'user' | 'admin' | 'operator') => {
+      await storeOtp(phone, '246810');
+      const res = await app.inject({ method: 'POST', url: '/auth/verify-otp', payload: { phone, code: '246810', audience } });
+      expect(res.statusCode).toBe(200);
+      return app.jwt.decode<{ type: string }>(res.json<{ accessToken: string }>().accessToken)!.type;
+    };
+
+    expect(await loginAs('admin')).toBe('admin');
+    expect(await loginAs('operator')).toBe('operator');
+    expect(await loginAs('user')).toBe('user');
+    expect(await loginAs()).toBe('user');
   });
 
   // ─── Step 4: KYC ─────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, setToken } from '../api/client.js';
+import { verifyErrorMessage, verifyOtpBody } from '../lib/login.js';
 
 interface Props {
   onLogin: () => void;
@@ -31,11 +32,11 @@ export function LoginPage({ onLogin }: Props) {
     setLoading(true);
     setError('');
     try {
-      const { accessToken } = await api.post('auth/verify-otp', { json: { phone, code } }).json<{ accessToken: string }>();
+      const { accessToken } = await api.post('auth/verify-otp', { json: verifyOtpBody(phone, code) }).json<{ accessToken: string }>();
       setToken(accessToken);
       onLogin();
-    } catch {
-      setError('קוד שגוי. נסה שנית.');
+    } catch (err) {
+      setError(await verifyErrorMessage(err));
     } finally {
       setLoading(false);
     }
