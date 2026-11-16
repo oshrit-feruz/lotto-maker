@@ -20,6 +20,7 @@ import { PrismaClient } from '@prisma/client';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { DRAW_DAY_TO_JS, TIMEZONE } from '@lotto-maker/shared';
 import type { DrawDay } from '@lotto-maker/shared';
+import { SEED_DRAW_NUMBER_BASE } from '../src/lib/seed-draws.js';
 
 if (process.env.NODE_ENV === 'production') {
   console.error('[seed] NODE_ENV=production: the dev seed never runs against production. Aborting.');
@@ -37,8 +38,6 @@ const DRAW_MINUTE = 45;
 const SALES_CLOSE_MINUTES_BEFORE = 120;
 // Same default as config.ORDER_CLOSE_BUFFER_MINUTES: orders stop this long before salesCloseAt.
 const ORDER_CLOSE_BUFFER_MINUTES = Number(process.env.ORDER_CLOSE_BUFFER_MINUTES ?? 30);
-// Seeded draws get numbers in this range so they never look like a real pais draw number.
-const DEV_DRAW_NUMBER_BASE = 900_000;
 
 const DEFAULT_LOCATION = {
   name: 'סניף ראשי',
@@ -143,10 +142,10 @@ async function seedDraw() {
   }
   const { drawAt, salesCloseAt } = nextDevDraw(now);
   const last = await prisma.draw.findFirst({
-    where: { drawNumber: { gt: DEV_DRAW_NUMBER_BASE } },
+    where: { drawNumber: { gt: SEED_DRAW_NUMBER_BASE } },
     orderBy: { drawNumber: 'desc' },
   });
-  const drawNumber = (last?.drawNumber ?? DEV_DRAW_NUMBER_BASE) + 1;
+  const drawNumber = (last?.drawNumber ?? SEED_DRAW_NUMBER_BASE) + 1;
   const draw = await prisma.draw.create({ data: { drawNumber, drawAt, salesCloseAt } });
   console.log(`[seed] created draw #${draw.drawNumber}: draw ${drawAt.toISOString()}, sales close ${salesCloseAt.toISOString()}`);
 }

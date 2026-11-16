@@ -4,9 +4,6 @@ import type { FastifyInstance } from 'fastify';
 // The production-hardening layer of the real app (Phase 7): health, request ids, CORS, headers,
 // body limit and the route rate limits, against a real Redis. Needs no database, except /ready.
 
-vi.mock('twilio', () => ({
-  default: vi.fn(() => ({ messages: { create: vi.fn().mockResolvedValue({ sid: 'SM_mock' }) } })),
-}));
 vi.mock('firebase-admin', () => ({
   default: { initializeApp: vi.fn(), messaging: vi.fn(() => ({ send: vi.fn() })) },
 }));

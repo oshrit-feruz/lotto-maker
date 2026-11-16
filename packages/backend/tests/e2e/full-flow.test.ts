@@ -10,12 +10,6 @@ vi.mock('../../src/storage/r2.service.js', () => ({
   DEFAULT_SIGNED_URL_TTL_SECONDS: 300,
 }));
 
-vi.mock('twilio', () => ({
-  default: vi.fn(() => ({
-    messages: { create: vi.fn().mockResolvedValue({ sid: 'SM_mock' }) },
-  })),
-}));
-
 vi.mock('firebase-admin', () => ({
   default: { initializeApp: vi.fn(), messaging: vi.fn(() => ({ send: vi.fn() })) },
 }));

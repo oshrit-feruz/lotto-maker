@@ -11,6 +11,7 @@ import {
 } from '../../services/pais-lotto-parser.js';
 import type { NextLotteryInfo, ParsedLottoDraw } from '../../services/pais-lotto-parser.js';
 import { writeAuditLog } from '../../lib/audit-log.js';
+import { SEED_DRAW_NUMBER_BASE } from '../../lib/seed-draws.js';
 import { markDrawResultsDelayed } from '../results/settlement.service.js';
 
 // One request per draw (plus retries with backoff), a clear User-Agent, no archive crawling.
@@ -138,11 +139,15 @@ export async function storeSuggestedResults(drawId: string, parsed: ParsedLottoD
   });
 }
 
-/** For draws whose time has passed and have no results yet: one request each, with backoff. */
+/**
+ * For draws whose time has passed and have no results yet: one request each, with backoff.
+ * Dev-seed draws (numbered above SEED_DRAW_NUMBER_BASE) are skipped: pais has no results for them.
+ */
 export async function fetchDueResults(now: Date = new Date()): Promise<void> {
   const due = await prisma.draw.findMany({
     where: {
       status: 'scheduled',
+      drawNumber: { lt: SEED_DRAW_NUMBER_BASE },
       drawAt: { lte: new Date(now.getTime() - RESULTS_WAIT_MINUTES * 60_000) },
     },
     orderBy: { drawAt: 'asc' },
