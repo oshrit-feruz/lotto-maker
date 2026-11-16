@@ -21,6 +21,8 @@ export function formatTxAmount(type: string, amount: string | number): string {
   const n = Number(amount);
   const magnitude = Number.isFinite(n) ? Math.abs(n).toFixed(2) : String(amount).replace(/^[-+]/, '');
   const direction = txDirection(type, amount);
-  const sign = direction === 'credit' ? '+' : direction === 'debit' ? '-' : '';
+  let sign = '';
+  if (direction === 'credit') sign = '+';
+  else if (direction === 'debit') sign = '-';
   return `${sign}₪${magnitude}`;
 }

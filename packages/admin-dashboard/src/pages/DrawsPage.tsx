@@ -11,6 +11,8 @@ export { DRAW_STATUS_LABEL };
 
 export const DRAWS_PAGE_SIZE = 25;
 
+const DRAW_TONE: Partial<Record<DrawStatus, 'amber' | 'green'>> = { results_suggested: 'amber', settled: 'green' };
+
 export default function DrawsPage() {
   const [status, setStatus] = useState<DrawStatus | ''>('');
   const [page, setPage] = useState(1);
@@ -25,7 +27,7 @@ export default function DrawsPage() {
       <h1>הגרלות</h1>
       <div className="row">
         <label>
-          סטטוס
+          {'סטטוס'}
           <select
             value={status}
             onChange={(e) => {
@@ -72,7 +74,7 @@ export default function DrawsPage() {
                       </td>
                       <td>{formatDate(d.drawAt)}</td>
                       <td>
-                        <Badge tone={d.status === 'results_suggested' ? 'amber' : d.status === 'settled' ? 'green' : 'blue'}>
+                        <Badge tone={DRAW_TONE[d.status] ?? 'blue'}>
                           {labelOf(DRAW_STATUS_LABEL, d.status)}
                         </Badge>
                       </td>

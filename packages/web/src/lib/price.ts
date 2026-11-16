@@ -27,8 +27,10 @@ export function buildPriceDisplay(calc: CalculateResponse): PriceDisplay {
   }
   lines.push({ label: 'עמלת שירות', value: formatShekel(calc.perOrder.fee) });
   if (calc.drawCount > 1) {
-    lines.push({ label: 'סה״כ להגרלה אחת', value: formatShekel(calc.perOrder.total) });
-    lines.push({ label: 'מספר הגרלות', value: `× ${calc.drawCount}` });
+    lines.push(
+      { label: 'סה״כ להגרלה אחת', value: formatShekel(calc.perOrder.total) },
+      { label: 'מספר הגרלות', value: `× ${calc.drawCount}` },
+    );
   }
   const warning = calc.enoughDraws
     ? null

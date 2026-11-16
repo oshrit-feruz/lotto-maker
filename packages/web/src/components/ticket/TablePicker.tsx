@@ -17,7 +17,7 @@ const NUMBERS = Array.from({ length: LOTTO_NUMBER_MAX }, (_, i) => i + 1);
 const STRONG = Array.from({ length: LOTTO_STRONG_MAX }, (_, i) => i + 1);
 
 /** 37-number grid plus the strong number (1-7) for one table. */
-export function TablePicker({ index, table, needNumbers, needStrong, onNumber, onStrong }: Props) {
+export function TablePicker({ index, table, needNumbers, needStrong, onNumber, onStrong }: Readonly<Props>) {
   const full = table.numbers.length >= needNumbers;
   return (
     <div className="stack">

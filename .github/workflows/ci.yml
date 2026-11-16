@@ -234,6 +234,10 @@ jobs:
         run: npm run build -w packages/shared
       - name: Build
         run: npm run build -w packages/${{ matrix.package }}
+      # next build type-checks with its own settings; tsc covers every file with the package's tsconfig
+      - name: Type-check
+        working-directory: packages/${{ matrix.package }}
+        run: npm exec --no -- tsc --noEmit
       - name: Tests
         run: npm test -w packages/${{ matrix.package }}
 

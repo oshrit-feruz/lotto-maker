@@ -27,7 +27,7 @@ export default function UserDetailPage() {
   );
 }
 
-export function UserView({ user }: { user: AdminUserDetail }) {
+export function UserView({ user }: Readonly<{ user: AdminUserDetail }>) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');

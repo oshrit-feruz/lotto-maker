@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'תוצאות לוטו' };
 // Rendered per request (never baked at build time); the backend data itself is cached by fetch.
 export const dynamic = 'force-dynamic';
 
-function PrizeTable({ table }: { table: PrizeTableData }) {
+function PrizeTable({ table }: Readonly<{ table: PrizeTableData }>) {
   return (
     <div className="table-wrap">
       <h3>{table.title}</h3>
@@ -46,6 +46,15 @@ export default async function ResultsPage() {
   // 404 RESULTS_NOT_AVAILABLE: no draw has confirmed results yet.
   const notYet = !res.ok && res.status === 404;
   const tables = result ? prizeTables(result) : [];
+  const noResult = notYet ? (
+    <div className="card empty">
+      <p>עדיין אין תוצאות מאושרות להצגה. התוצאות יופיעו כאן אחרי ההגרלה הקרובה.</p>
+    </div>
+  ) : (
+    <div className="card">
+      <p>התוצאות אינן זמינות כרגע. נסו שוב מאוחר יותר.</p>
+    </div>
+  );
 
   return (
     <>
@@ -77,14 +86,8 @@ export default async function ResultsPage() {
             </p>
           )}
         </section>
-      ) : notYet ? (
-        <div className="card empty">
-          <p>עדיין אין תוצאות מאושרות להצגה. התוצאות יופיעו כאן אחרי ההגרלה הקרובה.</p>
-        </div>
       ) : (
-        <div className="card">
-          <p>התוצאות אינן זמינות כרגע. נסו שוב מאוחר יותר.</p>
-        </div>
+        noResult
       )}
       <p className="small">
         יש לכם טופס בהגרלה? <Link href="/account/orders">בדקו בהזמנות שלכם</Link>.

@@ -29,23 +29,25 @@ export default function LoginPage() {
     }
   }
 
+  const submitLabel = step === 'phone' ? 'שלח קוד' : 'כניסה';
+
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
         <div className="login-brand">
           <span className="brand-mark" aria-hidden="true" />
-          ניהול
+          {'ניהול'}
         </div>
         <h1>כניסת מנהל</h1>
         <div className="perf" aria-hidden="true" />
         {step === 'phone' ? (
           <label>
-            טלפון
+            {'טלפון'}
             <input value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" placeholder="050-0000000" autoFocus />
           </label>
         ) : (
           <label>
-            קוד אימות שנשלח ל-{phone}
+            {`קוד אימות שנשלח ל-${phone}`}
             <input value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" inputMode="numeric" maxLength={6} autoFocus />
           </label>
         )}
@@ -55,7 +57,7 @@ export default function LoginPage() {
           </p>
         )}
         <button type="submit" disabled={busy || (step === 'phone' ? !phone : code.length !== 6)}>
-          {busy ? 'רגע…' : step === 'phone' ? 'שלח קוד' : 'כניסה'}
+          {busy ? 'רגע…' : submitLabel}
         </button>
         {step === 'code' && (
           <button

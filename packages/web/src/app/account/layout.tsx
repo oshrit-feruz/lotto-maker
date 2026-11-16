@@ -3,7 +3,7 @@ import { AccountNav } from '@/components/account/AccountNav';
 
 export const metadata: Metadata = { title: 'האזור האישי' };
 
-export default function AccountLayout({ children }: { children: React.ReactNode }) {
+export default function AccountLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <>
       <AccountNav />

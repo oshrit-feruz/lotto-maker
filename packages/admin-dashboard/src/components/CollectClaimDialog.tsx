@@ -16,13 +16,13 @@ export default function CollectClaimDialog({
   error,
   onConfirm,
   onCancel,
-}: {
+}: Readonly<{
   claim: Pick<PrizeClaim, 'amount' | 'claimantPhone'> & Partial<Pick<PrizeClaim, 'claimantName' | 'drawNumber'>>;
   busy?: boolean;
   error?: string | null;
   onConfirm: (idLast4: string) => void;
   onCancel: () => void;
-}) {
+}>) {
   const [typed, setTyped] = useState('');
   return (
     <ConfirmDialog
@@ -55,7 +55,7 @@ export default function CollectClaimDialog({
         </dd>
       </dl>
       <label>
-        4 ספרות אחרונות של תעודת הזהות
+        {'4 ספרות אחרונות של תעודת הזהות'}
         <input
           value={typed}
           onChange={(e) => setTyped(e.target.value.replace(/\D/g, '').slice(0, 4))}

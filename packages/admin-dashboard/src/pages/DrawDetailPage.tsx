@@ -26,7 +26,7 @@ export default function DrawDetailPage() {
   );
 }
 
-export function DrawEditor({ draw }: { draw: DrawDetail }) {
+export function DrawEditor({ draw }: Readonly<{ draw: DrawDetail }>) {
   const qc = useQueryClient();
   const readOnly = isDrawReadOnly(draw);
   const [form, setForm] = useState<DrawForm>(() => toForm(draw));

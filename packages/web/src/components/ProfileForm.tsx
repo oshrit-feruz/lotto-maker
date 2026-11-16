@@ -5,7 +5,7 @@ import { api, errorMessage } from '@/lib/api-client';
 import { isValidIsraeliId, normalizeIsraeliId } from '@/lib/israeli-id';
 
 /** KYC: POST /me/kyc {fullName, idNumber, dateOfBirth}. The backend re-validates everything. */
-export function ProfileForm({ onDone }: { onDone: () => void }) {
+export function ProfileForm({ onDone }: Readonly<{ onDone: () => void }>) {
   const [fullName, setFullName] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const [dob, setDob] = useState('');

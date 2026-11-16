@@ -22,7 +22,7 @@ interface Props {
   onSelect: (game: GameType) => void;
 }
 
-export function GameSelectScreen({ onSelect }: Props) {
+export function GameSelectScreen({ onSelect }: Readonly<Props>) {
   // Lotto only: the other games are blocked on the server (ENABLED_GAMES=lotto)
   const games: GameType[] = ['lotto'];
   const [upcoming, setUpcoming] = useState<UpcomingDraw[]>([]);

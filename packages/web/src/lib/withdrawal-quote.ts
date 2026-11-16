@@ -18,13 +18,13 @@ export function quotePath(amount: string, method: WithdrawalMethod): string | nu
   const a = amount.trim();
   if (!AMOUNT.test(a)) return null;
   const n = Number(a);
-  if (!(n > 0) || n > MAX_QUOTE_AMOUNT) return null;
+  if (n <= 0 || n > MAX_QUOTE_AMOUNT) return null;
   return `wallet/withdrawals/quote?${new URLSearchParams({ amount: a, method }).toString()}`;
 }
 
 /** True when `quote` was given for this amount and method (and is not a stale answer). */
 export function quoteMatches(quote: WithdrawalQuote | null, amount: string, method: WithdrawalMethod): boolean {
-  if (!quote || quote.method !== method) return false;
+  if (quote?.method !== method) return false;
   const a = toAmount(amount.trim());
   const q = toAmount(quote.amount);
   return a !== null && q !== null && Math.round(a * 100) === Math.round(q * 100);

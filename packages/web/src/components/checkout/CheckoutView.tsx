@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { TICKET_TYPE_LABELS, getSystematicRule } from '@lotto-maker/shared';
 import { api, errorMessage } from '@/lib/api-client';
 import { clearDraft, loadDraft, savePendingPayment } from '@/lib/draft';
@@ -103,6 +103,61 @@ export function CheckoutView() {
 
   const rule = ticket.systematicType ? getSystematicRule(ticket.systematicType) : null;
 
+  let payAction: ReactNode = null;
+  if (calc?.enoughDraws && missing === 0) {
+    payAction = (
+      <button className="btn btn-block" style={{ marginTop: 12 }} onClick={payFromWallet} disabled={busy}>
+        {busy ? 'מבצע הזמנה…' : 'תשלום מהארנק'}
+      </button>
+    );
+  } else if (calc?.enoughDraws && missing !== null) {
+    payAction = (
+      <>
+        <p className="small" style={{ marginTop: 12 }}>
+          חסרים <span dir="ltr">{formatShekel(missing)}</span> בארנק. נטען את הסכום בכרטיס אשראי בעמוד תשלום
+          מאובטח, ואז ההזמנה תבוצע מהארנק.
+        </p>
+        <button className="btn btn-block" onClick={topUp} disabled={busy}>
+          {busy ? 'מעביר לתשלום…' : `טעינה של ${formatShekel(missing)} ותשלום`}
+        </button>
+      </>
+    );
+  }
+
+  let summary: ReactNode;
+  if (me && !me.verifiedAdult) {
+    summary = (
+      <>
+        <div className="alert alert-info">לפני ההזמנה הראשונה יש להשלים את פרטי הפרופיל.</div>
+        <ProfileForm onDone={() => void load(ticket)} />
+      </>
+    );
+  } else if (calc && balance !== null && missing !== null) {
+    summary = (
+      <>
+        <PriceSummary price={buildPriceDisplay(calc)} />
+        <div className="perf" aria-hidden="true" />
+        <div className="receipt-total">
+          <span>לתשלום</span>
+          <span dir="ltr">{formatShekel(calc.total)}</span>
+        </div>
+        <div className="spread small">
+          <span>יתרה בארנק</span>
+          <span dir="ltr">{formatShekel(balance)}</span>
+        </div>
+        {payAction}
+      </>
+    );
+  } else if (error) {
+    summary = (
+      <button className="btn btn-ghost" onClick={() => void load(ticket)}>
+        נסו שוב
+      </button>
+    );
+  } else {
+    summary = <p className="muted loading">טוען…</p>;
+  }
+
   return (
     <div className="grid-2">
       <section className="card">
@@ -129,46 +184,7 @@ export function CheckoutView() {
             {error}
           </div>
         ) : null}
-        {me && !me.verifiedAdult ? (
-          <>
-            <div className="alert alert-info">לפני ההזמנה הראשונה יש להשלים את פרטי הפרופיל.</div>
-            <ProfileForm onDone={() => void load(ticket)} />
-          </>
-        ) : calc && balance !== null && missing !== null ? (
-          <>
-            <PriceSummary price={buildPriceDisplay(calc)} />
-            <div className="perf" aria-hidden="true" />
-            <div className="receipt-total">
-              <span>לתשלום</span>
-              <span dir="ltr">{formatShekel(calc.total)}</span>
-            </div>
-            <div className="spread small">
-              <span>יתרה בארנק</span>
-              <span dir="ltr">{formatShekel(balance)}</span>
-            </div>
-            {!calc.enoughDraws ? null : missing === 0 ? (
-              <button className="btn btn-block" style={{ marginTop: 12 }} onClick={payFromWallet} disabled={busy}>
-                {busy ? 'מבצע הזמנה…' : 'תשלום מהארנק'}
-              </button>
-            ) : (
-              <>
-                <p className="small" style={{ marginTop: 12 }}>
-                  חסרים <span dir="ltr">{formatShekel(missing)}</span> בארנק. נטען את הסכום בכרטיס אשראי בעמוד תשלום
-                  מאובטח, ואז ההזמנה תבוצע מהארנק.
-                </p>
-                <button className="btn btn-block" onClick={topUp} disabled={busy}>
-                  {busy ? 'מעביר לתשלום…' : `טעינה של ${formatShekel(missing)} ותשלום`}
-                </button>
-              </>
-            )}
-          </>
-        ) : !error ? (
-          <p className="muted loading">טוען…</p>
-        ) : (
-          <button className="btn btn-ghost" onClick={() => void load(ticket)}>
-            נסו שוב
-          </button>
-        )}
+        {summary}
       </section>
     </div>
   );

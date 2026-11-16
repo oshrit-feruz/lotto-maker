@@ -64,8 +64,8 @@ describe('startSession', () => {
     startSession(admin(1));
     expect(hasSession()).toBe(true);
     expect(getRefreshToken()).toBe('r1');
-    expect(sessionStorage.length).toBe(0);
-    expect(localStorage.length).toBe(0);
+    expect(sessionStorage).toHaveLength(0);
+    expect(localStorage).toHaveLength(0);
   });
 });
 

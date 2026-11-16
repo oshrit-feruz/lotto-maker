@@ -1,7 +1,7 @@
 import type { PriceDisplay } from '@/lib/price';
 
 /** `hideWarning`: the caller shows `price.warning` itself (the sticky bar keeps it outside the collapsed details). */
-export function PriceSummary({ price, hideWarning = false }: { price: PriceDisplay; hideWarning?: boolean }) {
+export function PriceSummary({ price, hideWarning = false }: Readonly<{ price: PriceDisplay; hideWarning?: boolean }>) {
   return (
     <>
       <ul className="price-lines">

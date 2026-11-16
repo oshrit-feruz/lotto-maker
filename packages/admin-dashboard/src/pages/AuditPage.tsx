@@ -23,7 +23,7 @@ export function actorLabel(e: Pick<AuditEntry, 'actorType' | 'actorId' | 'adminN
 }
 
 /** A date filter: the native picker (localized where the browser allows) plus the value as dd/mm/yyyy. */
-function DateFilter({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function DateFilter({ label, value, onChange }: Readonly<{ label: string; value: string; onChange: (v: string) => void }>) {
   return (
     <label>
       {label}

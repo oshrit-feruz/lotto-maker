@@ -13,7 +13,7 @@ interface Props {
   onContinue: () => void;
 }
 
-export function WalletLoadScreen({ onContinue }: Props) {
+export function WalletLoadScreen({ onContinue }: Readonly<Props>) {
   const [selected, setSelected] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const pendingPayment = useRef<string | null>(null);

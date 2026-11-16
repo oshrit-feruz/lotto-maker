@@ -7,7 +7,7 @@ import { getWithdrawalBankDetails } from '../api/payouts';
  * Every fetch is written to the audit log, so nothing fetches it automatically and the result is
  * kept only in this component's state (gone when the dialog closes), never in the query cache.
  */
-export default function BankDetailsReveal({ withdrawalId }: { withdrawalId: string }) {
+export default function BankDetailsReveal({ withdrawalId }: Readonly<{ withdrawalId: string }>) {
   const reveal = useMutation({ mutationFn: () => getWithdrawalBankDetails(withdrawalId) });
 
   if (reveal.data) {

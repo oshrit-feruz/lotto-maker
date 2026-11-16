@@ -26,6 +26,8 @@ export function slotError(local: string, expiresAt: string, now = new Date()): s
   return null;
 }
 
+const CLAIM_TONE: Partial<Record<ClaimStatus, 'green' | 'red'>> = { collected: 'green', expired: 'red' };
+
 export default function PrizeClaimsPage() {
   const qc = useQueryClient();
   const [status, setStatus] = useState<ClaimStatus>('awaiting_pickup');
@@ -67,7 +69,7 @@ export default function PrizeClaimsPage() {
       <h1>זכיות לאיסוף</h1>
       <div className="row">
         <label>
-          סטטוס
+          {'סטטוס'}
           <select
             value={status}
             onChange={(e) => {
@@ -114,7 +116,7 @@ export default function PrizeClaimsPage() {
                       <td>{formatDate(c.scheduledFor)}</td>
                       <td>{formatDate(c.expiresAt)}</td>
                       <td>
-                        <Badge tone={c.status === 'collected' ? 'green' : c.status === 'expired' ? 'red' : 'amber'}>
+                        <Badge tone={CLAIM_TONE[c.status] ?? 'amber'}>
                           {labelOf(CLAIM_STATUS_LABEL, c.status)}
                         </Badge>
                       </td>
@@ -177,7 +179,7 @@ export default function PrizeClaimsPage() {
             סכום: {formatNis(scheduling.amount)} · בתוקף עד {formatDate(scheduling.expiresAt)}
           </p>
           <label>
-            תאריך ושעה (שעון ישראל)
+            {'תאריך ושעה (שעון ישראל)'}
             <input
               type="datetime-local"
               value={slot}

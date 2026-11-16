@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { MAX_DRAW_COUNT, TICKET_TYPE_LABELS, binomial, type TicketType } from '@lotto-maker/shared';
 import { ApiError, api, errorMessage } from '@/lib/api-client';
 import { loadDraft, saveDraft } from '@/lib/draft';
@@ -113,12 +113,37 @@ export function TicketForm() {
   }, [active, state.tables.length]);
 
   const price = calc ? buildPriceDisplay(calc) : null;
-  const canContinue = Boolean(requestKey && calc && calc.enoughDraws && !loadingPrice);
+  const canContinue = Boolean(requestKey && calc?.enoughDraws && !loadingPrice);
 
   function goToCheckout() {
     if (!canContinue) return;
     saveDraft(state);
     router.push('/checkout');
+  }
+
+  const firstDraw = calc?.draws[0];
+  let priceStatus: ReactNode = null;
+  if (!complete) {
+    priceStatus = <p className="muted small price-bar-note">מלאו את כל הטבלאות כדי לראות מחיר.</p>;
+  } else if (loadingPrice) {
+    priceStatus = <p className="muted small loading price-bar-note">מחשב מחיר…</p>;
+  } else if (priceError) {
+    priceStatus = <div className="alert alert-error small">{priceError}</div>;
+  } else if (price) {
+    priceStatus = (
+      <>
+        <div className="price-bar-details" id="price-bar-details">
+          <PriceSummary price={price} hideWarning />
+          {firstDraw ? (
+            <p className="small muted" style={{ margin: '0 0 8px' }}>
+              הגרלה {firstDraw.drawNumber}, {formatDateTime(firstDraw.drawAt)}. ההזמנה נסגרת{' '}
+              {formatDateTime(firstDraw.orderCutoff)}.
+            </p>
+          ) : null}
+        </div>
+        {price.warning ? <div className="alert alert-warn small">{price.warning}</div> : null}
+      </>
+    );
   }
 
   return (
@@ -203,7 +228,7 @@ export function TicketForm() {
             onChange={(e) => dispatch({ type: 'setExtra', extra: e.target.checked })}
             style={{ width: 20, height: 20 }}
           />
-          להוסיף אקסטרה
+          {'להוסיף אקסטרה'}
         </label>
       </section>
 
@@ -224,20 +249,33 @@ export function TicketForm() {
             }}
           >
             <span className="lottomat-icon" aria-hidden="true" />
-            לוטומט לכל הטבלאות
+            {'לוטומט לכל הטבלאות'}
           </button>
         </div>
 
         {state.tables.map((table, i) => {
           const done = isTableComplete(state, i);
           const open = i === active;
+          const rollingClass = rolling && (rolling.target === 'all' || rolling.target === i) ? ' rolling' : '';
+          let body: ReactNode;
+          if (open) {
+            body = (
+              <TablePicker
+                index={i}
+                table={table}
+                needNumbers={needNumbers}
+                needStrong={needStrong}
+                onNumber={(n) => dispatch({ type: 'toggleNumber', table: i, number: n })}
+                onStrong={(n) => dispatch({ type: 'toggleStrong', table: i, number: n })}
+              />
+            );
+          } else if (table.numbers.length > 0 || table.strongNumbers.length > 0) {
+            body = <Balls numbers={table.numbers} strong={table.strongNumbers} />;
+          } else {
+            body = <span className="small muted">ריקה. לחצו לעריכה או השתמשו בלוטומט.</span>;
+          }
           return (
-            <div
-              key={i}
-              className={`table-card${done ? ' complete' : ''}${
-                rolling && (rolling.target === 'all' || rolling.target === i) ? ' rolling' : ''
-              }`}
-            >
+            <div key={i} className={`table-card${done ? ' complete' : ''}${rollingClass}`}>
               <div className="spread">
                 <button
                   type="button"
@@ -259,7 +297,7 @@ export function TicketForm() {
                     }}
                   >
                     <span className="lottomat-icon" aria-hidden="true" />
-                    לוטומט
+                    {'לוטומט'}
                   </button>
                   <button
                     type="button"
@@ -271,20 +309,7 @@ export function TicketForm() {
                   </button>
                 </div>
               </div>
-              {open ? (
-                <TablePicker
-                  index={i}
-                  table={table}
-                  needNumbers={needNumbers}
-                  needStrong={needStrong}
-                  onNumber={(n) => dispatch({ type: 'toggleNumber', table: i, number: n })}
-                  onStrong={(n) => dispatch({ type: 'toggleStrong', table: i, number: n })}
-                />
-              ) : table.numbers.length > 0 || table.strongNumbers.length > 0 ? (
-                <Balls numbers={table.numbers} strong={table.strongNumbers} />
-              ) : (
-                <span className="small muted">ריקה. לחצו לעריכה או השתמשו בלוטומט.</span>
-              )}
+              {body}
             </div>
           );
         })}
@@ -303,26 +328,7 @@ export function TicketForm() {
       ) : null}
 
       <div className={`price-bar${detailsOpen ? ' details-open' : ''}`} aria-live="polite">
-        {!complete ? (
-          <p className="muted small price-bar-note">מלאו את כל הטבלאות כדי לראות מחיר.</p>
-        ) : loadingPrice ? (
-          <p className="muted small loading price-bar-note">מחשב מחיר…</p>
-        ) : priceError ? (
-          <div className="alert alert-error small">{priceError}</div>
-        ) : price ? (
-          <>
-            <div className="price-bar-details" id="price-bar-details">
-              <PriceSummary price={price} hideWarning />
-              {calc && calc.draws[0] ? (
-                <p className="small muted" style={{ margin: '0 0 8px' }}>
-                  הגרלה {calc.draws[0].drawNumber}, {formatDateTime(calc.draws[0].drawAt)}. ההזמנה נסגרת{' '}
-                  {formatDateTime(calc.draws[0].orderCutoff)}.
-                </p>
-              ) : null}
-            </div>
-            {price.warning ? <div className="alert alert-warn small">{price.warning}</div> : null}
-          </>
-        ) : null}
+        {priceStatus}
         <div className="price-bar-main">
           <div className="price-bar-sum">
             <div className="price-total">{price ? <span dir="ltr">{price.total}</span> : null}</div>

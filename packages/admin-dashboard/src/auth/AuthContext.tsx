@@ -15,7 +15,7 @@ const Ctx = createContext<AuthState | null>(null);
  * Tokens are kept in memory only (see api/client.ts), so every page load starts logged out.
  * Leaving a session drops all cached query data so the next admin never sees the previous one's.
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const qc = useQueryClient();
   const [status, setStatus] = useState<AuthState['status']>('out');
 

@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react';
 
-export function Balls({ numbers, strong }: { numbers: number[]; strong?: number[] | number | null }) {
-  const strongList = strong === null || strong === undefined ? [] : Array.isArray(strong) ? strong : [strong];
+export function Balls({ numbers, strong }: Readonly<{ numbers: number[]; strong?: number[] | number | null }>) {
+  let strongList: number[] = [];
+  if (Array.isArray(strong)) strongList = strong;
+  else if (strong !== null && strong !== undefined) strongList = [strong];
   return (
     // One line always: the balls shrink to fit a narrow row (see .balls in globals.css).
     <span className="balls" dir="ltr">

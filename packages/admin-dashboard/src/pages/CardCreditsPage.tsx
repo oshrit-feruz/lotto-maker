@@ -64,7 +64,7 @@ export default function CardCreditsPage() {
       </p>
       <div className="row">
         <label>
-          סטטוס
+          {'סטטוס'}
           <select
             value={status}
             onChange={(e) => {
@@ -148,7 +148,7 @@ export default function CardCreditsPage() {
             לא ניתן לבטל.
           </p>
           <label>
-            אסמכתת התשלום (למשל מספר העברה בנקאית)
+            {'אסמכתת התשלום (למשל מספר העברה בנקאית)'}
             <input
               value={reference}
               onChange={(e) => setReference(e.target.value)}

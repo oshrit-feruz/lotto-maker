@@ -22,7 +22,7 @@ type Phase = 'checking' | 'approved' | 'ordering' | 'done' | 'failed' | 'timeout
  * provider's webhook has credited the wallet; on /payment/success it then
  * places the stored ticket as an order (POST /orders).
  */
-export function PaymentReturn({ mode }: { mode: 'success' | 'canceled' }) {
+export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' }>) {
   const params = useSearchParams();
   const [phase, setPhase] = useState<Phase>('checking');
   const [payment, setPayment] = useState<PaymentView | null>(null);

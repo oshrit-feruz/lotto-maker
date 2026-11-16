@@ -32,7 +32,7 @@ export function SiteFooter() {
               <a className="helpline" href={`tel:${HELPLINE}`}>
                 {HELPLINE}
               </a>
-              .
+              {'.'}
             </p>
           </div>
           <p className="small">התוצאות הרשמיות הן אך ורק אלו המפורסמות על ידי מפעל הפיס.</p>

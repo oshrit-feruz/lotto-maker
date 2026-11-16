@@ -13,7 +13,7 @@ interface Props {
   onToggle: (day: DrawDay) => void;
 }
 
-export function DrawDaySelector({ selected, onToggle }: Props) {
+export function DrawDaySelector({ selected, onToggle }: Readonly<Props>) {
   const days: DrawDay[] = ['tue', 'thu', 'sat'];
   return (
     <View style={styles.row}>

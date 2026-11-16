@@ -28,7 +28,7 @@ function Shell() {
         <div className="nav-inner">
           <div className="nav-brand">
             <span className="brand-mark" aria-hidden="true" />
-            ניהול
+            {'ניהול'}
           </div>
           {NAV.map(([to, label]) => (
             <NavLink key={to} to={to}>

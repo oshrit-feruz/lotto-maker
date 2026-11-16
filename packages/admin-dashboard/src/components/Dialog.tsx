@@ -23,7 +23,7 @@ export function ConfirmDialog({
   danger = false,
   onConfirm,
   onCancel,
-}: {
+}: Readonly<{
   title: string;
   children: ReactNode;
   confirmLabel: string;
@@ -33,7 +33,7 @@ export function ConfirmDialog({
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}>) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   // Latest values for the document listener, which is registered once.
@@ -59,7 +59,9 @@ export function ConfirmDialog({
       e.preventDefault();
       if (items.length === 0) return dialog.focus();
       const i = items.indexOf(document.activeElement as HTMLElement);
-      const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : i === -1 || i === items.length - 1 ? 0 : i + 1;
+      let next: number;
+      if (e.shiftKey) next = i <= 0 ? items.length - 1 : i - 1;
+      else next = i === -1 || i === items.length - 1 ? 0 : i + 1;
       items[next]!.focus();
     };
     // Pull focus back if it lands outside (e.g. a click on the page behind the backdrop).

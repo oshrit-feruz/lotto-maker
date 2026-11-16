@@ -13,13 +13,13 @@ export function Pager({
   total,
   onPage,
   disabled = false,
-}: {
+}: Readonly<{
   page: number;
   pageSize: number;
   total: number;
   onPage: (page: number) => void;
   disabled?: boolean;
-}) {
+}>) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="row" style={{ marginTop: 12 }}>
@@ -36,7 +36,7 @@ export function Pager({
   );
 }
 
-export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+export function ErrorBox({ error, onRetry }: Readonly<{ error: unknown; onRetry?: () => void }>) {
   const msg = errorText(error);
   return (
     <div className="error" role="alert">
@@ -50,17 +50,17 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
   );
 }
 
-export function Empty({ children = 'אין נתונים' }: { children?: ReactNode }) {
+export function Empty({ children = 'אין נתונים' }: Readonly<{ children?: ReactNode }>) {
   return <p className="muted empty">{children}</p>;
 }
 
 export function Badge({
   tone = 'gray',
   children,
-}: {
+}: Readonly<{
   tone?: 'gray' | 'green' | 'red' | 'amber' | 'blue';
   children: ReactNode;
-}) {
+}>) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
@@ -79,7 +79,7 @@ export function QueryState<T>({
 }
 
 /** An amount as `₪1,234.00` / `-₪14.50`, isolated LTR so the minus stays in front in RTL text. */
-export function Money({ value, className }: { value: number | string | null | undefined; className?: string | undefined }) {
+export function Money({ value, className }: Readonly<{ value: number | string | null | undefined; className?: string | undefined }>) {
   return (
     <span dir="ltr" className={['money', className].filter(Boolean).join(' ')}>
       {formatNis(value)}

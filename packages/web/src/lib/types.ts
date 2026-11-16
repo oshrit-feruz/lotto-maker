@@ -158,7 +158,8 @@ export interface Paged<T> {
 
 export interface WalletTransactionView {
   id: string;
-  type: 'deposit' | 'charge' | 'refund' | 'winning' | 'refund_reversal' | string;
+  /** deposit, charge, refund, winning, refund_reversal, or a type added later. */
+  type: string;
   amount: string;
   orderId: string | null;
   description: string;
