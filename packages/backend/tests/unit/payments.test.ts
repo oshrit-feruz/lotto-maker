@@ -37,6 +37,7 @@ beforeEach(() => {
   fake.db.payments.clear();
   fake.db.walletTxs.length = 0;
   fake.db.auditLogs.length = 0;
+  fake.db.limits.clear();
   provider.refunds.length = 0;
   fake.db.addUser(USER, 0);
 });
@@ -153,6 +154,61 @@ describe('payments: webhook', () => {
     expect(fake.db.walletTxs).toHaveLength(0);
     expect(payment.status).toBe('refunded');
     expect(provider.refunds).toEqual([{ providerTxId, amount: 100 }]);
+  });
+
+  describe('responsible gaming at credit time', () => {
+    const limitsRow = (patch: Record<string, unknown>) => ({
+      depositDaily: null,
+      depositWeekly: null,
+      depositMonthly: null,
+      lossMonthly: null,
+      pending: {},
+      selfExcludedUntil: null,
+      selfExcludedPermanent: false,
+      selfExcludedAt: null,
+      ...patch,
+    });
+
+    it('a user who self-excluded after checkout is not credited; the payment is refunded', async () => {
+      const { providerTxId, payment } = await checkout(100);
+      fake.db.limits.set(USER, limitsRow({ selfExcludedPermanent: true, selfExcludedAt: new Date() }));
+
+      const { rawBody, headers } = signedWebhook({ providerTxId, status: 'approved', amount: 100 });
+      await expect(processWebhook(rawBody, headers)).resolves.toEqual({ outcome: 'rg_blocked' });
+
+      expect(fake.db.balanceOf(USER)).toBe(0);
+      expect(fake.db.walletTxs).toHaveLength(0);
+      expect(payment.status).toBe('refunded');
+      expect(provider.refunds).toEqual([{ providerTxId, amount: 100 }]);
+      expect(fake.db.auditLogs.map((a) => a.action)).toContain('payment:rejected_responsible_gaming');
+      expect(fake.db.auditLogs.find((a) => a.action === 'payment:rejected_responsible_gaming').metadata.code).toBe(
+        'SELF_EXCLUDED',
+      );
+    });
+
+    it('two checkouts that each fit the limit: the second credit over the limit is refused', async () => {
+      // Both checkouts were opened before the limit was set (a decrease applies at once)
+      const a = await checkout(100);
+      const b = await checkout(100);
+      fake.db.limits.set(USER, limitsRow({ depositDaily: 150 }));
+
+      const okA = signedWebhook({ providerTxId: a.providerTxId, status: 'approved', amount: 100 });
+      await expect(processWebhook(okA.rawBody, okA.headers)).resolves.toEqual({ outcome: 'credited' });
+      const okB = signedWebhook({ providerTxId: b.providerTxId, status: 'approved', amount: 100 });
+      await expect(processWebhook(okB.rawBody, okB.headers)).resolves.toEqual({ outcome: 'rg_blocked' });
+
+      expect(fake.db.balanceOf(USER)).toBe(100);
+      expect(b.payment.status).toBe('refunded');
+      expect(provider.refunds).toEqual([{ providerTxId: b.providerTxId, amount: 100 }]);
+    });
+
+    it('a deposit within the limit is credited, counting itself once', async () => {
+      fake.db.limits.set(USER, limitsRow({ depositDaily: 100 }));
+      const { providerTxId } = await checkout(100);
+      const { rawBody, headers } = signedWebhook({ providerTxId, status: 'approved', amount: 100 });
+      await expect(processWebhook(rawBody, headers)).resolves.toEqual({ outcome: 'credited' });
+      expect(fake.db.balanceOf(USER)).toBe(100);
+    });
   });
 
   describe('refund after approval', () => {

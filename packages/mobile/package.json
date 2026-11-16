@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",
@@ -18,6 +19,7 @@
     "@react-navigation/native": "^6.1.17",
     "@react-navigation/stack": "^6.3.29",
     "expo": "~51.0.0",
+    "expo-font": "~12.0.10",
     "expo-image": "~1.12.0",
     "expo-notifications": "~0.28.0",
     "expo-router": "~3.5.0",
@@ -33,6 +35,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
   }
 }

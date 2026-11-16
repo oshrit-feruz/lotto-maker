@@ -5,25 +5,25 @@
  * HaPais's colours: pine, sun-yellow, plum on a cool mint paper.
  */
 :root {
-  --pine: #0c3b33;
-  --pine-deep: #072620;
-  --pine-2: #145247;
+  --pine: #395c6b;
+  --pine-deep: #284450;
+  --pine-2: #4a7182;
   --sun: #ffc233;
   --sun-deep: #e8a500;
   --sun-soft: #fff4d4;
   --plum: #5b2a86;
   --plum-soft: #efe6f7;
-  --paper: #f0f5f1;
-  --ink: #0f1f1b;
-  --muted: #4a5e58;
-  --line: #d3dfd8;
+  --paper: #eef3f5;
+  --ink: #12232b;
+  --muted: #5a6f78;
+  --line: #d6e0e6;
   --surface: #ffffff;
 
   /* Legacy names kept so every existing class keeps working. */
   --bg: var(--paper);
   --brand: var(--pine);
   --brand-ink: #ffffff;
-  --brand-soft: #e1eee8;
+  --brand-soft: #d3e0e5;
   --accent: var(--sun);
   --accent-soft: var(--sun-soft);
   --danger: #b3261e;
@@ -33,7 +33,7 @@
 
   --radius: 14px;
   --radius-sm: 10px;
-  --shadow: 0 1px 0 rgba(12, 59, 51, 0.06), 0 10px 24px -14px rgba(12, 59, 51, 0.35);
+  --shadow: 0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35);
   --focus: 0 0 0 3px var(--paper), 0 0 0 6px var(--plum);
   --font-display: var(--font-shekel), var(--font-secular-he), var(--font-secular-latin), var(--font-rubik-he), system-ui, sans-serif;
   --font-body: var(--font-rubik-he), var(--font-rubik-latin), system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
@@ -228,7 +228,7 @@ main {
 /* ---------- Footer ---------- */
 .site-footer {
   background: var(--pine-deep);
-  color: #d5e2dd;
+  color: #d5e0e5;
   font-size: 0.92rem;
   padding: 32px 0 40px;
 }
@@ -276,10 +276,10 @@ main {
 
 /* Responsible gaming: an always-visible panel, never fine print. */
 .disclaimer {
-  border: 1px solid #2b4a42;
+  border: 1px solid #3b5866;
   border-radius: var(--radius);
   padding: 18px;
-  background: #0b302a;
+  background: #1f3a46;
 }
 
 .disclaimer p {
@@ -297,7 +297,7 @@ main {
   align-items: start;
   padding: 14px 0;
   margin: 12px 0;
-  border-block: 1px solid #2b4a42;
+  border-block: 1px solid #3b5866;
   color: #ffffff;
   font-size: 1rem;
 }
@@ -337,7 +337,7 @@ main {
 }
 
 .disclaimer .small {
-  color: #c3d4ce;
+  color: #c3d0d6;
   margin: 0;
 }
 
@@ -431,8 +431,8 @@ a.card:hover {
 }
 
 .btn:disabled {
-  background: #b9c8c2;
-  color: #33463f;
+  background: #b9c6cd;
+  color: #33444c;
   cursor: not-allowed;
 }
 
@@ -460,7 +460,7 @@ a.card:hover {
 
 .btn-ghost:disabled {
   background: transparent;
-  color: #7f918b;
+  color: #7d8f98;
   border-color: var(--line);
 }
 
@@ -504,7 +504,7 @@ select {
   min-height: 48px;
   padding: 10px 14px;
   border-radius: var(--radius-sm);
-  border: 1.5px solid #b8c9c1;
+  border: 1.5px solid #b8c8d0;
   font: inherit;
   background: #ffffff;
   color: var(--ink);
@@ -576,7 +576,7 @@ input[type='radio'] {
 
 .alert-info {
   background: var(--brand-soft);
-  border-color: #bcd6cc;
+  border-color: #bccdd6;
   border-inline-start-color: var(--pine-2);
 }
 
@@ -630,7 +630,7 @@ input[type='radio'] {
   height: 56px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  border: 3px dashed #a8bdb4;
+  border: 3px dashed #a8bac3;
 }
 
 .empty-note {
@@ -680,7 +680,7 @@ table.table {
 }
 
 .table tbody tr:nth-child(odd) {
-  background: #f7faf8;
+  background: #f7f9fa;
 }
 
 .table-wrap {
@@ -702,7 +702,7 @@ table.table {
 .perf {
   position: relative;
   height: 0;
-  border-top: 2px dashed #c3d3cb;
+  border-top: 2px dashed #c3d1d8;
   margin: 18px calc(-1 * 20px);
 }
 
@@ -751,12 +751,12 @@ table.table {
 }
 
 .hero-copy p {
-  color: #d3e6df;
+  color: #d3e0e5;
   font-size: 1.05rem;
 }
 
 .hero .muted {
-  color: #d3e6df;
+  color: #d3e0e5;
 }
 
 /* Decorative balls behind the hero (purely visual). */
@@ -797,7 +797,7 @@ table.table {
   height: 34px;
   inset-inline-end: 34px;
   top: 92px;
-  background: radial-gradient(circle at 35% 30%, #ffffff 0 10%, #e3efe9 42%, #a9c4b9 100%);
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 10%, #e3ebef 42%, #a9bcc5 100%);
   animation-delay: 0.22s;
 }
 
@@ -883,7 +883,7 @@ table.table {
 .countdown dt {
   font-size: 0.78rem;
   margin-top: 4px;
-  color: #d3e6df;
+  color: #d3e0e5;
 }
 
 .countdown-closed {
@@ -970,7 +970,7 @@ table.table {
   inset-inline-start: 21px;
   top: 44px;
   bottom: 0;
-  border-inline-start: 2px dashed #a8bdb4;
+  border-inline-start: 2px dashed #a8bac3;
 }
 
 .steps h3 {
@@ -991,7 +991,7 @@ table.table {
     top: 21px;
     bottom: auto;
     border-inline-start: 0;
-    border-top: 2px dashed #a8bdb4;
+    border-top: 2px dashed #a8bac3;
   }
 }
 
@@ -1017,8 +1017,8 @@ table.table {
 
 .ball {
   --ball-hi: #ffffff;
-  --ball-mid: #eaf3ee;
-  --ball-lo: #b7cec4;
+  --ball-mid: #eaf0f3;
+  --ball-lo: #b7c7cf;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1075,7 +1075,7 @@ table.table {
   width: 100%;
   min-width: 0;
   border-radius: 50%;
-  border: 2px solid #c7d6cf;
+  border: 2px solid #c7d4db;
   background: #ffffff;
   font-family: var(--font-display);
   font-size: 1.1rem;
@@ -1090,7 +1090,7 @@ table.table {
 .picker button:hover:not(:disabled),
 .strong-picker button:hover {
   border-color: var(--pine-2);
-  background: #f3f8f5;
+  background: #f3f6f8;
 }
 
 .picker button:focus-visible,
@@ -1216,7 +1216,7 @@ table.table {
 .segmented button[aria-pressed='true'] {
   background: var(--pine);
   color: var(--brand-ink);
-  box-shadow: 0 2px 6px -2px rgba(12, 59, 51, 0.6);
+  box-shadow: 0 2px 6px -2px rgba(57, 92, 107, 0.6);
 }
 
 .price-bar {
@@ -1226,7 +1226,7 @@ table.table {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px 18px 0 0;
-  box-shadow: 0 -10px 30px -12px rgba(12, 59, 51, 0.35);
+  box-shadow: 0 -10px 30px -12px rgba(57, 92, 107, 0.35);
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
   margin: 20px -16px -48px;
 }

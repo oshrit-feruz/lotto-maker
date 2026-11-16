@@ -1,6 +1,7 @@
 import type { DrawDetail } from '../api/types';
-import { formatNis } from '../lib/format';
+import { formatCount, formatNis } from '../lib/format';
 import { GAMES, GAME_LABEL, computePayout } from '../lib/payout';
+import { Balls, ExtraDigits } from './Balls';
 import { ConfirmDialog } from './Dialog';
 
 export const ESTIMATE_NOTE = 'הערכה לפי טבלת הזכיות הארצית — הסכום בפועל נקבע לפי הטפסים של הלקוחות';
@@ -34,9 +35,10 @@ export default function ConfirmDrawDialog({
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      <p className="ltr">
-        {draw.numbers.join(' · ')} + {draw.strong ?? '?'} | {draw.extraDigits.join('')}
-      </p>
+      <div className="results-line">
+        <Balls numbers={draw.numbers} strong={draw.strong} />
+        <ExtraDigits digits={draw.extraDigits} />
+      </div>
       <p className="muted">{ESTIMATE_NOTE}</p>
       <table>
         <thead>
@@ -52,19 +54,27 @@ export default function ConfirmDrawDialog({
             return (
               <tr key={g}>
                 <td>{GAME_LABEL[g]}</td>
-                <td data-testid={`winners-${g}`}>{rows.reduce((s, t) => s + t.winnersCount, 0)}</td>
+                <td data-testid={`winners-${g}`}>{formatCount(rows.reduce((s, t) => s + t.winnersCount, 0))}</td>
                 <td data-testid={`total-${g}`}>{formatNis(estimate.perGame[g])}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      <p>
-        <strong>
-          סה״כ משוער לפי טבלת הזכיות: <span data-testid="grand-total">{formatNis(estimate.total)}</span>
-        </strong>{' '}
-        ({estimate.winners} זוכים ארצית)
-      </p>
+      <dl className="kv">
+        <dt>
+          <strong>סה״כ משוער לפי טבלת הזכיות</strong>
+        </dt>
+        <dd>
+          <strong>
+            <span data-testid="grand-total" dir="ltr" className="money">
+              {formatNis(estimate.total)}
+            </span>
+          </strong>
+        </dd>
+        <dt>זוכים ארצית</dt>
+        <dd data-testid="grand-winners">{formatCount(estimate.winners)}</dd>
+      </dl>
       <p className="muted">
         האישור מתחיל את סילוק הזכיות לפי הטפסים של הלקוחות. בסיום ההגרלה תופיע בסטטוס „שולמה”, או תסומן „דורש טיפול”
         אם הסילוק נכשל. לאחר האישור לא ניתן לערוך את התוצאות, אלא אם ההגרלה מסומנת „דורש טיפול”.

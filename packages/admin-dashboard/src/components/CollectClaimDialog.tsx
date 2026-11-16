@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import type { PrizeClaim } from '../api/types';
-import { formatNis } from '../lib/format';
-import { isIdLast4Valid } from '../lib/idCheck';
+import { isIdLast4Format } from '../lib/idCheck';
+import { formatPhoneLocal } from '../lib/phone';
+import { Money } from './ui';
 import { ConfirmDialog } from './Dialog';
 
-/** Collecting a prize requires typing the claimant's ID last 4 digits. */
+/**
+ * Hand-over of a prize against the claimant's ID card. The admin types the last 4 digits from the
+ * physical card. The dashboard never receives the claimant's digits, so it only checks the format;
+ * the server compares them and a mismatch comes back as 422 ID_MISMATCH (shown in Hebrew).
+ */
 export default function CollectClaimDialog({
   claim,
   busy,
@@ -12,52 +17,56 @@ export default function CollectClaimDialog({
   onConfirm,
   onCancel,
 }: {
-  claim: Pick<PrizeClaim, 'amount' | 'claimantIdLast4' | 'claimantPhone'>;
+  claim: Pick<PrizeClaim, 'amount' | 'claimantPhone'> & Partial<Pick<PrizeClaim, 'claimantName' | 'drawNumber'>>;
   busy?: boolean;
   error?: string | null;
   onConfirm: (idLast4: string) => void;
   onCancel: () => void;
 }) {
   const [typed, setTyped] = useState('');
-  const idKnown = !!claim.claimantIdLast4;
-  const valid = isIdLast4Valid(typed, claim.claimantIdLast4);
-  const mismatch = idKnown && typed.length === 4 && !valid;
   return (
     <ConfirmDialog
       title="מסירת זכייה"
       confirmLabel="סמן כנאסף"
-      confirmDisabled={!valid}
+      confirmDisabled={!isIdLast4Format(typed)}
       busy={busy ?? false}
       error={error ?? null}
       onConfirm={() => onConfirm(typed)}
       onCancel={onCancel}
     >
-      <p>
-        סכום למסירה: <strong>{formatNis(claim.amount)}</strong>
-        {claim.claimantPhone && <span className="ltr"> · {claim.claimantPhone}</span>}
-      </p>
-      {!idKnown && (
-        <p className="error" role="alert">
-          תעודת הזהות של הזוכה אינה זמינה במערכת – לא ניתן לאמת ולמסור את הזכייה.
-        </p>
-      )}
+      <dl className="kv">
+        <dt>סכום למסירה</dt>
+        <dd>
+          <strong>
+            <Money value={claim.amount} />
+          </strong>
+        </dd>
+        {claim.drawNumber != null && (
+          <>
+            <dt>הגרלה</dt>
+            <dd>{claim.drawNumber}</dd>
+          </>
+        )}
+        <dt>זוכה</dt>
+        <dd>{claim.claimantName ?? '—'}</dd>
+        <dt>טלפון</dt>
+        <dd>
+          <span className="ltr">{claim.claimantPhone ? formatPhoneLocal(claim.claimantPhone) : '—'}</span>
+        </dd>
+      </dl>
       <label>
         4 ספרות אחרונות של תעודת הזהות
         <input
           value={typed}
           onChange={(e) => setTyped(e.target.value.replace(/\D/g, '').slice(0, 4))}
           inputMode="numeric"
+          autoComplete="off"
           maxLength={4}
           dir="ltr"
-          disabled={!idKnown}
           autoFocus
         />
       </label>
-      {mismatch && (
-        <p className="error" role="alert">
-          הספרות אינן תואמות
-        </p>
-      )}
+      <p className="muted">הקלד את הספרות מתעודת הזהות שהזוכה מציג. המערכת בודקת אותן מול הזוכה.</p>
     </ConfirmDialog>
   );
 }

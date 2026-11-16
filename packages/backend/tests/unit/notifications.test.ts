@@ -101,6 +101,38 @@ describe('NotificationService', () => {
     });
   });
 
+  // ─── deliverToUser (used by the logged notify path) ──────────────────────────
+
+  describe('deliverToUser', () => {
+    it('reports no devices', async () => {
+      mockFindMany.mockResolvedValue([]);
+      await expect(notificationService.deliverToUser('user-1', PAYLOADS.orderLost())).resolves.toMatchObject({
+        devices: 0,
+        delivered: 0,
+      });
+    });
+
+    it('reports how many devices FCM accepted', async () => {
+      mockFindMany.mockResolvedValue([{ token: 'a' }, { token: 'b' }]);
+      mockSendEachForMulticast.mockResolvedValue({
+        responses: [makeOtherErrorResponse(), makeOtherErrorResponse()],
+        successCount: 0,
+        failureCount: 2,
+      });
+      await expect(notificationService.deliverToUser('user-1', PAYLOADS.orderLost())).resolves.toEqual({
+        devices: 2,
+        delivered: 0,
+        configured: true,
+      });
+    });
+
+    it('lets an FCM error through instead of swallowing it', async () => {
+      mockFindMany.mockResolvedValue([{ token: 'a' }]);
+      mockSendEachForMulticast.mockRejectedValue(new Error('FCM unavailable'));
+      await expect(notificationService.deliverToUser('user-1', PAYLOADS.orderLost())).rejects.toThrow('FCM unavailable');
+    });
+  });
+
   // ─── Stale token cleanup ──────────────────────────────────────────────────────
 
   describe('stale token cleanup', () => {

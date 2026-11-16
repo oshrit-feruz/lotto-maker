@@ -1,32 +1,842 @@
-:root { font-family: system-ui, "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f3f4f6; }
-body { margin: 0; }
-* { box-sizing: border-box; }
-.layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-.layout nav { background: #1e3a8a; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
-.layout nav a { color: #dbeafe; text-decoration: none; padding: 8px 12px; border-radius: 6px; }
-.layout nav a.active { background: #1d4ed8; color: #fff; }
-.layout main { padding: 24px; overflow-x: auto; }
-.card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 16px; }
-.login { display: grid; place-items: center; min-height: 100vh; }
-.login .card { width: 340px; display: flex; flex-direction: column; gap: 12px; }
-label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
-input, select, textarea { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
-button { padding: 8px 14px; border: 0; border-radius: 6px; background: #1d4ed8; color: #fff; cursor: pointer; font: inherit; }
-button:disabled { opacity: .5; cursor: not-allowed; }
-button.secondary { background: #e5e7eb; color: #111827; }
-button.danger { background: #b91c1c; }
-button.link { background: none; color: #1d4ed8; padding: 0; }
-table { width: 100%; border-collapse: collapse; background: #fff; }
-th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
-.row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
-.row.end { justify-content: flex-end; margin: 16px 0 0; }
-.muted { color: #6b7280; }
-.error { color: #b91c1c; }
-.badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e5e7eb; }
-.badge.green { background: #d1fae5; } .badge.red { background: #fee2e2; } .badge.amber { background: #fef3c7; } .badge.blue { background: #dbeafe; }
-.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 10; }
-.dialog { background: #fff; border-radius: 8px; padding: 20px; width: 480px; max-width: 95vw; max-height: 90vh; overflow: auto; }
-.ltr { direction: ltr; unicode-bidi: isolate; }
-.nums { display: flex; gap: 6px; flex-wrap: wrap; }
-.nums input { width: 56px; text-align: center; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+/*
+ * Admin dashboard: the customer website's design ("the courier's ticket") adapted to a
+ * dense desktop tool. Tokens come from packages/shared/src/design/tokens.css, fonts are
+ * self-hosted (./fonts.css). Pine-deep sidebar, paper workspace, white cards and tables,
+ * lottery balls wherever a draw's winning numbers appear.
+ */
+@import '../../shared/src/design/tokens.css';
+@import './fonts.css';
+
+:root {
+  color-scheme: light;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  min-height: 100vh;
+}
+
+a {
+  color: var(--pine-2);
+  font-weight: 500;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+}
+
+a:hover {
+  color: var(--pine);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--pine-deep);
+  margin: 0 0 0.6em;
+}
+
+/* Compact 1.2 scale from the 15px body: this is a working tool, not a page to read. */
+h1 {
+  font-size: 1.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin-top: 1em;
+}
+
+p {
+  margin: 0 0 0.75em;
+}
+
+/* ---------- Shell: sidebar + workspace ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.layout nav {
+  background: var(--pine-deep);
+  color: #d5e0e5;
+  padding: 20px 14px;
+}
+
+.layout nav .nav-inner {
+  position: sticky;
+  top: 20px;
+  height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 18px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #34586a;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: #ffffff;
+  line-height: 1;
+}
+
+/* Two overlapping balls: the brand mark, as on the website header. */
+.brand-mark {
+  position: relative;
+  width: 30px;
+  height: 22px;
+  flex: none;
+}
+
+.brand-mark::before,
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.brand-mark::before {
+  inset-inline-start: 0;
+  background: radial-gradient(circle at 35% 30%, #fff6d6 0 12%, var(--sun) 45%, var(--sun-deep) 100%);
+}
+
+.brand-mark::after {
+  inset-inline-start: 10px;
+  background: radial-gradient(circle at 35% 30%, #d9c2ee 0 12%, #7a46a8 45%, var(--plum) 100%);
+  box-shadow: 0 0 0 2px var(--pine-deep);
+}
+
+.layout nav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  color: #d5e0e5;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.layout nav a:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.layout nav a.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--sun);
+  font-weight: 700;
+}
+
+/* The active item's sun bar on the start edge. */
+.layout nav a.active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  border-start-end-radius: 4px;
+  border-end-end-radius: 4px;
+  background: var(--sun);
+}
+
+.layout nav a:focus-visible,
+.layout nav button:focus-visible {
+  box-shadow: 0 0 0 3px var(--sun);
+}
+
+.layout nav button.secondary {
+  margin-top: auto;
+  background: transparent;
+  color: #ffffff;
+  border-color: #4a6f80;
+}
+
+.layout nav button.secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.layout main {
+  padding: 28px 32px 56px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+/* ---------- Building blocks ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.card > h2:first-child {
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.row.end {
+  justify-content: flex-end;
+  margin: 20px 0 0;
+}
+
+.row > span {
+  align-self: center;
+}
+
+td .row {
+  margin: 0;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+}
+
+.money {
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.money.neg {
+  color: var(--danger);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0 0 14px;
+}
+
+.kv dt {
+  color: var(--muted);
+}
+
+.kv dd {
+  margin: 0;
+}
+
+.heading-sub {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin: 0 6px;
+}
+
+.empty {
+  padding: 28px 16px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  text-align: center;
+  background: transparent;
+}
+
+/* ---------- Buttons: the website's pills, one size down for dense screens ---------- */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--pine);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+button:hover {
+  background: var(--pine-2);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  background: #b9c6cd;
+  color: #33444c;
+  cursor: not-allowed;
+}
+
+/* Accent (sun): the one main action on a screen. */
+button.accent {
+  background: var(--sun);
+  color: var(--pine-deep);
+  box-shadow: 0 3px 0 var(--sun-deep);
+}
+
+button.accent:hover {
+  background: #ffd25e;
+}
+
+button.accent:disabled {
+  background: #e9dfc0;
+  color: #5c5236;
+  box-shadow: none;
+}
+
+/* Ghost */
+button.secondary {
+  background: var(--surface);
+  color: var(--pine);
+  border-color: var(--line);
+}
+
+button.secondary:hover {
+  background: var(--pine-soft);
+}
+
+button.secondary:disabled {
+  background: transparent;
+  color: #7d8f98;
+}
+
+/* Danger: outlined, as on the website. */
+button.danger {
+  background: var(--surface);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+button.danger:hover {
+  background: var(--danger-soft);
+}
+
+button.danger:disabled {
+  background: transparent;
+  color: #b98a86;
+  border-color: #e3bdb9;
+}
+
+button.link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--pine-2);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.link:hover {
+  background: none;
+  color: var(--pine);
+}
+
+td button {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 0.9rem;
+}
+
+/* ---------- Forms ---------- */
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+input,
+select,
+textarea {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1.5px solid #b8c8d0;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+select {
+  min-width: 180px;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--pine-2);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--pine);
+  box-shadow: var(--focus);
+}
+
+input:disabled,
+select:disabled {
+  background: #f4f6f8;
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  min-height: 0;
+  accent-color: var(--pine);
+}
+
+.date-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-field output {
+  font-size: 0.85rem;
+  color: var(--muted);
+  min-width: 76px;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ---------- Alerts: the website's side-bar alert ---------- */
+.error {
+  background: var(--danger-soft);
+  border: 1px solid #efb7b1;
+  border-inline-start: 5px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: #8f1d17;
+  font-weight: 500;
+}
+
+.card.error {
+  box-shadow: none;
+}
+
+.error button.link {
+  color: #8f1d17;
+  margin-inline-start: 6px;
+}
+
+/* ---------- Badges ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 11px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--pine-soft);
+  color: var(--pine);
+}
+
+.badge.green {
+  background: var(--ok-soft);
+  color: #0f5530;
+}
+
+.badge.red {
+  background: var(--danger-soft);
+  color: #8f1d17;
+}
+
+/* Waiting on a person: the sun, like the website's alert-warn. */
+.badge.amber {
+  background: var(--sun-soft);
+  color: #5a4300;
+  box-shadow: inset 0 0 0 1px #f2d58a;
+}
+
+/* In progress / informational: plum. */
+.badge.blue {
+  background: var(--plum-soft);
+  color: var(--plum);
+}
+
+/* ---------- Tables: white card, tinted header, zebra + hover rows ---------- */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  text-align: start;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+  vertical-align: middle;
+}
+
+th {
+  background: var(--pine-soft);
+  color: var(--pine);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border-bottom-color: #c3d1d8;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+tbody tr:nth-child(even) {
+  background: #f7f9fa;
+}
+
+tbody tr:hover {
+  background: var(--sun-soft);
+}
+
+/* Tables inside a card or dialog sit flat. */
+.card table,
+.dialog table {
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+main > table + .row {
+  margin-top: 14px;
+}
+
+/* ---------- Dialog ---------- */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 68, 80, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 10;
+}
+
+.dialog {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  width: 560px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 30px 60px -20px rgba(40, 68, 80, 0.6);
+}
+
+.dialog h2 {
+  font-size: 1.35rem;
+}
+
+.dialog .error {
+  margin-top: 12px;
+}
+
+/* ---------- Lottery balls (same object as the website's .ball / .ball-strong) ---------- */
+.balls {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ball {
+  --ball-hi: var(--ball-regular-hi);
+  --ball-mid: var(--ball-regular-mid);
+  --ball-lo: var(--ball-regular-lo);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, var(--ball-hi) 0 10%, var(--ball-mid) 46%, var(--ball-lo) 100%);
+  color: var(--pine-deep);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.12);
+}
+
+.ball-strong {
+  --ball-hi: var(--ball-strong-hi);
+  --ball-mid: var(--ball-strong-mid);
+  --ball-lo: var(--ball-strong-lo);
+  color: #ffffff;
+  margin-inline-start: 6px;
+}
+
+.results-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 24px;
+}
+
+.extra-digits {
+  color: var(--muted);
+}
+
+.extra-digits strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+/* ---------- Draw detail: result entry as balls ---------- */
+/* dir="ltr" for the number order; flex-end keeps the row on the RTL start (right) side. */
+.nums {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.nums + h3 {
+  margin-top: 18px;
+}
+
+.nums-sep {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.ball-input {
+  width: 48px;
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #c7d4db;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--pine-deep);
+}
+
+.ball-input:not(:placeholder-shown) {
+  border-color: var(--sun-deep);
+  background: radial-gradient(circle at 35% 28%, var(--ball-regular-hi) 0 10%, var(--ball-regular-mid) 46%, var(--ball-regular-lo) 100%);
+}
+
+.ball-input.strong:not(:placeholder-shown) {
+  border-color: var(--plum);
+  color: #ffffff;
+  background: radial-gradient(circle at 35% 28%, var(--ball-strong-hi) 0 10%, var(--ball-strong-mid) 46%, var(--ball-strong-lo) 100%);
+}
+
+.ball-input::placeholder {
+  color: #a8bac3;
+}
+
+.ball-input:disabled {
+  opacity: 1;
+  color: var(--pine-deep);
+}
+
+.ball-input.strong:disabled {
+  color: #ffffff;
+}
+
+.digit-input {
+  width: 40px;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.prize-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+
+.prize-grid .card {
+  min-width: 0;
+}
+
+.prize-grid table {
+  table-layout: fixed;
+}
+
+.prize-grid th:first-child,
+.prize-grid td:first-child {
+  width: 64px;
+}
+
+.prize-grid td {
+  padding: 6px 10px;
+}
+
+.prize-grid td input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Login: the website's ticket stub ---------- */
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--pine-deep);
+}
+
+.login .card {
+  --notch: 13px;
+  width: 380px;
+  max-width: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 0;
+  box-shadow: 0 24px 40px -24px rgba(0, 0, 0, 0.6);
+  margin: 0;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  color: var(--pine);
+  font-size: 1.1rem;
+}
+
+.login .card h1 {
+  margin: 0;
+}
+
+/* The perforation: a dashed rule with a notch cut from each side. */
+.perf {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed #c3d1d8;
+  margin: 4px -24px;
+}
+
+.perf::before,
+.perf::after {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--notch) - 1px);
+  width: calc(var(--notch) * 2);
+  height: calc(var(--notch) * 2);
+  border-radius: 50%;
+  background: var(--pine-deep);
+}
+
+.perf::before {
+  inset-inline-start: calc(-1 * var(--notch));
+}
+
+.perf::after {
+  inset-inline-end: calc(-1 * var(--notch));
+}
+
+.login .card button[type='submit'] {
+  min-height: 46px;
+}
+
+.login .card button.link {
+  align-self: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

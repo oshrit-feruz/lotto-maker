@@ -42,52 +42,64 @@ export function LoginPage({ onLogin }: Props) {
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'system-ui, sans-serif', direction: 'rtl' }}>
-      <h1 style={{ textAlign: 'center' }}>כניסה לאופרטור</h1>
+    <div className="login">
+      <div className="stub">
+        <div className="login-brand">
+          <span className="brand-mark" aria-hidden="true" />
+          עמדת הקלדה
+        </div>
+        <h1>כניסה לאופרטור</h1>
+        <div className="perf" aria-hidden="true" />
 
-      {step === 'phone' ? (
-        <form onSubmit={handleSendOtp}>
-          <label>מספר טלפון (E.164)</label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+972501234567"
-            required
-            style={inputStyle}
-          />
-          {error && <p style={{ color: '#e02424' }}>{error}</p>}
-          <button type="submit" disabled={loading} style={primaryBtn}>
-            {loading ? 'שולח...' : 'שלח קוד'}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={handleVerifyOtp}>
-          <label>קוד אימות (6 ספרות)</label>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            maxLength={6}
-            required
-            style={inputStyle}
-          />
-          {error && <p style={{ color: '#e02424' }}>{error}</p>}
-          <button type="submit" disabled={loading} style={primaryBtn}>
-            {loading ? 'מאמת...' : 'כניסה'}
-          </button>
-        </form>
-      )}
+        {step === 'phone' ? (
+          <form onSubmit={handleSendOtp}>
+            <div className="field">
+              <label htmlFor="op-phone">מספר טלפון (E.164)</label>
+              <input
+                id="op-phone"
+                className="input ltr"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+972501234567"
+                required
+              />
+            </div>
+            {error && (
+              <p className="alert alert-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button type="submit" disabled={loading} className="btn btn-block">
+              {loading ? 'שולח...' : 'שלח קוד'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOtp}>
+            <div className="field">
+              <label htmlFor="op-code">קוד אימות (6 ספרות)</label>
+              <input
+                id="op-code"
+                className="input input-digits"
+                type="text"
+                inputMode="numeric"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                maxLength={6}
+                required
+              />
+            </div>
+            {error && (
+              <p className="alert alert-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button type="submit" disabled={loading} className="btn btn-block">
+              {loading ? 'מאמת...' : 'כניסה'}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  display: 'block', width: '100%', padding: '10px 12px', fontSize: '1.1rem',
-  borderRadius: 6, border: '1px solid #d1d5db', marginBottom: 12, boxSizing: 'border-box',
-};
-const primaryBtn: React.CSSProperties = {
-  width: '100%', padding: 14, background: '#1a56db', color: '#fff',
-  border: 'none', borderRadius: 6, fontSize: '1rem', cursor: 'pointer', fontWeight: 700,
-};

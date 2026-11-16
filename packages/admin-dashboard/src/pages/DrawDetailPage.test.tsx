@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { toError } from '../api/client';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DrawDetail } from '../api/types';
@@ -20,6 +21,7 @@ const base: DrawDetail = {
   settledAt: null,
   needsAttention: false,
   attentionReason: null,
+  updatedAt: '2026-11-10T19:30:00.123Z',
   numbers: [1, 2, 3, 4, 5, 6],
   strong: 7,
   extraDigits: [1, 2, 3, 4, 5, 6],
@@ -99,5 +101,46 @@ describe('DrawEditor', () => {
     expect(screen.getByLabelText('מספר 1')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'שומר…' })).toBeDisabled();
     finish({ ...base, numbers: [9, 2, 3, 4, 5, 6] });
+  });
+});
+
+describe('confirming results', () => {
+  beforeEach(() => vi.mocked(draws.confirmDraw).mockReset());
+
+  const openAndConfirm = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'אשר תוצאות' }));
+    const dialog = screen.getByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'אשר תוצאות' }));
+  };
+
+  it('sends the reviewed draw’s updatedAt as expectedUpdatedAt', async () => {
+    vi.mocked(draws.confirmDraw).mockResolvedValueOnce({ ...base, status: 'results_confirmed' });
+    renderEditor(base);
+    await openAndConfirm();
+    expect(draws.confirmDraw).toHaveBeenCalledWith('d1', '2026-11-10T19:30:00.123Z');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('on 409 RESULTS_CHANGED closes the dialog, shows a Hebrew message and refetches the draw', async () => {
+    const qc = new QueryClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    vi.mocked(draws.confirmDraw).mockRejectedValueOnce(toError({ status: 409 }, { error: 'RESULTS_CHANGED', message: 'The results changed' }));
+    render(
+      <QueryClientProvider client={qc}>
+        <DrawEditor draw={base} />
+      </QueryClientProvider>,
+    );
+    await openAndConfirm();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('התוצאות השתנו מאז שנבדקו');
+    expect(alert).not.toHaveTextContent('The results changed');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['draw', 'd1'] });
+
+    // Opening the dialog again clears the notice; the new confirm carries the draw's updatedAt.
+    vi.mocked(draws.confirmDraw).mockResolvedValueOnce({ ...base, status: 'results_confirmed' });
+    await openAndConfirm();
+    expect(screen.queryByText(/התוצאות השתנו/)).toBeNull();
+    expect(draws.confirmDraw).toHaveBeenCalledTimes(2);
   });
 });

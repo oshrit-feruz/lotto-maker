@@ -57,12 +57,14 @@ export function createFakeMoney() {
       if (orderBy?.createdAt === 'desc') rows.sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq);
       return rows[0] ? { ...rows[0] } : null;
     },
-    findMany: async ({ where, orderBy, take, include }: any = {}) => {
+    findMany: async ({ where, orderBy, skip, take, include }: any = {}) => {
       let rows = tables[name].filter((r) => matches(r, where));
       if (orderBy?.createdAt === 'desc') rows = [...rows].sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq);
+      if (skip) rows = rows.slice(skip);
       if (take) rows = rows.slice(0, take);
       return include ? rows.map((r) => withIncludes(r, include)) : rows.map((r) => ({ ...r }));
     },
+    count: async ({ where }: any = {}) => tables[name].filter((r) => matches(r, where)).length,
     create: async ({ data }: any) => {
       for (const keys of unique) {
         if (keys.every((k) => data[k] !== undefined && data[k] !== null) &&
@@ -116,9 +118,9 @@ export function createFakeMoney() {
       bankReference: null, providerTxId: null, adminId: null, decidedAt: null, paidAt: null, failureReason: null,
     })),
     pendingCardCredit: table('pendingCardCredit', () => ({
-      status: 'pending', attempts: 0, nextAttemptAt: new Date(0), lastError: null, providerTxId: null,
-      paidAt: null, paidByAdminId: null, manualReference: null,
-    })),
+      orderId: null, withdrawalId: null, status: 'pending', attempts: 0, nextAttemptAt: new Date(0), claimedAt: null,
+      lastError: null, providerTxId: null, paidAt: null, paidByAdminId: null, manualReference: null,
+    }), [['orderId'], ['withdrawalId']]),
     prizeClaim: table('prizeClaim', () => ({
       status: 'awaiting_pickup', scheduledAt: null, collectedAt: null, collectedByAdminId: null,
       idCheckedLast4: null, reminderSentAt: null,

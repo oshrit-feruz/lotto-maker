@@ -10,6 +10,7 @@ vi.mock('../../src/prisma.js', async () => {
 
 import {
   backoffMs,
+  CLAIM_STALE_MS,
   listCardCredits,
   markCardCreditPaid,
   payCardCredit,
@@ -123,13 +124,23 @@ describe('card credit payout', () => {
 });
 
 describe('admin: list and mark-paid', () => {
-  it('lists credits by status', async () => {
+  it('lists credits by status, a page at a time, with the user phone and name only', async () => {
+    fake.db.users.get(USER).fullName = 'ישראל ישראלי';
+    fake.db.users.get(USER).phone = '+972501234567';
+    fake.db.users.get(USER).idLast4 = '2782';
     const a = await addCredit('10.00', 'o1');
     await addCredit('20.00', 'o2');
     a.status = 'paid';
-    expect(await listCardCredits('pending')).toHaveLength(1);
-    expect(await listCardCredits('paid')).toHaveLength(1);
-    expect(await listCardCredits()).toHaveLength(2);
+    expect((await listCardCredits('pending')).items).toHaveLength(1);
+    expect((await listCardCredits('paid')).items).toHaveLength(1);
+    const all = await listCardCredits();
+    expect(all).toMatchObject({ total: 2, page: 1, pageSize: 50 });
+    expect(all.items[0]!.user).toEqual({ phone: '+972501234567', fullName: 'ישראל ישראלי' });
+    expect(JSON.stringify(all)).not.toContain('2782');
+
+    const page2 = await listCardCredits(undefined, { page: 2, pageSize: 1 });
+    expect(page2).toMatchObject({ total: 2, page: 2, pageSize: 1 });
+    expect(page2.items.map((c) => c.id)).toEqual([a.id]); // newest first, so the older one is on page 2
   });
 
   it('marks a stuck credit paid by hand, once, and the job then leaves it alone', async () => {
@@ -148,5 +159,117 @@ describe('admin: list and mark-paid', () => {
 
   it('404 for an unknown credit', async () => {
     await expect(markCardCreditPaid('nope', ADMIN, 'x')).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+describe('manual mark-paid vs the job: no double payment', () => {
+  it('job first: mark-paid during the provider call is refused with 409 CREDIT_IN_PROGRESS; paid once', async () => {
+    fake.db.addCard(USER);
+    const credit = await addCredit();
+    const realCredit = provider.creditCard.bind(provider);
+    let adminError: unknown;
+    const spy = vi.spyOn(provider, 'creditCard').mockImplementationOnce(async (...args) => {
+      // The provider call is in flight: the credit is claimed
+      expect(credit).toMatchObject({ status: 'processing' });
+      expect(credit.claimedAt).toBeInstanceOf(Date);
+      adminError = await markCardCreditPaid(credit.id, ADMIN, 'bank-ref').catch((e: unknown) => e);
+      return realCredit(...args);
+    });
+
+    await expect(payCardCredit(credit.id)).resolves.toBe('paid');
+    spy.mockRestore();
+
+    expect(adminError).toMatchObject({ statusCode: 409, code: 'CREDIT_IN_PROGRESS' });
+    expect(credit).toMatchObject({ status: 'paid', paidByAdminId: null, manualReference: null, claimedAt: null });
+    expect(provider.credits).toHaveLength(1);
+    expect(fake.db.auditActions()).toContain('card_credit:pending->paid');
+    expect(fake.db.auditActions()).not.toContain('card_credit:pending->paid_manual');
+    expect(fake.db.auditActions()).not.toContain('card_credit:paid_conflict');
+  });
+
+  it('admin first: a mark-paid that lands after the job read the credit makes the job skip it', async () => {
+    fake.db.addCard(USER);
+    const credit = await addCredit();
+    const table = fake.db.client.pendingCardCredit;
+    const realFind = table.findUnique;
+    // The job reads the credit as pending; before it can claim it, the admin marks it paid
+    table.findUnique = async (args: unknown) => {
+      const row = await realFind(args);
+      table.findUnique = realFind;
+      await markCardCreditPaid(credit.id, ADMIN, 'bank-ref');
+      return row;
+    };
+
+    await expect(payCardCredit(credit.id)).resolves.toBe('skipped');
+
+    expect(provider.credits).toHaveLength(0);
+    expect(credit).toMatchObject({ status: 'paid', paidByAdminId: ADMIN, manualReference: 'bank-ref', attempts: 0 });
+    expect(fake.db.auditActions()).toEqual(['card_credit:pending->paid_manual']);
+  });
+
+  it('admin first, job claims between the admin read and write: mark-paid gets 409 CREDIT_IN_PROGRESS', async () => {
+    fake.db.addCard(USER);
+    const credit = await addCredit();
+    const table = fake.db.client.pendingCardCredit;
+    const realFind = table.findUnique;
+    table.findUnique = async (args: unknown) => {
+      const row = await realFind(args);
+      table.findUnique = realFind;
+      // The admin read it as pending; the job now claims it (simulated: the claim only)
+      credit.status = 'processing';
+      credit.claimedAt = new Date();
+      return row;
+    };
+    await expect(markCardCreditPaid(credit.id, ADMIN, 'bank-ref')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CREDIT_IN_PROGRESS',
+    });
+    expect(credit.paidByAdminId).toBeNull();
+  });
+
+  it('a failed payout releases the claim, so the admin can then pay by hand', async () => {
+    fake.db.addCard(USER);
+    const credit = await addCredit();
+    provider.creditFailure = 'decline';
+    await expect(payCardCredit(credit.id)).resolves.toBe('failed');
+    expect(credit).toMatchObject({ status: 'pending', claimedAt: null, lastError: 'PROVIDER_DECLINED' });
+    await expect(markCardCreditPaid(credit.id, ADMIN, 'bank-ref')).resolves.toMatchObject({ status: 'paid' });
+  });
+});
+
+describe('stale claims', () => {
+  it('a fresh claim is left alone; one older than the stale limit is reclaimed and paid once', async () => {
+    fake.db.addCard(USER);
+    const credit = await addCredit();
+    const t0 = new Date('2026-11-12T10:00:00Z');
+    // A runner claimed it and died before recording anything
+    Object.assign(credit, { status: 'processing', claimedAt: t0, attempts: 1 });
+
+    const soon = new Date(t0.getTime() + CLAIM_STALE_MS - MIN);
+    await expect(payCardCredit(credit.id, soon)).resolves.toBe('skipped');
+    expect((await runCardCreditJob(soon)).paid).toBe(0);
+    await expect(markCardCreditPaid(credit.id, ADMIN, 'x')).rejects.toMatchObject({ code: 'CREDIT_IN_PROGRESS' });
+    expect(provider.credits).toHaveLength(0);
+
+    const later = new Date(t0.getTime() + CLAIM_STALE_MS + MIN);
+    expect((await runCardCreditJob(later)).paid).toBe(1);
+    expect(credit).toMatchObject({ status: 'paid', attempts: 2, claimedAt: null });
+    expect(provider.credits).toHaveLength(1);
+    // Same provider key as the dead runner used, so a payout it did make is not repeated
+    expect(provider.credits[0]!.idempotencyKey).toMatch(new RegExp(`^card-credit:${credit.id}:`));
+  });
+
+  it('a slow runner whose claim was taken over does not undo the new claim on failure', async () => {
+    fake.db.addCard(USER);
+    const credit = await addCredit();
+    const t0 = new Date('2026-11-12T10:00:00Z');
+    const spy = vi.spyOn(provider, 'creditCard').mockImplementationOnce(async () => {
+      // While the first runner waits on the provider, its claim goes stale and is taken over
+      Object.assign(credit, { claimedAt: new Date(t0.getTime() + CLAIM_STALE_MS + MIN) });
+      throw new Error('timeout');
+    });
+    await expect(payCardCredit(credit.id, t0)).resolves.toBe('failed');
+    spy.mockRestore();
+    expect(credit.status).toBe('processing'); // still the new runner's
   });
 });

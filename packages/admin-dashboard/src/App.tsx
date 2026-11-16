@@ -25,14 +25,20 @@ function Shell() {
   return (
     <div className="layout" dir="rtl">
       <nav>
-        {NAV.map(([to, label]) => (
-          <NavLink key={to} to={to}>
-            {label}
-          </NavLink>
-        ))}
-        <button className="secondary" onClick={() => void logout()} style={{ marginTop: 'auto' }}>
-          יציאה
-        </button>
+        <div className="nav-inner">
+          <div className="nav-brand">
+            <span className="brand-mark" aria-hidden="true" />
+            ניהול
+          </div>
+          {NAV.map(([to, label]) => (
+            <NavLink key={to} to={to}>
+              {label}
+            </NavLink>
+          ))}
+          <button className="secondary" onClick={() => void logout()}>
+            יציאה
+          </button>
+        </div>
       </nav>
       <main>
         <Outlet />

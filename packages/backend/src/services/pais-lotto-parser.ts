@@ -167,26 +167,48 @@ export interface NextLotteryInfo {
   salesCloseAt: Date;
   /** Assumed draw time: sales close plus DRAW_AFTER_CLOSE_MINUTES. */
   drawAt: Date;
-  /** Announced first prize in ILS ("12.00" -> 2 decimals), or null if missing / unparseable. */
+  /** Announced first prize in ILS with 2 decimals, or null if missing / unparseable. */
   firstPrize: string | null;
-  /** Announced double-lotto first prize (pais `secondPrize`), same format. */
+  /**
+   * Announced double-lotto first prize. pais does not send it, but the double first prize is always
+   * twice the lotto first prize (owner, 15/11/2026), so it is derived from firstPrize.
+   * pais's `secondPrize` is a different value (750,000 next to an 8,000,000 first prize) whose
+   * meaning is unconfirmed; it is kept as raw text only.
+   */
   doublePrize: string | null;
+  /** `firstPrize` exactly as pais sent it (as text), or null when absent. */
+  firstPrizeRaw: string | null;
+  /** `secondPrize` exactly as pais sent it (as text), or null when absent. Meaning unconfirmed. */
+  doublePrizeRaw: string | null;
+}
+
+/** Longest raw value kept; pais sends a short number, anything longer is cut. */
+const RAW_PRIZE_MAX = 100;
+
+export interface AnnouncedPrize {
+  /** In shekels with 2 decimals, or null if missing / unparseable. */
+  value: string | null;
+  /** The value as pais sent it, as text (cut to 100 chars), or null when absent. */
+  raw: string | null;
 }
 
 /**
- * Pais sends the announced prize either in shekels ("5,000,000", 5000000) or in millions as the
- * site shows it ("5", "5.5", "5 מיליון"). A value below 1,000 is read as millions: no lotto
- * first prize is that small.
+ * pais sends the announced prize as a number in shekels. Confirmed with a real
+ * getNextLotteryDate response on 15/11/2026: firstPrize 8000000 for an 8 million prize.
+ * Commas are tolerated ("8,000,000"). Anything that is not a positive number gives null.
  */
+export function parseAnnouncedPrizeDetailed(input: unknown): AnnouncedPrize {
+  if (input === null || input === undefined) return { value: null, raw: null };
+  const raw = String(input).trim().slice(0, RAW_PRIZE_MAX);
+  const m = /(\d+(?:\.\d+)?)/.exec(raw.replace(/,/g, ''));
+  const value = m ? Number(m[1]) : NaN;
+  if (!Number.isFinite(value) || value <= 0) return { value: null, raw };
+  return { value: value.toFixed(2), raw };
+}
+
+/** The announced prize in shekels (see parseAnnouncedPrizeDetailed). */
 export function parseAnnouncedPrize(raw: unknown): string | null {
-  if (raw === null || raw === undefined) return null;
-  const text = String(raw).replace(/,/g, '').trim();
-  const m = /(\d+(?:\.\d+)?)/.exec(text);
-  if (!m) return null;
-  let value = Number(m[1]);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  if (value < 1000) value *= 1_000_000;
-  return value.toFixed(2);
+  return parseAnnouncedPrizeDetailed(raw).value;
 }
 
 // Sales close 22:45, draw broadcast 23:00. Results usually appear ~1h after the draw
@@ -219,11 +241,16 @@ export function parseNextLotteryResponse(json: unknown): NextLotteryInfo {
   }
   if (!salesCloseAt || Number.isNaN(salesCloseAt.getTime())) throw new PaisParseError('draw date/time not parseable');
 
+  const first = parseAnnouncedPrizeDetailed(rec['firstPrize']);
+  // secondPrize is not the double-lotto prize; keep its raw text only (see NextLotteryInfo).
+  const second = parseAnnouncedPrizeDetailed(rec['secondPrize']);
   return {
     drawNumber,
     salesCloseAt,
     drawAt: new Date(salesCloseAt.getTime() + DRAW_AFTER_CLOSE_MINUTES * 60_000),
-    firstPrize: parseAnnouncedPrize(rec['firstPrize']),
-    doublePrize: parseAnnouncedPrize(rec['secondPrize']),
+    firstPrize: first.value,
+    doublePrize: first.value === null ? null : (Number(first.value) * 2).toFixed(2),
+    firstPrizeRaw: first.raw,
+    doublePrizeRaw: second.raw,
   };
 }

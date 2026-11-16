@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { Amount, AuthLayout, Button } from '../../components/ui/index.js';
+import { colors, radii, rtl } from '../../theme/index.js';
 import { walletApi } from '../../api/client.js';
 import { openCheckout, waitForPayment, useOnForeground, depositErrorMessage } from '../../api/checkout.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { notify } from '../../lib/confirm.js';
 
 const PRESET_AMOUNTS = [20, 50, 100, 200];
 
@@ -25,7 +28,7 @@ export function WalletLoadScreen({ onContinue }: Props) {
       pendingPayment.current = await openCheckout(selected);
     } catch (err: unknown) {
       setLoading(false);
-      Alert.alert('שגיאה', depositErrorMessage(err));
+      notify('שגיאה', depositErrorMessage(err));
     }
   }
 
@@ -41,66 +44,60 @@ export function WalletLoadScreen({ onContinue }: Props) {
         updateUser({ walletBalance: balance });
         onContinue();
       } else if (status === 'pending') {
-        Alert.alert('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.', [{ text: 'המשך', onPress: onContinue }]);
+        notify('התשלום בבדיקה', 'היתרה תתעדכן מיד כשהתשלום יאושר.', { okText: 'המשך', onDismiss: onContinue });
       } else {
-        Alert.alert('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
+        notify('התשלום לא בוצע', 'לא חויבת. אפשר לנסות שנית.');
       }
     } catch {
-      Alert.alert('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
+      notify('שגיאה', 'לא הצלחנו לבדוק את מצב התשלום. נסה שנית.');
     } finally {
       setLoading(false);
     }
   });
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>טען את הארנק</Text>
-      <Text style={styles.subtitle}>בחר סכום לטעינה ראשונית</Text>
-
-      <View style={styles.grid}>
-        {PRESET_AMOUNTS.map((amt) => (
-          <TouchableOpacity
-            key={amt}
-            onPress={() => setSelected(amt)}
-            style={[styles.amtBtn, selected === amt && styles.amtBtnSelected]}
-          >
-            <Text style={[styles.amtText, selected === amt && styles.amtTextSelected]}>
-              ₪{amt}
-            </Text>
-          </TouchableOpacity>
-        ))}
+    <AuthLayout title="טען את הארנק" subtitle="בחר סכום לטעינה ראשונית">
+      <View style={styles.grid} accessibilityRole="radiogroup">
+        {PRESET_AMOUNTS.map((amt) => {
+          const on = selected === amt;
+          return (
+            <Pressable
+              key={amt}
+              onPress={() => setSelected(amt)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              style={({ pressed }) => [styles.amtBtn, on && styles.amtBtnSelected, pressed && !on && styles.amtBtnPressed]}
+            >
+              <Amount value={`₪${amt}`} style={[styles.amtText, on && styles.amtTextSelected]} />
+            </Pressable>
+          );
+        })}
       </View>
 
-      <TouchableOpacity
-        style={[styles.btn, (!selected || loading) && styles.btnDisabled]}
+      <Button
+        label={loading ? 'ממתין לתשלום...' : `המשך לתשלום ₪${selected ?? '...'}`}
         onPress={handleDeposit}
         disabled={!selected || loading}
-      >
-        <Text style={styles.btnText}>{loading ? 'ממתין לתשלום...' : `המשך לתשלום ₪${selected ?? '...'}`}</Text>
-      </TouchableOpacity>
+        variant="accent"
+        size="lg"
+        block
+      />
 
-      <TouchableOpacity onPress={onContinue} style={styles.skipBtn} disabled={loading}>
-        <Text style={[styles.skipText, loading && { opacity: 0.4 }]}>דלג לעכשיו</Text>
-      </TouchableOpacity>
-    </View>
+      <Button label="דלג לעכשיו" onPress={onContinue} disabled={loading} variant="ghost" style={styles.skip} block />
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#6b7280', textAlign: 'center', marginBottom: 32 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginBottom: 28 },
+  grid: { flexDirection: rtl.row, flexWrap: 'wrap', gap: 12, marginBottom: 20 },
   amtBtn: {
-    width: 140, padding: 20, borderRadius: 12,
-    borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center',
+    flexBasis: '46%', flexGrow: 1, minHeight: 64, borderRadius: radii.md,
+    borderWidth: 2, borderColor: colors.line, backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center',
   },
-  amtBtnSelected: { borderColor: '#1a56db', backgroundColor: '#eff6ff' },
-  amtText: { fontSize: 22, fontWeight: '700', color: '#374151' },
-  amtTextSelected: { color: '#1a56db' },
-  btn: { backgroundColor: '#1a56db', borderRadius: 10, padding: 16, alignItems: 'center' },
-  btnDisabled: { opacity: 0.5 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  skipBtn: { alignItems: 'center', marginTop: 16 },
-  skipText: { color: '#9ca3af', fontSize: 14 },
+  amtBtnPressed: { backgroundColor: colors.brandSoft },
+  amtBtnSelected: { borderColor: colors.pine, backgroundColor: colors.sunSoft },
+  amtText: { fontSize: 26, lineHeight: 32, color: colors.pine },
+  amtTextSelected: { color: colors.pineDeep },
+  skip: { marginTop: 12 },
 });

@@ -1,5 +1,6 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { DrawDay } from '@lotto-maker/shared';
+import { colors, fonts, rtl } from '../../theme/index.js';
 
 const DAY_LABELS: Record<DrawDay, string> = {
   tue: 'ג׳',
@@ -19,15 +20,17 @@ export function DrawDaySelector({ selected, onToggle }: Props) {
       {days.map((day) => {
         const isSelected = selected.includes(day);
         return (
-          <TouchableOpacity
+          <Pressable
             key={day}
             onPress={() => onToggle(day)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: isSelected }}
             style={[styles.dayBtn, isSelected && styles.dayBtnSelected]}
           >
             <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
               {DAY_LABELS[day]}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
@@ -35,14 +38,14 @@ export function DrawDaySelector({ selected, onToggle }: Props) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  row: { flexDirection: rtl.row, gap: 12, justifyContent: 'center' },
   dayBtn: {
     width: 52, height: 52, borderRadius: 26,
-    borderWidth: 2, borderColor: '#d1d5db',
+    borderWidth: 2, borderColor: colors.pickerBorder,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
   },
-  dayBtnSelected: { backgroundColor: '#1a56db', borderColor: '#1a56db' },
-  dayText: { fontSize: 18, fontWeight: '700', color: '#374151' },
-  dayTextSelected: { color: '#fff' },
+  dayBtnSelected: { backgroundColor: colors.pine, borderColor: colors.pine },
+  dayText: { fontFamily: fonts.display, fontSize: 18, color: colors.pineDeep },
+  dayTextSelected: { color: colors.sun },
 });

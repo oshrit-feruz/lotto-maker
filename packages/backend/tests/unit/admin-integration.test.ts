@@ -21,6 +21,11 @@ const db = vi.hoisted(() => ({
   claimFindMany: vi.fn(),
   claimFindUnique: vi.fn(),
   claimUpdateMany: vi.fn(),
+  claimCount: vi.fn(),
+  withdrawalFindMany: vi.fn(),
+  withdrawalCount: vi.fn(),
+  creditFindMany: vi.fn(),
+  creditCount: vi.fn(),
 }));
 
 vi.mock('../../src/prisma.js', () => {
@@ -31,7 +36,9 @@ vi.mock('../../src/prisma.js', () => {
     auditLog: { findMany: db.auditFindMany, count: db.auditCount, create: db.auditCreate },
     admin: { findMany: db.adminFindMany },
     draw: { findMany: db.drawFindMany, count: db.drawCount, findUnique: db.drawFindUnique, updateMany: db.drawUpdateMany },
-    prizeClaim: { findMany: db.claimFindMany, findUnique: db.claimFindUnique, updateMany: db.claimUpdateMany },
+    prizeClaim: { findMany: db.claimFindMany, findUnique: db.claimFindUnique, updateMany: db.claimUpdateMany, count: db.claimCount },
+    withdrawal: { findMany: db.withdrawalFindMany, count: db.withdrawalCount },
+    pendingCardCredit: { findMany: db.creditFindMany, count: db.creditCount },
   };
   prisma.$transaction = (fn: (tx: any) => Promise<unknown>) => fn(prisma);
   return { prisma };
@@ -279,20 +286,24 @@ describe('GET /admin/prize-claims', () => {
     id: `c-${status}`, orderId: 'o1', userId: 'user-1', amount: new Decimal('5000'), status,
     scheduledAt: status === 'scheduled' ? new Date('2026-12-01T09:00:00Z') : null, collectedAt: null,
     expiresAt: new Date('2027-05-01T00:00:00Z'), createdAt: new Date('2026-11-01T00:00:00Z'),
+    // Even if a row carried ID data, the response must not pass it through
     user: { fullName: 'Dana Levi', phone: '+972501234567', idLast4: '2782' },
     order: { id: 'o1', draw: { drawNumber: 3980 } },
   });
 
-  it('adds the claimant fields, scheduledAt and expiresAt', async () => {
+  beforeEach(() => db.claimCount.mockResolvedValue(1));
+
+  it('adds the claimant fields, scheduledAt and expiresAt, and no ID digits', async () => {
     db.claimFindMany.mockResolvedValue([claimRow('scheduled')]);
     const res = await get('/admin/prize-claims');
     expect(res.statusCode).toBe(200);
-    expect(res.json()[0]).toMatchObject({
+    const body = res.json();
+    expect(body).toMatchObject({ total: 1, page: 1, pageSize: 50 });
+    expect(body.items[0]).toMatchObject({
       id: 'c-scheduled',
       status: 'scheduled',
       claimantName: 'Dana Levi',
       claimantPhone: '+972501234567',
-      claimantIdLast4: '2782',
       drawNumber: 3980,
       scheduledAt: '2026-12-01T09:00:00.000Z',
       scheduledFor: '2026-12-01T09:00:00.000Z',
@@ -300,6 +311,11 @@ describe('GET /admin/prize-claims', () => {
       user: { fullName: 'Dana Levi', phone: '+972501234567' },
       order: { id: 'o1', draw: { drawNumber: 3980 } },
     });
+    expect(body.items[0]).not.toHaveProperty('claimantIdLast4');
+    expect(res.body).not.toContain('2782');
+    expect(res.body).not.toContain('idLast4');
+    // ID data is not even read
+    expect(db.claimFindMany.mock.calls[0][0].include.user.select).toEqual({ fullName: true, phone: true });
   });
 
   it.each(['awaiting_pickup', 'scheduled', 'collected', 'expired'])('filters by status=%s', async (status) => {
@@ -307,6 +323,19 @@ describe('GET /admin/prize-claims', () => {
     const res = await get(`/admin/prize-claims?status=${status}`);
     expect(res.statusCode).toBe(200);
     expect(db.claimFindMany.mock.calls[0][0].where).toEqual({ status });
+    expect(db.claimCount.mock.calls[0][0].where).toEqual({ status });
+  });
+
+  it('pages: default 50, max 200, skip from page', async () => {
+    db.claimFindMany.mockResolvedValue([]);
+    db.claimCount.mockResolvedValue(430);
+    const res = await get('/admin/prize-claims?page=3&pageSize=200');
+    expect(res.json()).toEqual({ items: [], total: 430, page: 3, pageSize: 200 });
+    expect(db.claimFindMany.mock.calls[0][0]).toMatchObject({ skip: 400, take: 200 });
+    expect((await get('/admin/prize-claims')).json()).toMatchObject({ page: 1, pageSize: 50 });
+    expect(db.claimFindMany.mock.calls[1][0]).toMatchObject({ skip: 0, take: 50 });
+    expect((await get('/admin/prize-claims?pageSize=201')).statusCode).toBe(400);
+    expect((await get('/admin/prize-claims?page=0')).statusCode).toBe(400);
   });
 
   it('rejects an unknown status', async () => {
@@ -322,6 +351,54 @@ describe('GET /admin/prize-claims', () => {
     expect(res.statusCode).toBe(200);
     expect(db.claimUpdateMany.mock.calls[0][0].data).toEqual({ status: 'scheduled', scheduledAt: new Date(slot) });
     expect(auditActions()).toEqual(['prize_claim:awaiting_pickup->scheduled']);
+  });
+});
+
+describe('GET /admin/withdrawals and /admin/card-credits: requester and paging', () => {
+  // A full user row, as a careless include would return it: only phone and name may come out
+  const requester = { ...userRow() };
+  const withdrawalRow = {
+    id: 'w1', userId: 'user-1', amount: new Decimal('500'), fee: new Decimal('5'), method: 'bank', status: 'requested',
+    savedCardId: null, bankAccountLast4: '6789', bankReference: null, providerTxId: null, adminId: null,
+    decidedAt: null, paidAt: null, failureReason: null, createdAt: new Date('2026-11-11T10:00:00Z'),
+    bankDetailsEnc: 'v1:secret-bank', user: requester,
+  };
+  const creditRow = {
+    id: 'cc1', orderId: null, withdrawalId: 'w0', userId: 'user-1', amount: new Decimal('120'), status: 'processing',
+    attempts: 1, nextAttemptAt: new Date('2026-11-11T10:05:00Z'), claimedAt: new Date('2026-11-11T10:00:00Z'),
+    lastError: null, providerTxId: null, paidAt: null, paidByAdminId: null, manualReference: null,
+    createdAt: new Date('2026-11-11T09:00:00Z'), user: requester,
+  };
+
+  it('withdrawals: adds the user phone and name, nothing else about the user', async () => {
+    db.withdrawalFindMany.mockResolvedValue([withdrawalRow]);
+    db.withdrawalCount.mockResolvedValue(51);
+    const res = await get('/admin/withdrawals?status=requested&page=2');
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ total: 51, page: 2, pageSize: 50 });
+    expect(body.items[0]).toMatchObject({ id: 'w1', userId: 'user-1', payout: '495.00', user: { phone: '+972501234567', fullName: 'Dana Levi' } });
+    expect(Object.keys(body.items[0].user).sort()).toEqual(['fullName', 'phone']);
+    for (const secret of ['2782', '123456782', 'v1:secret', 'idNumber', 'secret-bank']) expect(res.body).not.toContain(secret);
+    const q = db.withdrawalFindMany.mock.calls[0][0];
+    expect(q).toMatchObject({ where: { status: 'requested' }, skip: 50, take: 50 });
+    expect(q.include.user.select).toEqual({ phone: true, fullName: true });
+    expect((await get('/admin/withdrawals?pageSize=500')).statusCode).toBe(400);
+  });
+
+  it('card credits: adds the user phone and name, the source and the processing claim', async () => {
+    db.creditFindMany.mockResolvedValue([creditRow]);
+    db.creditCount.mockResolvedValue(1);
+    const res = await get('/admin/card-credits?status=processing&pageSize=10');
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ total: 1, page: 1, pageSize: 10 });
+    expect(body.items[0]).toMatchObject({
+      id: 'cc1', orderId: null, withdrawalId: 'w0', status: 'processing', amount: '120',
+      claimedAt: '2026-11-11T10:00:00.000Z', user: { phone: '+972501234567', fullName: 'Dana Levi' },
+    });
+    for (const secret of ['2782', '123456782', 'v1:secret', 'idNumber']) expect(res.body).not.toContain(secret);
+    expect(db.creditFindMany.mock.calls[0][0]).toMatchObject({ where: { status: 'processing' }, skip: 0, take: 10 });
   });
 });
 

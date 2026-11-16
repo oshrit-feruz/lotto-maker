@@ -1,26 +1,52 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { errorText } from '../api/errors';
 import { approveWithdrawal, listWithdrawals, markWithdrawalPaid, rejectWithdrawal } from '../api/payouts';
-import type { Withdrawal, WithdrawalStatus } from '../api/types';
+import type { WithdrawalListItem as Withdrawal, WithdrawalStatus } from '../api/types';
+import BankDetailsReveal from '../components/BankDetailsReveal';
 import { ConfirmDialog } from '../components/Dialog';
-import { Badge, Empty, QueryState } from '../components/ui';
+import RequesterLink from '../components/RequesterLink';
+import { Badge, Empty, Pager, QueryState } from '../components/ui';
 import { formatDate, formatNis } from '../lib/format';
-
-const STATUS_LABEL: Record<WithdrawalStatus, string> = {
-  pending: 'ממתינה',
-  approved: 'אושרה',
-  rejected: 'נדחתה',
-  paid: 'שולמה',
-};
+import {
+  canApprove,
+  canMarkPaid,
+  canReject,
+  REFERENCE_MAX,
+  REJECT_REASON_MAX,
+  REJECT_REASON_MIN,
+  WITHDRAWAL_METHOD_LABEL,
+  WITHDRAWAL_STATUSES,
+  WITHDRAWAL_STATUS_LABEL,
+  WITHDRAWAL_STATUS_TONE,
+} from '../lib/withdrawals';
+import { labelOf } from '../lib/labels';
 
 type Action = { kind: 'approve' | 'reject' | 'pay'; w: Withdrawal };
 
+const TITLE: Record<Action['kind'], string> = {
+  approve: 'אישור משיכה',
+  reject: 'דחיית משיכה',
+  pay: 'סימון כשולמה',
+};
+
+/** What the notes column shows: the reject / failure reason, else the transfer reference. */
+function notes(w: Withdrawal): string {
+  if (w.failureReason) return w.failureReason;
+  if (w.bankReference) return `אסמכתה: ${w.bankReference}`;
+  return '';
+}
+
 export default function WithdrawalsPage() {
   const qc = useQueryClient();
-  const [status, setStatus] = useState<WithdrawalStatus>('pending');
+  const [status, setStatus] = useState<WithdrawalStatus>('requested');
+  const [page, setPage] = useState(1);
   const [action, setAction] = useState<Action | null>(null);
   const [text, setText] = useState('');
-  const q = useQuery({ queryKey: ['withdrawals', status], queryFn: () => listWithdrawals(status) });
+  const q = useQuery({
+    queryKey: ['withdrawals', status, page],
+    queryFn: () => listWithdrawals(status, page),
+  });
 
   const run = useMutation({
     mutationFn: (a: Action & { text: string }) => {
@@ -32,6 +58,7 @@ export default function WithdrawalsPage() {
       close();
       void qc.invalidateQueries({ queryKey: ['withdrawals'] });
     },
+    onError: () => void qc.invalidateQueries({ queryKey: ['withdrawals'] }),
   });
   function close() {
     setAction(null);
@@ -39,8 +66,13 @@ export default function WithdrawalsPage() {
     run.reset();
   }
 
-  const needsText = action?.kind === 'reject' || action?.kind === 'pay';
-  const title = action?.kind === 'approve' ? 'אישור משיכה' : action?.kind === 'reject' ? 'דחיית משיכה' : 'סימון כשולם';
+  const t = text.trim();
+  const textValid =
+    action?.kind === 'reject'
+      ? t.length >= REJECT_REASON_MIN && t.length <= REJECT_REASON_MAX
+      : action?.kind === 'pay'
+        ? t.length >= 1 && t.length <= REFERENCE_MAX
+        : true;
 
   return (
     <>
@@ -48,85 +80,119 @@ export default function WithdrawalsPage() {
       <div className="row">
         <label>
           סטטוס
-          <select value={status} onChange={(e) => setStatus(e.target.value as WithdrawalStatus)}>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value as WithdrawalStatus);
+              setPage(1);
+            }}
+          >
+            {WITHDRAWAL_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {WITHDRAWAL_STATUS_LABEL[s]}
               </option>
             ))}
           </select>
         </label>
       </div>
       <QueryState q={q}>
-        {(items) =>
-          items.length === 0 ? (
-            <Empty />
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>נוצר</th>
-                  <th>משתמש</th>
-                  <th>סכום</th>
-                  <th>אמצעי</th>
-                  <th>סטטוס</th>
-                  <th>הערות</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((w) => (
-                  <tr key={w.id}>
-                    <td>{formatDate(w.createdAt)}</td>
-                    <td className="ltr">{w.user?.phone ?? w.userId.slice(-8)}</td>
-                    <td>{formatNis(w.amount)}</td>
-                    <td>{w.method === 'bank' ? 'בנק' : (w.method ?? '—')}</td>
-                    <td>
-                      <Badge tone={w.status === 'paid' ? 'green' : w.status === 'rejected' ? 'red' : 'amber'}>{STATUS_LABEL[w.status]}</Badge>
-                    </td>
-                    <td>{w.rejectReason ?? w.reference ?? ''}</td>
-                    <td>
-                      <div className="row">
-                        {w.status === 'pending' && (
-                          <>
-                            <button onClick={() => setAction({ kind: 'approve', w })}>אשר</button>
+        {({ items, total, pageSize }) => (
+          <>
+            {items.length === 0 ? (
+              <Empty />
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>נוצר</th>
+                    <th>משתמש</th>
+                    <th>סכום</th>
+                    <th>עמלה</th>
+                    <th>לתשלום</th>
+                    <th>אמצעי</th>
+                    <th>סטטוס</th>
+                    <th>הערות</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((w) => (
+                    <tr key={w.id}>
+                      <td>{formatDate(w.createdAt)}</td>
+                      <td>
+                        <RequesterLink userId={w.userId} user={w.user} />
+                      </td>
+                      <td>{formatNis(w.amount)}</td>
+                      <td>{formatNis(w.fee)}</td>
+                      <td>{formatNis(w.payout)}</td>
+                      <td>
+                        {labelOf(WITHDRAWAL_METHOD_LABEL, w.method)}
+                        {w.bankAccountLast4 && <span className="ltr"> ••{w.bankAccountLast4}</span>}
+                      </td>
+                      <td>
+                        <Badge tone={Object.hasOwn(WITHDRAWAL_STATUS_TONE, w.status) ? WITHDRAWAL_STATUS_TONE[w.status] : 'gray'}>
+                          {labelOf(WITHDRAWAL_STATUS_LABEL, w.status)}
+                        </Badge>
+                      </td>
+                      <td>{notes(w)}</td>
+                      <td>
+                        <div className="row">
+                          {canApprove(w) && <button onClick={() => setAction({ kind: 'approve', w })}>אשר</button>}
+                          {canMarkPaid(w) && <button onClick={() => setAction({ kind: 'pay', w })}>סמן כשולמה</button>}
+                          {canReject(w) && (
                             <button className="danger" onClick={() => setAction({ kind: 'reject', w })}>
                               דחה
                             </button>
-                          </>
-                        )}
-                        {w.status === 'approved' && w.method === 'bank' && (
-                          <button onClick={() => setAction({ kind: 'pay', w })}>סמן כשולם</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        }
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {(total > pageSize || page > 1) && <Pager page={page} pageSize={pageSize} total={total} onPage={setPage} />}
+          </>
+        )}
       </QueryState>
 
       {action && (
         <ConfirmDialog
-          title={title}
-          confirmLabel={title}
+          title={TITLE[action.kind]}
+          confirmLabel={TITLE[action.kind]}
           danger={action.kind === 'reject'}
-          confirmDisabled={needsText && text.trim() === ''}
+          confirmDisabled={!textValid}
           busy={run.isPending}
-          error={run.isError ? (run.error as Error).message : null}
+          error={run.isError ? errorText(run.error) : null}
           onConfirm={() => run.mutate({ ...action, text })}
           onCancel={close}
         >
           <p>
-            משיכה של <strong>{formatNis(action.w.amount)}</strong>
-            {action.w.user?.phone && <span className="ltr"> · {action.w.user.phone}</span>}
+            משיכה של <strong>{formatNis(action.w.amount)}</strong> (
+            {labelOf(WITHDRAWAL_METHOD_LABEL, action.w.method)}) · לתשלום ללקוח:{' '}
+            <strong>{formatNis(action.w.payout)}</strong>
           </p>
-          {needsText && (
+          {action.kind === 'approve' && action.w.method === 'card' && (
+            <p className="muted">אישור משיכה לכרטיס מבצע את הזיכוי מיד.</p>
+          )}
+          {action.kind === 'reject' && <p className="muted">הסכום יוחזר לארנק של הלקוח.</p>}
+          {action.w.method === 'bank' && <BankDetailsReveal withdrawalId={action.w.id} />}
+          {action.kind === 'reject' && (
             <label>
-              {action.kind === 'reject' ? 'סיבת הדחייה' : 'אסמכתת העברה בנקאית'}
-              <input value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+              סיבת הדחייה
+              <input value={text} onChange={(e) => setText(e.target.value)} maxLength={REJECT_REASON_MAX} autoFocus />
+            </label>
+          )}
+          {action.kind === 'pay' && (
+            <label>
+              אסמכתת ההעברה הבנקאית
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                maxLength={REFERENCE_MAX}
+                dir="ltr"
+                autoFocus
+              />
             </label>
           )}
         </ConfirmDialog>

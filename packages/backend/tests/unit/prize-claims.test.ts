@@ -11,11 +11,11 @@ vi.mock('../../src/prisma.js', async () => {
   return { prisma: fake.db.client };
 });
 
-vi.mock('../../src/services/notifications.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/services/notifications.js')>();
+// `sendToUser` is the notify helper's fire-and-forget entry point: (userId, template, params)
+vi.mock('../../src/modules/notifications/notify.service.js', async () => {
   const { vi: viInner } = await import('vitest');
-  fake.sendToUser = viInner.fn().mockResolvedValue(undefined);
-  return { ...actual, notificationService: { sendToUser: fake.sendToUser } };
+  fake.sendToUser = viInner.fn();
+  return { notifyInBackground: fake.sendToUser };
 });
 
 import {
@@ -182,7 +182,7 @@ describe('daily job: 7-day reminder', () => {
 
     expect(await sendExpiryReminders()).toBe(1);
     expect(fake.sendToUser).toHaveBeenCalledTimes(1);
-    expect(fake.sendToUser).toHaveBeenCalledWith(USER, expect.objectContaining({ data: { type: 'PRIZE_CLAIM_EXPIRING' } }));
+    expect(fake.sendToUser).toHaveBeenCalledWith(USER, 'claim_reminder', expect.objectContaining({ expiresOn: expect.any(String) }));
     expect(soon.reminderSentAt).toBeInstanceOf(Date);
 
     expect(await sendExpiryReminders()).toBe(0);

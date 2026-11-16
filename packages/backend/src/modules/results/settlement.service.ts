@@ -4,7 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../prisma.js';
 import { config } from '../../config.js';
 import { orderStatusChange, orderStatusChangeTx, writeAuditLog } from '../../lib/audit-log.js';
-import { notificationService, PAYLOADS } from '../../services/notifications.js';
+import { notifyInBackground } from '../notifications/notify.service.js';
 import { creditPrizeTx } from '../wallet/wallet.service.js';
 import { claimExpiry } from '../../lib/prize-claim.js';
 import { scoreOrder, totalOf } from '../../lib/settlement-math.js';
@@ -40,7 +40,8 @@ export type OrderOutcome =
   /** The ticket hit a tier with no prize amount on the draw. Left unsettled for an admin. */
   | { kind: 'needs_attention'; tiers: string[] }
   | { kind: 'lost' }
-  | { kind: 'won_wallet'; total: Decimal }
+  /** `credited` went into the wallet; `excess` (over the wallet cap) waits for a card payout. */
+  | { kind: 'won_wallet'; total: Decimal; credited: Decimal; excess: Decimal }
   | { kind: 'won_claim'; total: Decimal };
 
 /** Builds the game -> tier -> prize lookup from a draw's PrizeTier rows. */
@@ -104,14 +105,14 @@ export async function settleOrderTx(
   });
 
   if (total.lte(config.SMALL_PRIZE_LIMIT)) {
-    const { excess } = await creditPrizeTx(tx, order.userId, total, order.id);
+    const { credited, excess } = await creditPrizeTx(tx, order.userId, total, order.id);
     if (excess.gt(0)) {
       // Paid to the user's default card by the card-credit job (modules/wallet/card-credits.service)
       await tx.pendingCardCredit.create({
         data: { orderId: order.id, userId: order.userId, amount: excess.toFixed(2) },
       });
     }
-    return { kind: 'won_wallet', total };
+    return { kind: 'won_wallet', total, credited, excess };
   }
 
   // Above the limit: nothing is credited; the user collects it with the original ticket and ID
@@ -174,12 +175,24 @@ export async function settleDraw(drawId: string): Promise<{ settled: boolean; pr
     }
     processed++;
 
+    // After the commit, and never able to fail it: notify logs and swallows its own errors
     if (outcome.kind === 'lost') {
-      notificationService.sendToUser(order.userId, PAYLOADS.orderLost()).catch(console.error);
+      notifyInBackground(order.userId, 'order_lost', {});
     } else if (outcome.kind === 'won_wallet') {
-      notificationService.sendToUser(order.userId, PAYLOADS.orderWon(outcome.total.toFixed(2))).catch(console.error);
+      // Only what reached the wallet is reported as deposited; the rest goes to the saved card
+      notifyInBackground(
+        order.userId,
+        'order_won',
+        outcome.excess.gt(0)
+          ? {
+              amount: outcome.total.toFixed(2),
+              walletAmount: outcome.credited.toFixed(2),
+              cardAmount: outcome.excess.toFixed(2),
+            }
+          : { amount: outcome.total.toFixed(2) },
+      );
     } else {
-      notificationService.sendToUser(order.userId, PAYLOADS.prizeClaim(outcome.total.toFixed(2))).catch(console.error);
+      notifyInBackground(order.userId, 'big_prize_claim_created', { amount: outcome.total.toFixed(2) });
     }
   }
 
@@ -246,6 +259,6 @@ export async function markDrawResultsDelayed(drawId: string): Promise<void> {
     });
     if (count === 0) continue;
     await orderStatusChange(order.id, 'scanned', 'results_delayed', 'system', 'system');
-    notificationService.sendToUser(order.userId, PAYLOADS.resultsDelayed()).catch(console.error);
+    notifyInBackground(order.userId, 'results_delayed', {});
   }
 }

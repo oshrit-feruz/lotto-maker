@@ -10,7 +10,12 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "db:migrate": "turbo run db:migrate --filter=backend",
-    "db:studio": "turbo run db:studio --filter=backend"
+    "db:studio": "turbo run db:studio --filter=backend",
+    "typecheck:backend": "npm run build -w packages/shared && npm run lint -w packages/backend",
+    "test:backend": "npm test -w packages/backend",
+    "test:e2e": "npm run test:e2e -w packages/backend",
+    "db:deploy": "npm run db:deploy -w packages/backend",
+    "docker:build": "docker build -t lotto-backend ."
   },
   "devDependencies": {
     "turbo": "^2.0.0",

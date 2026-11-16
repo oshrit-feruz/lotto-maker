@@ -34,9 +34,8 @@ const mockPublish = vi.hoisted(() => vi.fn());
 vi.mock('../../src/redis.js', () => ({ redis: { publish: mockPublish } }));
 
 const mockSendToUser = vi.hoisted(() => vi.fn());
-vi.mock('../../src/services/notifications.js', () => ({
-  notificationService: { sendToUser: mockSendToUser },
-  PAYLOADS: { orderKeyed: () => ({ title: 't', body: 'b' }) },
+vi.mock('../../src/modules/notifications/notify.service.js', () => ({
+  notifyInBackground: mockSendToUser,
 }));
 
 const mockUpload = vi.hoisted(() => vi.fn());

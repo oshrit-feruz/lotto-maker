@@ -6,6 +6,7 @@ import {
   parseCurrentLotto,
   parseNextLotteryResponse,
   parseAnnouncedPrize,
+  parseAnnouncedPrizeDetailed,
   normalizeTier,
   PaisParseError,
 } from '../../src/services/pais-lotto-parser.js';
@@ -108,13 +109,45 @@ describe('parseNextLotteryResponse', () => {
       { displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: '5,000,000', secondPrize: 10 },
     ]);
     expect(info.firstPrize).toBe('5000000.00');
+    // The double prize is twice the first prize; secondPrize is kept as raw text only.
     expect(info.doublePrize).toBe('10000000.00');
+    expect(info.doublePrizeRaw).toBe('10');
   });
   it('leaves the prizes null when missing or unparseable', () => {
     const info = parseNextLotteryResponse([{ displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: 'n/a' }]);
     expect(info.firstPrize).toBeNull();
     expect(info.doublePrize).toBeNull();
-    expect(parseAnnouncedPrize('5.5 מיליון')).toBe('5500000.00');
     expect(parseAnnouncedPrize(0)).toBeNull();
+  });
+  // pais sends shekels (confirmed with a real response on 15/11/2026).
+  it.each([
+    ['8,000,000', '8000000.00', '8,000,000'],
+    [8000000, '8000000.00', '8000000'],
+    [750000, '750000.00', '750000'],
+    ['n/a', null, 'n/a'],
+    [null, null, null],
+  ])('%j -> %s (raw %j)', (input, value, raw) => {
+    expect(parseAnnouncedPrizeDetailed(input)).toEqual({ value, raw });
+  });
+  it('parses the real getNextLotteryDate response for draw 3985', () => {
+    const info = parseNextLotteryResponse([
+      {
+        nextLottoryDate: 'Nov 17, 2026 22:45:00',
+        displayDate: '17/11/2026',
+        displayTime: '22:45',
+        firstPrize: 8000000,
+        secondPrize: 750000,
+        LotteryNumber: 3985,
+      },
+    ]);
+    expect(info).toMatchObject({
+      drawNumber: 3985,
+      firstPrize: '8000000.00',
+      doublePrize: '16000000.00',
+      firstPrizeRaw: '8000000',
+      doublePrizeRaw: '750000',
+    });
+    expect(info.salesCloseAt.toISOString()).toBe('2026-11-17T20:45:00.000Z');
+    expect(info.drawAt.toISOString()).toBe('2026-11-17T21:00:00.000Z');
   });
 });

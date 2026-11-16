@@ -56,6 +56,7 @@ export async function fetchLottoDraw(drawNumber: number): Promise<ParsedLottoDra
   return parsed;
 }
 
+
 /**
  * Keeps the upcoming draw in sync with getNextLotteryDate. A draw that is still `scheduled`
  * is updated when pais changes its times; draws past that stage are never touched.
@@ -66,6 +67,8 @@ export async function syncUpcomingDraws(): Promise<void> {
   const prizes = {
     announcedFirstPrize: info.firstPrize,
     announcedDoublePrize: info.doublePrize,
+    announcedFirstPrizeRaw: info.firstPrizeRaw,
+    announcedDoublePrizeRaw: info.doublePrizeRaw,
   };
   if (!existing) {
     await prisma.draw.create({
@@ -80,7 +83,9 @@ export async function syncUpcomingDraws(): Promise<void> {
     (existing.salesCloseAt.getTime() !== info.salesCloseAt.getTime() ||
       existing.drawAt.getTime() !== info.drawAt.getTime() ||
       !samePrize(existing.announcedFirstPrize, info.firstPrize) ||
-      !samePrize(existing.announcedDoublePrize, info.doublePrize))
+      !samePrize(existing.announcedDoublePrize, info.doublePrize) ||
+      (existing.announcedFirstPrizeRaw ?? null) !== info.firstPrizeRaw ||
+      (existing.announcedDoublePrizeRaw ?? null) !== info.doublePrizeRaw)
   ) {
     await prisma.draw.update({
       where: { id: existing.id },

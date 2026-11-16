@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView,
-} from 'react-native';
+import { Text, StyleSheet } from 'react-native';
+import { AuthLayout, Button, Field, Notice } from '../../components/ui/index.js';
+import { colors, rtl, type } from '../../theme/index.js';
 import { usersApi } from '../../api/client.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   onVerified: () => void;
 }
 
-export function KYCScreen({ onVerified }: Props) {
+export function KYCScreen({ onVerified }: Readonly<Props>) {
   const [fullName, setFullName] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const [dob, setDob] = useState('');
@@ -18,13 +19,13 @@ export function KYCScreen({ onVerified }: Props) {
 
   async function handleSubmit() {
     if (!fullName || !idNumber || !dob) {
-      Alert.alert('שדות חסרים', 'אנא מלא את כל השדות.');
+      notify('שדות חסרים', 'אנא מלא את כל השדות.');
       return;
     }
     // Parse DD/MM/YYYY → YYYY-MM-DD
     const parts = dob.split('/');
     if (parts.length !== 3) {
-      Alert.alert('תאריך שגוי', 'הזן תאריך בפורמט DD/MM/YYYY');
+      notify('תאריך שגוי', 'הזן תאריך בפורמט DD/MM/YYYY');
       return;
     }
     const isoDate = `${parts[2]}-${parts[1]!.padStart(2, '0')}-${parts[0]!.padStart(2, '0')}`;
@@ -37,15 +38,18 @@ export function KYCScreen({ onVerified }: Props) {
     } catch (err: unknown) {
       const e = err as { code?: string };
       if (e.code === 'AGE_VERIFICATION_FAILED') {
-        Alert.alert('גיל לא מספיק', 'עליך להיות בן 18 ומעלה להשתמש בשירות זה.');
+        notify('גיל לא מספיק', 'עליך להיות בן 18 ומעלה להשתמש בשירות זה.');
       } else if (e.code === 'INVALID_ID_NUMBER') {
-        Alert.alert('תעודת זהות שגויה', 'מספר תעודת הזהות אינו תקין. בדוק את המספר ונסה שנית.');
+        notify('תעודת זהות שגויה', 'מספר תעודת הזהות אינו תקין. בדוק את המספר ונסה שנית.');
       } else if (e.code === 'INVALID_DATE_OF_BIRTH') {
-        Alert.alert('תאריך שגוי', 'תאריך הלידה אינו תקין.');
+        notify('תאריך שגוי', 'תאריך הלידה אינו תקין.');
+      } else if (e.code === 'KYC_PENDING') {
+        // A returning user whose earlier check is waiting for manual review: let them in.
+        notify('האימות בבדיקה', 'בדיקת הזהות שלך ממתינה לאישור. נעדכן כשתאושר.', { okText: 'המשך', onDismiss: onVerified });
       } else if (e.code === 'ID_NUMBER_ALREADY_USED') {
-        Alert.alert('תעודת זהות בשימוש', 'מספר תעודת הזהות כבר רשום בחשבון אחר.');
+        notify('תעודת זהות בשימוש', 'מספר תעודת הזהות כבר רשום בחשבון אחר.');
       } else {
-        Alert.alert('שגיאה', 'אירעה שגיאה. בדוק את הפרטים ונסה שנית.');
+        notify('שגיאה', 'אירעה שגיאה. בדוק את הפרטים ונסה שנית.');
       }
     } finally {
       setLoading(false);
@@ -53,45 +57,29 @@ export function KYCScreen({ onVerified }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>אימות זהות</Text>
-      <Text style={styles.subtitle}>נדרש על-פי חוק. המידע מאובטח ומוגן.</Text>
+    <AuthLayout title="אימות זהות" subtitle="נדרש על-פי חוק. המידע מאובטח ומוגן.">
+      <Field label="שם מלא" value={fullName} onChangeText={setFullName} placeholder="ישראל ישראלי" autoComplete="name" textContentType="name" />
+      <Field label="מספר ת.ז." value={idNumber} onChangeText={setIdNumber} keyboardType="number-pad" placeholder="000000000" />
+      <Field label="תאריך לידה" value={dob} onChangeText={setDob} placeholder="DD/MM/YYYY" keyboardType="numbers-and-punctuation" />
 
-      <Text style={styles.label}>שם מלא</Text>
-      <TextInput style={styles.input} value={fullName} onChangeText={setFullName} placeholder="ישראל ישראלי" textAlign="right" />
+      <Notice tone="warn">
+        <Text style={styles.legal}>
+          * השירות מיועד לבני 18 ומעלה בלבד. אימות גיל הוא חובה חוקית.
+        </Text>
+      </Notice>
 
-      <Text style={styles.label}>מספר ת.ז.</Text>
-      <TextInput style={styles.input} value={idNumber} onChangeText={setIdNumber} keyboardType="number-pad" placeholder="000000000" textAlign="right" />
-
-      <Text style={styles.label}>תאריך לידה</Text>
-      <TextInput style={styles.input} value={dob} onChangeText={setDob} placeholder="DD/MM/YYYY" keyboardType="numbers-and-punctuation" textAlign="right" />
-
-      <TouchableOpacity
-        style={[styles.btn, loading && styles.btnDisabled]}
+      <Button
+        label={loading ? 'מאמת...' : 'אמת זהות'}
         onPress={handleSubmit}
         disabled={loading}
-      >
-        <Text style={styles.btnText}>{loading ? 'מאמת...' : 'אמת זהות'}</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.legal}>
-        * השירות מיועד לבני 18 ומעלה בלבד. אימות גיל הוא חובה חוקית.
-      </Text>
-    </ScrollView>
+        variant="accent"
+        size="lg"
+        block
+      />
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: '#fff', flexGrow: 1 },
-  title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 8, marginTop: 24 },
-  subtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 28 },
-  label: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 6, textAlign: 'right' },
-  input: {
-    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8,
-    padding: 12, fontSize: 16, marginBottom: 16,
-  },
-  btn: { backgroundColor: '#1a56db', borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 8 },
-  btnDisabled: { opacity: 0.5 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  legal: { fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 20 },
+  legal: { ...type.smallStrong, color: colors.warnInk, textAlign: rtl.textStart },
 });

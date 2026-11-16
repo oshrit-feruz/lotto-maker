@@ -1,17 +1,20 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { ORDER_STATUS_LABELS } from '@lotto-maker/shared';
 import type { OrderStatus } from '@lotto-maker/shared';
+import { colors, fonts, radii } from '../../theme/index.js';
+
+const NEUTRAL = { bg: colors.neutralSoft, text: colors.muted };
 
 const STATUS_COLORS: Record<OrderStatus, { bg: string; text: string }> = {
-  pending:         { bg: '#fef3c7', text: '#92400e' },
-  in_queue:        { bg: '#dbeafe', text: '#1e40af' },
-  keyed:           { bg: '#e0e7ff', text: '#3730a3' },
-  scanned:         { bg: '#d1fae5', text: '#065f46' },
-  won:             { bg: '#fef08a', text: '#713f12' },
-  lost:            { bg: '#f3f4f6', text: '#6b7280' },
-  refunded:        { bg: '#fee2e2', text: '#991b1b' },
-  results_delayed: { bg: '#fef3c7', text: '#92400e' },
-  cancelled:       { bg: '#f3f4f6', text: '#6b7280' },
+  pending:         { bg: colors.sunSoft, text: colors.warnInk },
+  in_queue:        { bg: colors.brandSoft, text: colors.pine },
+  keyed:           { bg: colors.plumSoft, text: colors.plum },
+  scanned:         { bg: colors.okSoft, text: colors.okInk },
+  won:             { bg: colors.sun, text: colors.pineDeep },
+  lost:            NEUTRAL,
+  refunded:        { bg: colors.dangerSoft, text: colors.dangerInk },
+  results_delayed: { bg: colors.sunSoft, text: colors.warnInk },
+  cancelled:       NEUTRAL,
 };
 
 interface Props {
@@ -19,10 +22,10 @@ interface Props {
 }
 
 export function OrderStatusBadge({ status }: Props) {
-  const colors = STATUS_COLORS[status] ?? STATUS_COLORS.pending;
+  const c = STATUS_COLORS[status] ?? STATUS_COLORS.pending;
   return (
-    <View style={[styles.badge, { backgroundColor: colors.bg }]}>
-      <Text style={[styles.text, { color: colors.text }]}>
+    <View style={[styles.badge, { backgroundColor: c.bg }]}>
+      <Text style={[styles.text, { color: c.text }]}>
         {ORDER_STATUS_LABELS[status] ?? status}
       </Text>
     </View>
@@ -31,13 +34,13 @@ export function OrderStatusBadge({ status }: Props) {
 
 const styles = StyleSheet.create({
   badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
     alignSelf: 'flex-start',
   },
   text: {
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
-    fontWeight: '600',
   },
 });

@@ -1,8 +1,7 @@
 /**
- * True when `typed` is exactly four digits equal to the claimant's known last 4.
- * An unknown expected value is never valid: without it the ID cannot be checked.
+ * True when `typed` is exactly four digits. The dashboard never knows the claimant's digits; the
+ * server compares them on collect (422 ID_MISMATCH, or ID_NOT_ON_FILE without a verified ID).
  */
-export function isIdLast4Valid(typed: string, expected: string | null | undefined): boolean {
-  if (!expected || !/^\d{4}$/.test(typed)) return false;
-  return typed === expected;
+export function isIdLast4Format(typed: string): boolean {
+  return /^\d{4}$/.test(typed);
 }

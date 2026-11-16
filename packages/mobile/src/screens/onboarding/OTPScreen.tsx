@@ -1,17 +1,21 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import { AuthLayout } from '../../components/ui/index.js';
+import { colors, fonts, radii, rtl, type } from '../../theme/index.js';
 import { authApi, setToken, setRefreshToken } from '../../api/client.js';
 import { usersApi } from '../../api/client.js';
 import { useAuthStore } from '../../store/auth.store.js';
+import { notify } from '../../lib/confirm.js';
 
 interface Props {
   phone: string;
-  onVerified: (isNewUser: boolean) => void;
+  /** Called with the loaded profile; the caller decides where onboarding goes next. */
+  onVerified: (user: { verifiedAdult: boolean }) => void;
 }
 
-export function OTPScreen({ phone, onVerified }: Props) {
+export function OTPScreen({ phone, onVerified }: Readonly<Props>) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -28,13 +32,13 @@ export function OTPScreen({ phone, onVerified }: Props) {
     if (enteredCode.length !== 6) return;
     setLoading(true);
     try {
-      const { accessToken, refreshToken, isNewUser } = await authApi.verifyOtp(phone, enteredCode);
+      const { accessToken, refreshToken } = await authApi.verifyOtp(phone, enteredCode);
       await Promise.all([setToken(accessToken), setRefreshToken(refreshToken)]);
       const user = await usersApi.getMe();
       setUser(user);
-      onVerified(isNewUser);
+      onVerified(user);
     } catch {
-      Alert.alert('קוד שגוי', 'הקוד שהזנת שגוי. נסה שנית.');
+      notify('קוד שגוי', 'הקוד שהזנת שגוי. נסה שנית.');
       setCode('');
       inputRef.current?.focus();
     } finally {
@@ -48,14 +52,14 @@ export function OTPScreen({ phone, onVerified }: Props) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>קוד אימות</Text>
-      <Text style={styles.subtitle}>שלחנו קוד ל-{phone}</Text>
-
+    <AuthLayout title="קוד אימות" subtitle={`שלחנו קוד ל-\u2066${phone}\u2069`}>
+      <Text style={styles.label}>הקוד בן 6 ספרות</Text>
       <TextInput
         ref={inputRef}
         style={styles.codeInput}
         keyboardType="number-pad"
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
         maxLength={6}
         value={code}
         onChangeText={(v) => {
@@ -63,34 +67,53 @@ export function OTPScreen({ phone, onVerified }: Props) {
           if (v.length === 6) handleVerify(v);
         }}
         placeholder="------"
+        placeholderTextColor={colors.emptyRing}
         textAlign="center"
+        accessibilityLabel="קוד אימות"
         autoFocus
       />
 
-      {loading && <Text style={{ textAlign: 'center', color: '#6b7280' }}>מאמת...</Text>}
+      {loading && (
+        <View style={styles.verifying}>
+          <ActivityIndicator color={colors.pine} />
+          <Text style={type.small}>מאמת...</Text>
+        </View>
+      )}
 
-      <TouchableOpacity
+      <Pressable
         onPress={handleResend}
         disabled={countdown > 0}
-        style={styles.resendBtn}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: countdown > 0 }}
+        style={({ pressed }) => [styles.resendBtn, pressed && countdown <= 0 && styles.resendPressed]}
       >
-        <Text style={[styles.resendText, countdown > 0 && { color: '#9ca3af' }]}>
+        <Text style={[styles.resendText, countdown > 0 && styles.resendWaiting]}>
           {countdown > 0 ? `שלח שוב בעוד ${countdown}ש׳` : 'שלח קוד מחדש'}
         </Text>
-      </TouchableOpacity>
-    </View>
+      </Pressable>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#fff' },
-  title: { fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#6b7280', textAlign: 'center', marginBottom: 32 },
+  label: { ...type.label, textAlign: rtl.textStart, marginBottom: 8 },
   codeInput: {
-    fontSize: 36, fontWeight: '700', letterSpacing: 12,
-    borderBottomWidth: 2, borderColor: '#1a56db',
-    marginHorizontal: 40, paddingBottom: 8, marginBottom: 24,
+    fontFamily: fonts.display,
+    fontSize: 34,
+    letterSpacing: 12,
+    minHeight: 64,
+    borderWidth: 2,
+    borderColor: colors.pine,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+    color: colors.pineDeep,
+    paddingVertical: 8,
+    marginBottom: 16,
+    writingDirection: 'ltr',
   },
-  resendBtn: { alignItems: 'center', marginTop: 8 },
-  resendText: { color: '#1a56db', fontSize: 15, fontWeight: '600' },
+  verifying: { flexDirection: rtl.row, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 },
+  resendBtn: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill, alignSelf: 'center', paddingHorizontal: 16 },
+  resendPressed: { backgroundColor: colors.brandSoft },
+  resendText: { fontFamily: fonts.bodyBold, color: colors.pine, fontSize: 15, textDecorationLine: 'underline' },
+  resendWaiting: { color: colors.muted, textDecorationLine: 'none', fontFamily: fonts.body },
 });

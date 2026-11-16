@@ -102,6 +102,9 @@ enum PrizeClaimStatus {
 
 enum PendingCardCreditStatus {
   pending
+  // The card-credit job has claimed it and is calling the provider (see claimedAt). An admin
+  // cannot mark it paid by hand meanwhile; a claim left behind by a crash is reclaimed later.
+  processing
   paid
   // Reserved. Nothing sets it today: a credit that cannot be paid stays `pending` and is retried.
   failed
@@ -428,6 +431,9 @@ model Draw {
   // Null when pais did not announce them or they could not be parsed.
   announcedFirstPrize  Decimal? @db.Decimal(14, 2)
   announcedDoublePrize Decimal? @db.Decimal(14, 2)
+  // The values exactly as pais sent them, kept because the unit (shekels or millions) is inferred
+  announcedFirstPrizeRaw  String?
+  announcedDoublePrizeRaw String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -496,9 +502,13 @@ model PrizeClaim {
 // Part of a small prize that did not fit under the wallet cap. A job pays it to the user's
 // default saved card; without a card, or on failure, it stays pending and is retried with
 // backoff (nextAttemptAt). An admin can also mark it paid by hand.
+// Money owed to the user that is paid to their default card: prize money above the wallet cap
+// (orderId), or a released withdrawal hold that no longer fits under the cap (withdrawalId).
+// Exactly one of the two is set (CHECK constraint in the migration).
 model PendingCardCredit {
   id        String                  @id @default(cuid())
-  orderId   String                  @unique
+  orderId   String?                 @unique
+  withdrawalId String?              @unique
   userId    String
   amount    Decimal                 @db.Decimal(12, 2)
   status    PendingCardCreditStatus @default(pending)
@@ -510,9 +520,12 @@ model PendingCardCredit {
   // Set when an admin paid it outside the system.
   paidByAdminId String?
   manualReference String?
+  // When the job claimed it (status processing). A claim older than the stale limit is reclaimed.
+  claimedAt DateTime?
   createdAt DateTime                @default(now())
 
-  order     Order                   @relation(fields: [orderId], references: [id])
+  order     Order?                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  withdrawal Withdrawal?            @relation(fields: [withdrawalId], references: [id], onDelete: Restrict)
   user      User                    @relation(fields: [userId], references: [id])
 
   @@index([userId, status])
@@ -577,6 +590,8 @@ model Withdrawal {
   user              User                @relation(fields: [userId], references: [id])
   savedCard         SavedCard?          @relation(fields: [savedCardId], references: [id])
   walletTxs         WalletTransaction[]
+  // The part of a released hold that did not fit under the wallet cap
+  cardCredit        PendingCardCredit?
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -591,4 +606,153 @@ model Admin {
   createdAt DateTime @default(now())
 
   confirmedDraws Draw[]
+}
+
+// ─── Phase 6: KYC ────────────────────────────────────────────────────────────
+// The Phase 6 models carry a plain userId with no Prisma relation (and no foreign key in the
+// migrations), so the User model and its relation list stay untouched.
+
+enum KycCheckStatus {
+  verified
+  rejected
+  manual_review
+}
+
+// One identity check by the KYC provider. The ID number is kept only as AES-256-GCM ciphertext
+// plus the keyed hash and the last 4 digits (same as User). A check in `manual_review` is the
+// admin queue; approving it copies the identity onto the User.
+model KycCheck {
+  id           String         @id @default(cuid())
+  userId       String
+  provider     String
+  // The provider's reference for this check.
+  reference    String
+  status       KycCheckStatus
+  reason       String?
+  fullName     String
+  idNumberEnc  String
+  idNumberHash String
+  idLast4      String
+  birthYear    Int
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  // Also, in SQL only (Prisma cannot express a partial index): KycCheck_one_pending_per_user,
+  // UNIQUE ("userId") WHERE status = 'manual_review'. One check waiting for review per user.
+}
+
+// ─── Phase 6: responsible gaming ─────────────────────────────────────────────
+
+// Deposit limits (rolling day / week / 30 days) and the monthly loss limit, in ILS; null = no limit.
+// Lowering a limit applies at once. Raising or removing one is parked in `pending` as
+// { [limit]: { value: number | null, effectiveAt: ISO date } } and applies once effectiveAt has passed.
+// Self-exclusion lives here too: `selfExcludedUntil`, or `selfExcludedPermanent`.
+model UserLimits {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  depositDaily          Decimal?  @db.Decimal(12, 2)
+  depositWeekly         Decimal?  @db.Decimal(12, 2)
+  depositMonthly        Decimal?  @db.Decimal(12, 2)
+  lossMonthly           Decimal?  @db.Decimal(12, 2)
+  pending               Json      @default("{}")
+  selfExcludedUntil     DateTime?
+  selfExcludedPermanent Boolean   @default(false)
+  // When the current exclusion was set (a permanent one can be lifted by an admin 6 months later).
+  selfExcludedAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ─── Phase 6: notifications ──────────────────────────────────────────────────
+
+enum NotificationChannel {
+  sms
+  email
+  push
+}
+
+enum NotificationStatus {
+  sent
+  failed
+  // Not sent on purpose: the user opted out of the channel, or there is no address for it.
+  skipped
+}
+
+// Every send attempt. The payload never holds an OTP code.
+model Notification {
+  id        String              @id @default(cuid())
+  // Null for a message to someone without an account yet (an OTP at sign-up).
+  userId    String?
+  channel   NotificationChannel
+  template  String
+  payload   Json
+  status    NotificationStatus
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Per user and channel on/off. No row means on. OTP and legal notices ignore it.
+model NotificationPreference {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel
+  enabled   Boolean             @default(true)
+  updatedAt DateTime            @updatedAt
+
+  @@unique([userId, channel])
+}
+
+// ─── Phase 6: fee receipts ───────────────────────────────────────────────────
+
+enum ReceiptKind {
+  receipt
+  // Issued when a paid order is refunded; references the original receipt, amounts are negative.
+  credit
+}
+
+// Last number issued per year. The row lock taken by the upsert in the receipt's own transaction
+// is what makes numbers sequential, never repeated and never skipped.
+model ReceiptCounter {
+  year Int @id
+  last Int
+}
+
+// A receipt for the SERVICE FEE of one order (the ticket price is held for the customer and is not
+// our income). Not a tax invoice until an accountant approves the format.
+model Receipt {
+  id                String      @id @default(cuid())
+  // "2026-000001"
+  number            String      @unique
+  year              Int
+  seq               Int
+  kind              ReceiptKind @default(receipt)
+  orderId           String
+  userId            String
+  originalReceiptId String?
+  customerName      String?
+  idLast4           String?
+  // Fee including VAT, the VAT in it and the net amount. Negative on a credit receipt.
+  feeAmount         Decimal     @db.Decimal(10, 2)
+  vatRate           Decimal     @db.Decimal(5, 4)
+  vatAmount         Decimal     @db.Decimal(10, 2)
+  netAmount         Decimal     @db.Decimal(10, 2)
+  // The issuer as it stood when the receipt was issued, so a later config change does not alter
+  // it. Null only on receipts issued before these columns existed.
+  businessName      String?
+  businessId        String?
+  businessAddress   String?
+  issuedAt          DateTime    @default(now())
+
+  @@unique([year, seq])
+  // One receipt and at most one credit receipt per order
+  @@unique([orderId, kind])
+  @@index([userId, issuedAt])
 }
