@@ -14,22 +14,22 @@
 import { Platform } from 'react-native';
 
 export const colors = {
-  pine: '#0c3b33',
-  pineDeep: '#072620',
-  pine2: '#145247',
+  pine: '#395c6b',
+  pineDeep: '#284450',
+  pine2: '#4a7182',
   sun: '#ffc233',
   sunDeep: '#e8a500',
   sunSoft: '#fff4d4',
   plum: '#5b2a86',
   plumSoft: '#efe6f7',
-  paper: '#f0f5f1',
-  ink: '#0f1f1b',
-  muted: '#4a5e58',
-  line: '#d3dfd8',
+  paper: '#eef3f5',
+  ink: '#12232b',
+  muted: '#5a6f78',
+  line: '#d6e0e6',
   surface: '#ffffff',
 
   brandInk: '#ffffff',
-  brandSoft: '#e1eee8',
+  brandSoft: '#d3e0e5',
   danger: '#b3261e',
   dangerSoft: '#fdecea',
   dangerInk: '#8f1d17',
@@ -40,31 +40,31 @@ export const colors = {
   warnLine: '#f2d58a',
   errorLine: '#efb7b1',
   okLine: '#b4dcc2',
-  infoLine: '#bcd6cc',
-  neutralSoft: '#e7ece9',
+  infoLine: '#bccdd6',
+  neutralSoft: '#e6ebee',
   /** Placeholder text and disabled ghost-button text. */
-  faint: '#7f918b',
+  faint: '#7d8f98',
 
   /** Text on pine backgrounds (hero copy, countdown labels). */
-  onPineMuted: '#d3e6df',
+  onPineMuted: '#d3e0e5',
   /** Footer / disclaimer panel on pine-deep. */
-  disclaimerBg: '#0b302a',
-  disclaimerLine: '#2b4a42',
-  disclaimerText: '#d5e2dd',
+  disclaimerBg: '#1f3a46',
+  disclaimerLine: '#3b5866',
+  disclaimerText: '#d5e0e5',
 
-  inputBorder: '#b8c9c1',
-  pickerBorder: '#c7d6cf',
+  inputBorder: '#b8c8d0',
+  pickerBorder: '#c7d4db',
   strongPickerBorder: '#d3c3e2',
-  perforation: '#c3d3cb',
-  emptyRing: '#a8bdb4',
-  disabledBg: '#b9c8c2',
-  disabledInk: '#33463f',
+  perforation: '#c3d1d8',
+  emptyRing: '#a8bac3',
+  disabledBg: '#b9c6cd',
+  disabledInk: '#33444c',
   sunHover: '#ffd25e',
 } as const;
 
 /** Glossy ball shading: highlight, body, rim (the web's radial-gradient stops). */
 export const ballShades = {
-  white: { hi: '#ffffff', mid: '#eaf3ee', lo: '#b7cec4', ink: colors.pineDeep },
+  white: { hi: '#ffffff', mid: '#eaf0f3', lo: '#b7c7cf', ink: colors.pineDeep },
   sun: { hi: '#fff6d6', mid: colors.sun, lo: colors.sunDeep, ink: colors.pineDeep },
   plum: { hi: '#d9c2ee', mid: '#7a46a8', lo: colors.plum, ink: '#ffffff' },
 } as const;
@@ -124,7 +124,7 @@ export const type = {
 /** --shadow: a hairline plus a soft pine drop. */
 export const shadows = {
   card: Platform.select({
-    web: { boxShadow: '0 1px 0 rgba(12, 59, 51, 0.06), 0 10px 24px -14px rgba(12, 59, 51, 0.35)' } as object,
+    web: { boxShadow: '0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35)' } as object,
     default: {
       shadowColor: colors.pine,
       shadowOffset: { width: 0, height: 6 },
@@ -146,7 +146,7 @@ export const shadows = {
   }),
   /** Sticky bars that sit above content (tab bar, price bar). */
   bar: Platform.select({
-    web: { boxShadow: '0 -10px 30px -12px rgba(12, 59, 51, 0.35)' } as object,
+    web: { boxShadow: '0 -10px 30px -12px rgba(57, 92, 107, 0.35)' } as object,
     default: {
       shadowColor: colors.pine,
       shadowOffset: { width: 0, height: -4 },

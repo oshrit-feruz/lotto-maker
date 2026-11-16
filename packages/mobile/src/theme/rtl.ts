@@ -37,5 +37,5 @@ export function applyDocumentDirection() {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return;
   document.documentElement.setAttribute('dir', 'rtl');
   document.documentElement.setAttribute('lang', 'he');
-  document.body.style.backgroundColor = '#f0f5f1';
+  document.body.style.backgroundColor = '#eef3f5';
 }

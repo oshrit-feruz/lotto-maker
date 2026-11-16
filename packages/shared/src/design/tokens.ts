@@ -12,21 +12,21 @@
  */
 
 export const colors = {
-  pine: '#0c3b33',
-  pineDeep: '#072620',
-  pine2: '#145247',
+  pine: '#395c6b',
+  pineDeep: '#284450',
+  pine2: '#4a7182',
   sun: '#ffc233',
   sunDeep: '#e8a500',
   sunSoft: '#fff4d4',
   plum: '#5b2a86',
   plumSoft: '#efe6f7',
-  paper: '#f0f5f1',
-  ink: '#0f1f1b',
-  muted: '#4a5e58',
-  line: '#d3dfd8',
+  paper: '#eef3f5',
+  ink: '#12232b',
+  muted: '#5a6f78',
+  line: '#d6e0e6',
   surface: '#ffffff',
   /** Soft pine tint: info alerts, neutral badges, ghost-button hover. */
-  pineSoft: '#e1eee8',
+  pineSoft: '#d3e0e5',
   ok: '#17703f',
   okSoft: '#e2f3e8',
   danger: '#b3261e',
@@ -44,7 +44,7 @@ export const radii = {
 
 export const shadows = {
   /** The one card shadow: a hairline plus a soft pine drop. */
-  card: '0 1px 0 rgba(12, 59, 51, 0.06), 0 10px 24px -14px rgba(12, 59, 51, 0.35)',
+  card: '0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35)',
   /** Keyboard focus: a paper gap, then a plum ring. */
   focus: `0 0 0 3px ${colors.paper}, 0 0 0 6px ${colors.plum}`,
 } as const;
