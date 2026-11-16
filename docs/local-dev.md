@@ -41,9 +41,9 @@ pg_isready && redis-cli ping     # "accepting connections" and "PONG"
 ### Docker (alternative)
 
 ```bash
-docker run -d --name lotto-pg -p 5432:5432 \
+docker run -d --name lotto-pg -p 127.0.0.1:5432:5432 \
   -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=lotto_maker postgres:16
-docker run -d --name lotto-redis -p 6379:6379 redis:7
+docker run -d --name lotto-redis -p 127.0.0.1:6379:6379 redis:7
 ```
 
 Stop a Homebrew Postgres first (`brew services stop postgresql@16`), or both fight over 5432.

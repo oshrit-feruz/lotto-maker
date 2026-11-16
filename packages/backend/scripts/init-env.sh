@@ -33,7 +33,12 @@ if grep -q '__GENERATE__' "$tmp"; then
   exit 1
 fi
 
-mv "$tmp" .env
+# ln fails if .env already exists, so a concurrent run can never replace it.
+if ! ln "$tmp" .env 2>/dev/null; then
+  echo "init-env: packages/backend/.env already exists; not overwriting" >&2
+  exit 1
+fi
+rm -f "$tmp"
 trap - EXIT
 chmod 600 .env
 echo "Created packages/backend/.env. Check DATABASE_URL and set SEED_ADMIN_PHONE before seeding."
