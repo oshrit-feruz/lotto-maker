@@ -5,7 +5,7 @@ interface Props {
   deadline: string;
 }
 
-export function CountdownTimer({ deadline }: Props) {
+export function CountdownTimer({ deadline }: Readonly<Props>) {
   const { minutes, seconds, isUrgent } = useCountdown(deadline);
 
   return (

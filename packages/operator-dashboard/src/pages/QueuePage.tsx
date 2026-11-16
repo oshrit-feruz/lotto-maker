@@ -1,13 +1,18 @@
 import { useQueue } from '../hooks/useQueue.js';
-import { useQueueStore } from '../store/queue.store.js';
+import { useQueueStore, type ConnectionStatus } from '../store/queue.store.js';
 import { QueueItem } from '../components/QueueItem/QueueItem.js';
+
+const CONNECTION_BADGE: Record<ConnectionStatus, { tone: string; label: string }> = {
+  connected: { tone: 'badge-ok', label: 'חי' },
+  reconnecting: { tone: 'badge-warn', label: 'מתחבר...' },
+  disconnected: { tone: 'badge-bad', label: 'מנותק' },
+};
 
 export function QueuePage() {
   useQueue();
 
   const { slots, connectionStatus } = useQueueStore();
-  const statusTone = connectionStatus === 'connected' ? 'badge-ok' : connectionStatus === 'reconnecting' ? 'badge-warn' : 'badge-bad';
-  const statusLabel = connectionStatus === 'connected' ? 'חי' : connectionStatus === 'reconnecting' ? 'מתחבר...' : 'מנותק';
+  const { tone: statusTone, label: statusLabel } = CONNECTION_BADGE[connectionStatus];
 
   return (
     <main className="page">

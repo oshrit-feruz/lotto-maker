@@ -1,4 +1,5 @@
 import ky from 'ky';
+import { endsSession } from '../lib/session.js';
 
 // In production, VITE_API_URL is the full Railway URL.
 // In development, we use the Vite proxy at /api → localhost:3000.
@@ -27,10 +28,10 @@ export const api = ky.create({
       },
     ],
     afterResponse: [
-      async (_request, _options, response) => {
-        if (response.status === 401) {
+      (request, _options, response) => {
+        if (endsSession(request, response)) {
           clearToken();
-          window.location.reload();
+          globalThis.location.reload();
         }
       },
     ],

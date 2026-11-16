@@ -22,3 +22,17 @@ export const SLOT_STATUS_LABEL: Record<string, string> = {
 };
 
 export const pad2 = (n: number) => String(n).padStart(2, '0');
+
+type Table = QueueSlotWithOrder['order']['tables'][number];
+
+/** The form's tables, numbered from 1 as printed, with a stable React key built from their numbers. */
+export function numberedTables(tables: readonly Table[]): Array<{ no: number; key: string; label: string } & Table> {
+  const seen = new Map<string, number>();
+  return tables.map((t, i) => {
+    const base = `${t.numbers.join(',')}|${t.strongNumbers.join(',')}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    const strong = t.strongNumbers.length > 0 ? ` | חזק: ${t.strongNumbers.join(', ')}` : '';
+    return { ...t, no: i + 1, key: `${base}#${count}`, label: `טבלה ${i + 1}: ${t.numbers.join(', ')}${strong}` };
+  });
+}

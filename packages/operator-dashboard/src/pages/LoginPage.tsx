@@ -1,45 +1,51 @@
 import { useState } from 'react';
 import { api, setToken } from '../api/client.js';
-import { verifyErrorMessage, verifyOtpBody } from '../lib/login.js';
+import { sendErrorMessage, verifyErrorMessage, verifyOtpBody } from '../lib/login.js';
 
 interface Props {
   onLogin: () => void;
 }
 
-export function LoginPage({ onLogin }: Props) {
+function ErrorAlert({ error }: Readonly<{ error: string }>) {
+  if (!error) return null;
+  return (
+    <p className="alert alert-error" role="alert">
+      {error}
+    </p>
+  );
+}
+
+export function LoginPage({ onLogin }: Readonly<Props>) {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault();
+  /** Runs one login call, showing its failure inline (never through the session-ending 401 path). */
+  function submit(call: () => Promise<void>, toMessage: (err: unknown) => Promise<string>) {
     setLoading(true);
     setError('');
-    try {
-      await api.post('auth/send-otp', { json: { phone } });
-      setStep('otp');
-    } catch {
-      setError('שגיאה בשליחת קוד. בדוק את מספר הטלפון.');
-    } finally {
-      setLoading(false);
-    }
+    call()
+      .catch(async (err: unknown) => setError(await toMessage(err)))
+      .finally(() => setLoading(false));
   }
 
-  async function handleVerifyOtp(e: React.FormEvent) {
+  function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
+    submit(async () => {
+      await api.post('auth/send-otp', { json: { phone } });
+      setStep('otp');
+    }, sendErrorMessage);
+  }
+
+  function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    submit(async () => {
       const { accessToken } = await api.post('auth/verify-otp', { json: verifyOtpBody(phone, code) }).json<{ accessToken: string }>();
       setToken(accessToken);
       onLogin();
-    } catch (err) {
-      setError(await verifyErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
+    }, verifyErrorMessage);
   }
 
   return (
@@ -66,11 +72,7 @@ export function LoginPage({ onLogin }: Props) {
                 required
               />
             </div>
-            {error && (
-              <p className="alert alert-error" role="alert">
-                {error}
-              </p>
-            )}
+            <ErrorAlert error={error} />
             <button type="submit" disabled={loading} className="btn btn-block">
               {loading ? 'שולח...' : 'שלח קוד'}
             </button>
@@ -90,11 +92,7 @@ export function LoginPage({ onLogin }: Props) {
                 required
               />
             </div>
-            {error && (
-              <p className="alert alert-error" role="alert">
-                {error}
-              </p>
-            )}
+            <ErrorAlert error={error} />
             <button type="submit" disabled={loading} className="btn btn-block">
               {loading ? 'מאמת...' : 'כניסה'}
             </button>

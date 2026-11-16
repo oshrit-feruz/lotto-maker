@@ -7,7 +7,7 @@ import { clearToken } from './api/client.js';
 type Page = 'queue' | 'shift-log';
 
 export function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('operator_token'));
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(localStorage.getItem('operator_token')));
   const [page, setPage] = useState<Page>('queue');
 
   if (!isLoggedIn) {
@@ -22,10 +22,11 @@ export function App() {
             <span className="brand-mark" aria-hidden="true" />
             לוטו מייקר
           </span>
-          <button className="nav-btn" aria-current={page === 'queue' ? 'page' : undefined} onClick={() => setPage('queue')}>
+          <button type="button" className="nav-btn" aria-current={page === 'queue' ? 'page' : undefined} onClick={() => setPage('queue')}>
             תור
           </button>
           <button
+            type="button"
             className="nav-btn"
             aria-current={page === 'shift-log' ? 'page' : undefined}
             onClick={() => setPage('shift-log')}
@@ -33,6 +34,7 @@ export function App() {
             לוג משמרת
           </button>
           <button
+            type="button"
             className="nav-btn logout"
             onClick={() => {
               clearToken();

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { colors, fonts } from '@lotto-maker/shared';
 import type { QueueSlotWithOrder } from '../api/client.js';
-import { SLOT_STATUS_LABEL, pad2, slotTitle, systematicLabel } from './display.js';
+import { SLOT_STATUS_LABEL, numberedTables, pad2, slotTitle, systematicLabel } from './display.js';
 
 const order = (o: Partial<QueueSlotWithOrder['order']>): QueueSlotWithOrder['order'] => ({
   gameType: 'lotto',
@@ -58,5 +58,16 @@ describe('design tokens', () => {
     const vite = read('../../vite.config.ts');
     expect(vite).toContain(`theme_color: '${colors.pine}'`);
     expect(vite).toContain(`background_color: '${colors.paper}'`);
+  });
+});
+
+describe('numberedTables', () => {
+  it('numbers tables from 1 with distinct keys, even for repeated tables', () => {
+    const t = { numbers: [1, 2, 3, 4, 5, 6], strongNumbers: [7] };
+    const rows = numberedTables([t, t, { numbers: [8, 9, 10, 11, 12, 13], strongNumbers: [] }]);
+    expect(rows.map((r) => r.no)).toEqual([1, 2, 3]);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(3);
+    expect(rows[0]!.label).toBe('טבלה 1: 1, 2, 3, 4, 5, 6 | חזק: 7');
+    expect(rows[2]!.label).toBe('טבלה 3: 8, 9, 10, 11, 12, 13');
   });
 });
