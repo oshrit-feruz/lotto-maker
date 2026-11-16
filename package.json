@@ -1,11 +1,12 @@
 {
   "name": "lotto-maker",
   "private": true,
+  "packageManager": "npm@10.9.2",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=!@lotto-maker/mobile",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
@@ -15,7 +16,8 @@
     "test:backend": "npm test -w packages/backend",
     "test:e2e": "npm run test:e2e -w packages/backend",
     "db:deploy": "npm run db:deploy -w packages/backend",
-    "docker:build": "docker build -t lotto-backend ."
+    "docker:build": "docker build -t lotto-backend .",
+    "dev:mobile": "npm run dev -w packages/mobile"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
