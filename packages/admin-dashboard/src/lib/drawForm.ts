@@ -38,12 +38,12 @@ export function toForm(d: DrawDetail): DrawForm {
 export function toBody(f: DrawForm): EditResultsBody | string {
   const nums = f.numbers.map(Number);
   const extra = f.extraDigits.map(Number);
-  if (f.numbers.some((n) => n === '') || nums.some((n) => !Number.isInteger(n) || n < 1 || n > 37))
+  if (f.numbers.includes('') || nums.some((n) => !Number.isInteger(n) || n < 1 || n > 37))
     return 'המספרים חייבים להיות 1–37';
   if (new Set(nums).size !== nums.length) return 'המספרים חייבים להיות שונים';
   const strong = Number(f.strong);
   if (f.strong === '' || !Number.isInteger(strong) || strong < 1 || strong > 7) return 'המספר החזק חייב להיות 1–7';
-  if (f.extraDigits.some((n) => n === '') || extra.some((n) => !Number.isInteger(n) || n < 1 || n > 7))
+  if (f.extraDigits.includes('') || extra.some((n) => !Number.isInteger(n) || n < 1 || n > 7))
     return 'ספרות אקסטרה חייבות להיות 1–7';
   const prizeTiers: EditResultsBody['prizeTiers'] = [];
   for (const g of GAMES) {

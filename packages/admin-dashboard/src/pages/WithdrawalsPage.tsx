@@ -79,7 +79,7 @@ export default function WithdrawalsPage() {
       <h1>משיכות</h1>
       <div className="row">
         <label>
-          סטטוס
+          {'סטטוס'}
           <select
             value={status}
             onChange={(e) => {
@@ -179,13 +179,13 @@ export default function WithdrawalsPage() {
           {action.w.method === 'bank' && <BankDetailsReveal withdrawalId={action.w.id} />}
           {action.kind === 'reject' && (
             <label>
-              סיבת הדחייה
+              {'סיבת הדחייה'}
               <input value={text} onChange={(e) => setText(e.target.value)} maxLength={REJECT_REASON_MAX} autoFocus />
             </label>
           )}
           {action.kind === 'pay' && (
             <label>
-              אסמכתת ההעברה הבנקאית
+              {'אסמכתת ההעברה הבנקאית'}
               <input
                 value={text}
                 onChange={(e) => setText(e.target.value)}

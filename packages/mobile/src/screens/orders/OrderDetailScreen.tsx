@@ -63,7 +63,7 @@ interface Props {
   orderId: string;
 }
 
-export function OrderDetailScreen({ orderId }: Props) {
+export function OrderDetailScreen({ orderId }: Readonly<Props>) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   // Short-lived signed URL, fetched each time the screen opens (never stored)
   const [scanUrl, setScanUrl] = useState<string | null>(null);

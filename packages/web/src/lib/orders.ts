@@ -41,6 +41,7 @@ export function isSafeRedirect(url: string): boolean {
 
 /** Where the hosted checkout sends the user back. The backend adds `paymentId` to both. */
 export function checkoutReturnUrls(origin: string): { successUrl: string; cancelUrl: string } {
-  const base = origin.replace(/\/+$/, '');
+  let base = origin;
+  while (base.endsWith('/')) base = base.slice(0, -1);
   return { successUrl: `${base}/payment/success`, cancelUrl: `${base}/payment/canceled` };
 }

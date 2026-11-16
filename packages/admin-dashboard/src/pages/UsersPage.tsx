@@ -29,7 +29,7 @@ export default function UsersPage() {
       <h1>משתמשים</h1>
       <form className="row" onSubmit={submit}>
         <label>
-          חיפוש לפי טלפון (מלא או תחילית)
+          {'חיפוש לפי טלפון (מלא או תחילית)'}
           <input
             value={input}
             onChange={(e) => {

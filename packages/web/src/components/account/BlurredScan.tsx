@@ -8,7 +8,7 @@ import { api, errorMessage } from '@/lib/api-client';
  * lower part, where the barcode is, stays blurred with CSS: the full ticket
  * is only needed when collecting a big prize, which we do for the customer.
  */
-export function BlurredScan({ orderId }: { orderId: string }) {
+export function BlurredScan({ orderId }: Readonly<{ orderId: string }>) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

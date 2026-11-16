@@ -63,7 +63,7 @@ export function orderKeyFor(
 ): string {
   const ticket = ticketSignature(input);
   const stored = store ? read(store) : null;
-  if (stored && stored.ticket === ticket) return stored.key;
+  if (stored?.ticket === ticket) return stored.key;
   const key = generate();
   try {
     store?.setItem(KEY, JSON.stringify({ key, ticket } satisfies StoredKey));

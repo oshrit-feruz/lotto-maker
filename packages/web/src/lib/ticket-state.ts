@@ -67,7 +67,7 @@ export function enabledSystematicRules(): SystematicRule[] {
 function activeRule(state: Pick<TicketState, 'systematicType'>): SystematicRule | null {
   if (state.systematicType === null) return null;
   const rule = getSystematicRule(state.systematicType);
-  return rule && rule.enabled ? rule : null;
+  return rule?.enabled ? rule : null;
 }
 
 /** How many numbers (1-37) each table needs. */
@@ -78,7 +78,7 @@ export function numbersPerTable(state: Pick<TicketState, 'systematicType'>): num
 /** How many strong numbers (1-7) each table needs. */
 export function strongPerTable(state: Pick<TicketState, 'systematicType'>): number {
   const rule = activeRule(state);
-  return rule && rule.kind === 'strong' ? (rule.strongCount ?? 1) : 1;
+  return rule?.kind === 'strong' ? (rule.strongCount ?? 1) : 1;
 }
 
 /** Table counts the user may choose: even numbers within the type's limits, or 1 for a systematic form. */
@@ -148,7 +148,7 @@ export function ticketReducer(state: TicketState, action: TicketAction): TicketS
       const id = action.systematicType;
       if (id !== null) {
         const rule = getSystematicRule(id);
-        if (!rule || !rule.enabled || rule.kind === 'unknown') return state;
+        if (!rule?.enabled || rule.kind === 'unknown') return state;
       }
       if (id === state.systematicType) return state;
       const next: TicketState = { ...state, systematicType: id, tables: [] };
@@ -214,7 +214,7 @@ export function sanitize(input: unknown): TicketState {
 
 export function isTableComplete(state: TicketState, index: number): boolean {
   const t = state.tables[index];
-  return Boolean(t && t.numbers.length === numbersPerTable(state) && t.strongNumbers.length === strongPerTable(state));
+  return t?.numbers.length === numbersPerTable(state) && t.strongNumbers.length === strongPerTable(state);
 }
 
 export function isTicketComplete(state: TicketState): boolean {

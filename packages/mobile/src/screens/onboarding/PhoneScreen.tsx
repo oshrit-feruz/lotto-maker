@@ -7,7 +7,7 @@ interface Props {
   onOtpSent: (phone: string) => void;
 }
 
-export function PhoneScreen({ onOtpSent }: Props) {
+export function PhoneScreen({ onOtpSent }: Readonly<Props>) {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 

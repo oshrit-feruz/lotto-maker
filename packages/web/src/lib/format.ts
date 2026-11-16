@@ -1,5 +1,8 @@
+/** A money or count value as the API sends it: a decimal string, a number, or nothing. */
+export type AmountValue = string | number | null | undefined;
+
 /** Parses a money value from the API (strings like "12.50", or numbers). NaN-safe: returns null. */
-export function toAmount(value: string | number | null | undefined): number | null {
+export function toAmount(value: AmountValue): number | null {
   if (value === null || value === undefined || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : null;
@@ -9,7 +12,7 @@ export function toAmount(value: string | number | null | undefined): number | nu
  * "₪1,234.50". Formatted by hand, not with Intl, so the server and every
  * browser produce the same string (no hydration mismatch). Unknown → "—".
  */
-export function formatShekel(value: string | number | null | undefined): string {
+export function formatShekel(value: AmountValue): string {
   const n = toAmount(value);
   if (n === null) return '—';
   const [int, dec] = Math.abs(n).toFixed(2).split('.');
@@ -75,10 +78,10 @@ export function formatShortDateTime(iso: string | Date | null | undefined): stri
   return `${p.day}.${p.month}.${p.year}${NBSP}${p.hour}:${p.minute}`;
 }
 
-/** A whole count with thousands separators: 57052 → "57,052". Formatted by hand, like formatShekel. */
-export function formatCount(value: number | string | null | undefined): string {
+/** A whole count with thousands separators: 57052 → "57,052". Grouped the same way as formatShekel. */
+export function formatCount(value: AmountValue): string {
   const n = toAmount(value);
   if (n === null) return '—';
   const sign = n < 0 ? '-' : '';
-  return sign + String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return sign + Math.round(Math.abs(n)).toLocaleString('en-US');
 }

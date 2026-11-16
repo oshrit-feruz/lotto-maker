@@ -11,7 +11,7 @@ import { BlurredScan } from './BlurredScan';
 import { ErrorNotice, Loading } from './Notice';
 import { winTotal } from './OrdersList';
 
-export function OrderDetail({ id }: { id: string }) {
+export function OrderDetail({ id }: Readonly<{ id: string }>) {
   const { data: o, error, loading, reload } = useApi<OrderView>(`orders/${encodeURIComponent(id)}`);
   if (loading) return <Loading />;
   if (error || !o) return <ErrorNotice message={error ?? 'ההזמנה לא נמצאה.'} onRetry={reload} />;

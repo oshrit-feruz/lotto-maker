@@ -2,7 +2,7 @@ export function Loading() {
   return <p className="muted loading">טוען…</p>;
 }
 
-export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorNotice({ message, onRetry }: Readonly<{ message: string; onRetry?: () => void }>) {
   return (
     <div className="alert alert-error" role="alert">
       {message}{' '}
@@ -16,6 +16,6 @@ export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: (
 }
 
 /** Shown when the backend endpoint for a section does not exist yet (404). */
-export function NotAvailable({ what }: { what: string }) {
+export function NotAvailable({ what }: Readonly<{ what: string }>) {
   return <div className="alert alert-info">{what} יהיו זמינים בקרוב.</div>;
 }

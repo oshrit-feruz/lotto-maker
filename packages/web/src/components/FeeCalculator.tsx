@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { MAX_DRAW_COUNT, TICKET_TYPE_LABELS, type TicketType } from '@lotto-maker/shared';
 import { buildPriceDisplay, priceFromList, type PriceDisplay } from '@/lib/price';
 import {
@@ -17,6 +17,11 @@ import { PriceSummary } from './ticket/PriceSummary';
 
 // The price does not depend on the numbers, so a fixed sequence fills the sample ticket.
 const sequentialRng: Rng = () => 0;
+
+function tableOptionsFor(type: TicketType, systematic: string): number[] {
+  if (systematic) return [1];
+  return type === 'regular' ? [2, 4, 6, 8, 10, 12, 14] : [2, 4, 6, 8, 10];
+}
 
 /**
  * Prices a sample ticket from the public price list (GET /prices), so it works
@@ -36,16 +41,45 @@ export function FeeCalculator() {
   state = ticketReducer(state, { type: 'setExtra', extra });
   state = ticketReducer(state, { type: 'setDrawCount', count: draws });
   state = ticketReducer(state, { type: 'lottomatAll', rng: sequentialRng });
-  const tableOptions = systematic ? [1] : type === 'regular' ? [2, 4, 6, 8, 10, 12, 14] : [2, 4, 6, 8, 10];
+  const tableOptions = tableOptionsFor(type, systematic);
 
   const priced = prices.data ? priceFromList(prices.data, toTicketInput(state)) : null;
   const price: PriceDisplay | null = priced?.ok ? buildPriceDisplay(priced.calc) : null;
-  const unavailable =
-    prices.notAvailable || priced?.ok === false
-      ? priced?.ok === false && priced.reason === 'EXTRA_NOT_AVAILABLE'
-        ? `אקסטרה אינו זמין ב${TICKET_TYPE_LABELS[type]}.`
-        : 'המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.'
-      : null;
+  let unavailable: string | null = null;
+  if (priced?.ok === false && priced.reason === 'EXTRA_NOT_AVAILABLE') {
+    unavailable = `אקסטרה אינו זמין ב${TICKET_TYPE_LABELS[type]}.`;
+  } else if (prices.notAvailable || priced?.ok === false) {
+    unavailable = 'המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.';
+  }
+
+  let priceBody: ReactNode;
+  if (prices.error) {
+    priceBody = (
+      <div className="alert alert-error">
+        {prices.error}{' '}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={prices.reload}>
+          נסו שוב
+        </button>
+      </div>
+    );
+  } else if (unavailable) {
+    priceBody = <div className="alert alert-warn">{unavailable}</div>;
+  } else if (price) {
+    priceBody = (
+      <>
+        <PriceSummary price={price} />
+        <div className="spread price-total">
+          <span>סה״כ</span>
+          <span dir="ltr">{price.total}</span>
+        </div>
+        <p className="small muted">
+          לפי המחירון העדכני. המחיר הסופי מחושב שוב בעת ההזמנה. <Link href="/ticket">למילוי טופס</Link>
+        </p>
+      </>
+    );
+  } else {
+    priceBody = <p className="muted">מחשב…</p>;
+  }
 
   return (
     <div className="grid-2">
@@ -105,34 +139,12 @@ export function FeeCalculator() {
         </div>
         <label className="row" style={{ cursor: 'pointer' }}>
           <input type="checkbox" checked={extra} onChange={(e) => setExtra(e.target.checked)} style={{ width: 20, height: 20 }} />
-          אקסטרה
+          {'אקסטרה'}
         </label>
       </section>
       <section className="card" aria-live="polite">
         <h2>המחיר</h2>
-        {prices.error ? (
-          <div className="alert alert-error">
-            {prices.error}{' '}
-            <button type="button" className="btn btn-ghost btn-sm" onClick={prices.reload}>
-              נסו שוב
-            </button>
-          </div>
-        ) : unavailable ? (
-          <div className="alert alert-warn">{unavailable}</div>
-        ) : price ? (
-          <>
-            <PriceSummary price={price} />
-            <div className="spread price-total">
-              <span>סה״כ</span>
-              <span dir="ltr">{price.total}</span>
-            </div>
-            <p className="small muted">
-              לפי המחירון העדכני. המחיר הסופי מחושב שוב בעת ההזמנה. <Link href="/ticket">למילוי טופס</Link>
-            </p>
-          </>
-        ) : (
-          <p className="muted">מחשב…</p>
-        )}
+        {priceBody}
       </section>
     </div>
   );

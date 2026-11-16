@@ -78,9 +78,8 @@ export function Withdrawals() {
               bank: { holderName: holderName.trim(), bankCode, branchCode, accountNumber },
             };
       const w = await api.post<WithdrawalView>('wallet/withdrawals', body);
-      setNotice(
-        `בקשת המשיכה התקבלה: ${formatShekel(w.amount)}${Number(w.fee) > 0 ? `, עמלה ${formatShekel(w.fee)}` : ''}, תקבלו ${formatShekel(w.payout)}.`,
-      );
+      const feePart = Number(w.fee) > 0 ? `, עמלה ${formatShekel(w.fee)}` : '';
+      setNotice(`בקשת המשיכה התקבלה: ${formatShekel(w.amount)}${feePart}, תקבלו ${formatShekel(w.payout)}.`);
       setAmount('');
       setAccountNumber('');
       list.reload();

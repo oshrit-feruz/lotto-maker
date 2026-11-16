@@ -17,13 +17,13 @@ export default function ConfirmDrawDialog({
   error,
   onConfirm,
   onCancel,
-}: {
+}: Readonly<{
   draw: Pick<DrawDetail, 'drawNumber' | 'numbers' | 'strong' | 'extraDigits' | 'prizeTiers'>;
   busy?: boolean;
   error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}>) {
   const estimate = computePayout(draw.prizeTiers);
   return (
     <ConfirmDialog

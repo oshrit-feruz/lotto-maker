@@ -49,7 +49,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
 
 /** The Hebrew message for a backend error code, or undefined when the code is unknown. */
 export function messageForCode(code: string): string | undefined {
-  return Object.prototype.hasOwnProperty.call(ERROR_MESSAGES, code) ? ERROR_MESSAGES[code] : undefined;
+  return Object.hasOwn(ERROR_MESSAGES, code) ? ERROR_MESSAGES[code] : undefined;
 }
 
 /** The text to show for any thrown value. */

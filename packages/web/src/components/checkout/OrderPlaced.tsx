@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { formatDateTime, formatShekel } from '@/lib/format';
 import type { CreateOrderResponse } from '@/lib/types';
 
-export function OrderPlaced({ result }: { result: CreateOrderResponse }) {
+export function OrderPlaced({ result }: Readonly<{ result: CreateOrderResponse }>) {
   return (
     <div className="card">
       <div className="alert alert-ok" role="status">

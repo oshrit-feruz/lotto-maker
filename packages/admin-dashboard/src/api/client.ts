@@ -51,8 +51,8 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
   const part = token.split('.')[1];
   if (!part) return null;
   try {
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=');
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const b64 = part.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(part.length / 4) * 4, '=');
+    const bytes = Uint8Array.from(atob(b64), (c) => c.codePointAt(0) ?? 0);
     const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : null;
   } catch {
@@ -137,7 +137,7 @@ export function refreshSession(): Promise<boolean> {
   const stored = refreshToken;
   if (!stored) return Promise.resolve(false);
   const gen = generation;
-  if (refreshing && refreshing.gen === gen) return refreshing.promise;
+  if (refreshing?.gen === gen) return refreshing.promise;
   const promise = (async () => {
     try {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -179,7 +179,8 @@ export async function request<T>(
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   }
   const qstr = qs.toString();
-  const url = `${BASE_URL}${path}${qstr ? `?${qstr}` : ''}`;
+  const search = qstr ? `?${qstr}` : '';
+  const url = `${BASE_URL}${path}${search}`;
   const authed = opts.auth !== false;
   const gen = generation;
 

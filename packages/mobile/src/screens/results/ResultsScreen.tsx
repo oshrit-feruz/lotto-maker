@@ -41,7 +41,7 @@ interface GameCardProps {
   now: number;
 }
 
-function GameCard({ gameType, result, error, loading, upcoming, now }: GameCardProps) {
+function GameCard({ gameType, result, error, loading, upcoming, now }: Readonly<GameCardProps>) {
   const name = GAME_DISPLAY_NAMES[gameType];
 
   const msUntilDraw = upcoming ? new Date(upcoming.drawTime).getTime() - now : 0;

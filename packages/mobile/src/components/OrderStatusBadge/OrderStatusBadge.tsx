@@ -21,7 +21,7 @@ interface Props {
   status: OrderStatus;
 }
 
-export function OrderStatusBadge({ status }: Props) {
+export function OrderStatusBadge({ status }: Readonly<Props>) {
   const c = STATUS_COLORS[status] ?? STATUS_COLORS.pending;
   return (
     <View style={[styles.badge, { backgroundColor: c.bg }]}>

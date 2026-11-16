@@ -14,7 +14,7 @@ interface Props {
   onOrderPlaced: () => void;
 }
 
-export function CartScreen({ onOrderPlaced }: Props) {
+export function CartScreen({ onOrderPlaced }: Readonly<Props>) {
   const { items, removeItem, clear, total } = useCartStore();
   const { user, updateUser } = useAuthStore();
   const [loading, setLoading] = useState(false);

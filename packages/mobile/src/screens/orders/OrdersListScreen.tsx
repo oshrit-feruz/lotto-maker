@@ -21,11 +21,18 @@ interface OrderRow {
   totalCharged: string;
 }
 
+/** "4 טבלאות · הגרלה 3812" for a ticket order, the numbers for a legacy order. */
+function orderSummary(item: OrderRow): string | undefined {
+  if (!item.ticket) return item.numbers?.join(', ');
+  const drawPart = item.draw ? ` · הגרלה ${item.draw.drawNumber}` : '';
+  return `${item.ticket.tables.length} טבלאות${drawPart}`;
+}
+
 interface Props {
   onSelectOrder: (id: string) => void;
 }
 
-export function OrdersListScreen({ onSelectOrder }: Props) {
+export function OrdersListScreen({ onSelectOrder }: Readonly<Props>) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,9 +71,7 @@ export function OrdersListScreen({ onSelectOrder }: Props) {
             <OrderStatusBadge status={item.status} />
           </View>
           <Text style={styles.numbers}>
-            {item.ticket
-              ? `${item.ticket.tables.length} טבלאות${item.draw ? ` · הגרלה ${item.draw.drawNumber}` : ''}`
-              : item.numbers?.join(', ')}
+            {orderSummary(item)}
           </Text>
           <View style={styles.cardBottom}>
             <Text style={styles.date}>{new Date(item.drawDate).toLocaleDateString('he-IL')}</Text>

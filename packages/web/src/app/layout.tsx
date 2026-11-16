@@ -16,7 +16,7 @@ export const viewport: Viewport = {
   themeColor: '#395c6b',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="he" dir="rtl" className={fontVariables}>
       <body>

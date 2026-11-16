@@ -9,7 +9,7 @@ import type { NextDraw } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 
 /** "₪12,000,000", with the shekel sign set smaller than the digits. */
-function PrizeAmount({ value }: { value: string }) {
+function PrizeAmount({ value }: Readonly<{ value: string }>) {
   const text = formatShekel(value).replace(/\.00$/, '');
   const amount = text.replace('₪', '');
   return (
@@ -27,6 +27,14 @@ export default async function HomePage() {
   const noOpenDraw = !res.ok && res.status === 404;
   // The countdown runs to the cutoff shown to users, which is a little before the backend's hard cutoff.
   const cutoff = next ? next.visibleCutoff || next.hardCutoff : null;
+  const noDrawNotice = noOpenDraw ? (
+    <div style={{ marginBottom: 16 }}>
+      <p className="prize-label">אין כרגע הגרלה פתוחה להזמנות</p>
+      <p>ההזמנות להגרלה האחרונה נסגרו, ומועד ההגרלה הבאה יתפרסם כאן בקרוב.</p>
+    </div>
+  ) : (
+    <p style={{ marginBottom: 16 }}>לא הצלחנו לטעון את פרטי ההגרלה הבאה. נסו לרענן את העמוד בעוד רגע.</p>
+  );
 
   return (
     <>
@@ -66,13 +74,8 @@ export default async function HomePage() {
               <Countdown until={cutoff!} />
               <p className="cutoff-line">הזמנות נסגרות: {formatDateTime(cutoff)}</p>
             </>
-          ) : noOpenDraw ? (
-            <div style={{ marginBottom: 16 }}>
-              <p className="prize-label">אין כרגע הגרלה פתוחה להזמנות</p>
-              <p>ההזמנות להגרלה האחרונה נסגרו, ומועד ההגרלה הבאה יתפרסם כאן בקרוב.</p>
-            </div>
           ) : (
-            <p style={{ marginBottom: 16 }}>לא הצלחנו לטעון את פרטי ההגרלה הבאה. נסו לרענן את העמוד בעוד רגע.</p>
+            noDrawNotice
           )}
           <Link href="/ticket" className="btn btn-accent btn-lg btn-block">
             למילוי טופס

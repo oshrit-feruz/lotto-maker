@@ -1009,12 +1009,7 @@ table.table {
 }
 
 /* ---------- Number balls ---------- */
-.balls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
+/* .balls (the row) is defined with the polish rules below. */
 .ball {
   --ball-hi: #ffffff;
   --ball-mid: #eaf0f3;
@@ -1478,6 +1473,8 @@ table.table {
 
 /* Balls stay on one line and shrink to fit a narrow row instead of wrapping. */
 .balls {
+  display: flex;
+  gap: 6px;
   flex-wrap: nowrap;
   min-width: 0;
   max-width: 100%;
