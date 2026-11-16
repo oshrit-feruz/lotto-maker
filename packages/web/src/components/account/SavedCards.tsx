@@ -34,7 +34,7 @@ export function SavedCards() {
       {cards.loading && !cards.data ? <Loading /> : null}
       {cards.error ? <ErrorNotice message={cards.error} onRetry={cards.reload} /> : null}
       {cards.data && cards.data.length === 0 ? (
-        <p className="muted">אין כרטיסים שמורים. כרטיס נשמר אוטומטית אחרי טעינה מוצלחת.</p>
+        <p className="muted empty-note">אין כרטיסים שמורים. כרטיס נשמר אוטומטית אחרי טעינה מוצלחת.</p>
       ) : null}
       {cards.data?.map((c) => (
         <div key={c.id} className="spread" style={{ borderBottom: '1px solid var(--line)', padding: '10px 0' }}>

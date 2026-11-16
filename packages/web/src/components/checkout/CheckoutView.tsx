@@ -51,10 +51,10 @@ export function CheckoutView() {
   }, [load]);
 
   if (placed) return <OrderPlaced result={placed} />;
-  if (!loaded) return <p className="muted">טוען…</p>;
+  if (!loaded) return <p className="muted loading">טוען…</p>;
   if (!ticket) {
     return (
-      <div className="card">
+      <div className="card empty">
         <p>אין טופס לתשלום.</p>
         <Link className="btn" href="/ticket">
           למילוי טופס
@@ -109,9 +109,9 @@ export function CheckoutView() {
           {rule ? `, ${rule.label}` : ''}, {ticket.tables.length} טבלאות
           {ticket.extra ? ', עם אקסטרה' : ''}, {ticket.drawCount === 1 ? 'הגרלה אחת' : `${ticket.drawCount} הגרלות`}
         </p>
-        <ol style={{ paddingInlineStart: 20 }}>
+        <ol className="ticket-tables">
           {ticket.tables.map((t, i) => (
-            <li key={i} style={{ marginBottom: 6 }}>
+            <li key={i}>
               <Balls numbers={t.numbers} strong={t.strongNumbers} />
             </li>
           ))}
@@ -119,7 +119,7 @@ export function CheckoutView() {
         <Link href="/ticket">עריכת הטופס</Link>
       </section>
 
-      <section className="card">
+      <section className="stub receipt">
         <h2>סיכום</h2>
         {error ? (
           <div className="alert alert-error" role="alert">
@@ -134,7 +134,8 @@ export function CheckoutView() {
         ) : calc && balance !== null && missing !== null ? (
           <>
             <PriceSummary price={buildPriceDisplay(calc)} />
-            <div className="spread price-total" style={{ margin: '8px 0' }}>
+            <div className="perf" aria-hidden="true" />
+            <div className="receipt-total">
               <span>לתשלום</span>
               <span dir="ltr">{formatShekel(calc.total)}</span>
             </div>
@@ -159,7 +160,7 @@ export function CheckoutView() {
             )}
           </>
         ) : !error ? (
-          <p className="muted">טוען…</p>
+          <p className="muted loading">טוען…</p>
         ) : (
           <button className="btn btn-ghost" onClick={() => void load(ticket)}>
             נסו שוב

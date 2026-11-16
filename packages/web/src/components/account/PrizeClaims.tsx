@@ -54,7 +54,7 @@ export function PrizeClaims() {
       {claims.notAvailable ? <NotAvailable what="זכיות לאיסוף" /> : null}
       {claims.loading && !claims.data ? <Loading /> : null}
       {claims.error ? <ErrorNotice message={claims.error} onRetry={claims.reload} /> : null}
-      {claims.data && claims.data.length === 0 ? <p className="muted">אין זכיות שממתינות לאיסוף.</p> : null}
+      {claims.data && claims.data.length === 0 ? <p className="muted empty-note">אין זכיות שממתינות לאיסוף.</p> : null}
       {claims.data?.map((c) => (
         <div key={c.id} className="table-card">
           <div className="spread">

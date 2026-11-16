@@ -1,0 +1,15 @@
+frontend-design skill
+Copyright Anthropic, PBC.
+
+SKILL.md and LICENSE.txt in this directory are copied unmodified from
+https://github.com/anthropics/claude-plugins-official
+  path:   plugins/frontend-design/skills/frontend-design/
+  commit: e0ab6e51219eef74e417a0e1d89e5d53e5e763d4
+  plugin: frontend-design 1.1.1 (authors: Prithvi Rajasekaran, Alexander Bricken)
+
+That is the source the official anthropics/claude-code marketplace
+(.claude-plugin/marketplace.json, entry "frontend-design") installs the plugin
+from; the copy that used to live under plugins/frontend-design in
+anthropics/claude-code itself has moved there.
+
+Licensed under the Apache License, Version 2.0 (see LICENSE.txt).

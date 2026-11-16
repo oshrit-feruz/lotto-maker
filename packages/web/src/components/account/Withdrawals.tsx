@@ -195,7 +195,7 @@ export function Withdrawals() {
       <h3 style={{ marginTop: 20 }}>בקשות משיכה</h3>
       {list.loading && !list.data ? <Loading /> : null}
       {list.error ? <ErrorNotice message={list.error} onRetry={list.reload} /> : null}
-      {list.data && list.data.length === 0 ? <p className="muted">אין בקשות משיכה.</p> : null}
+      {list.data && list.data.length === 0 ? <p className="muted empty-note">אין בקשות משיכה.</p> : null}
       {list.data && list.data.length > 0 ? (
         <div className="table-wrap">
           <table className="table">
