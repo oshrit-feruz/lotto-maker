@@ -16,6 +16,7 @@
     "test:backend": "npm test -w packages/backend",
     "test:e2e": "npm run test:e2e -w packages/backend",
     "db:deploy": "npm run db:deploy -w packages/backend",
+    "db:seed": "npm run db:seed -w packages/backend",
     "docker:build": "docker build -t lotto-backend .",
     "dev:mobile": "npm run dev -w packages/mobile"
   },
