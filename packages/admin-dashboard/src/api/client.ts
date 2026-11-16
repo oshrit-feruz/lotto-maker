@@ -1,6 +1,7 @@
 import { messageForCode } from './errors';
 
-const BASE_URL =(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+// Unset in `vite` dev: the local backend. Unset in a build: same origin.
+const BASE_URL = (import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3000' : '')).replace(/\/$/, '');
 
 // The backend returns tokens in the response body (no cookie). Both tokens live only in these
 // module variables, never in Web Storage, so a script injected into the page cannot read a
