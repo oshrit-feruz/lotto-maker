@@ -37,20 +37,34 @@ export function notConfigured(provider: SmsProviderName, missing: string[]): App
 
 export const DEFAULT_SMS_TIMEOUT_MS = 10_000;
 
+/** What a provider sees of the HTTP response: the body is already read (and bounded). */
+export interface SmsHttpResponse {
+  ok: boolean;
+  status: number;
+  text: string;
+}
+
+export const MAX_SMS_RESPONSE_BYTES = 64 * 1024;
+
 /**
- * fetch with a hard timeout. A timeout or network failure becomes an SmsProviderError without
- * the request details (the URL can carry no secret, but the body does).
+ * POSTs with a hard timeout that covers the whole exchange, response body included, so a
+ * gateway that sends headers and then stalls cannot hold an OTP request open. The body is read
+ * incrementally and the read is cancelled past `maxBytes`. A timeout or network failure becomes
+ * an SmsProviderError without the request details (the URL carries no secret, the body does).
  */
 export async function fetchWithTimeout(
   provider: SmsProviderName,
   url: string,
   init: RequestInit,
   timeoutMs: number,
-): Promise<Response> {
+  maxBytes = MAX_SMS_RESPONSE_BYTES,
+): Promise<SmsHttpResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    const text = await readBounded(res, maxBytes);
+    return { ok: res.ok, status: res.status, text };
   } catch (err) {
     if (controller.signal.aborted) throw new SmsProviderError(provider, `timeout after ${timeoutMs}ms`);
     const kind = err instanceof Error ? err.name : 'unknown';
@@ -60,10 +74,36 @@ export async function fetchWithTimeout(
   }
 }
 
-/** Reads a response body as text, bounded so a huge error page cannot blow up memory. */
-export async function readText(res: Response, max = 64 * 1024): Promise<string> {
-  const text = await res.text().catch(() => '');
-  return text.length > max ? text.slice(0, max) : text;
+/** Reads at most `maxBytes` of the body, then cancels the stream. */
+async function readBounded(res: Response, maxBytes: number): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = maxBytes - size;
+      if (value.byteLength >= room) {
+        chunks.push(value.subarray(0, room));
+        size = maxBytes;
+        await reader.cancel().catch(() => undefined);
+        break;
+      }
+      chunks.push(value);
+      size += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder().decode(all);
 }
 
 /**

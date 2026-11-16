@@ -3,7 +3,6 @@ import {
   DEFAULT_SMS_TIMEOUT_MS,
   fetchWithTimeout,
   notConfigured,
-  readText,
   SmsProviderError,
   toIsraeliLocal,
   type SmsProvider,
@@ -83,7 +82,7 @@ export class InforuSmsProvider implements SmsProvider {
       },
       this.opts.timeoutMs ?? DEFAULT_SMS_TIMEOUT_MS,
     );
-    const text = await readText(res);
+    const { text } = res;
     if (!res.ok) throw new SmsProviderError(this.name, `HTTP ${res.status}`);
     const status = /<Status>\s*(-?\d+)\s*<\/Status\s*>/i.exec(text)?.[1];
     if (status === undefined) throw new SmsProviderError(this.name, 'unexpected response (no Status)');

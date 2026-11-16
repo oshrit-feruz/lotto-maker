@@ -2,7 +2,6 @@ import {
   DEFAULT_SMS_TIMEOUT_MS,
   fetchWithTimeout,
   notConfigured,
-  readText,
   SmsProviderError,
   type SmsProvider,
 } from './provider.js';
@@ -50,7 +49,7 @@ export class TwilioSmsProvider implements SmsProvider {
       },
       this.opts.timeoutMs ?? DEFAULT_SMS_TIMEOUT_MS,
     );
-    const text = await readText(res);
+    const { text } = res;
     let json: { sid?: unknown; code?: unknown } = {};
     try {
       json = JSON.parse(text) as typeof json;

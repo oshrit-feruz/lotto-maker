@@ -2,7 +2,6 @@ import {
   DEFAULT_SMS_TIMEOUT_MS,
   fetchWithTimeout,
   notConfigured,
-  readText,
   SmsProviderError,
   toIsraeliLocal,
   type SmsProvider,
@@ -85,7 +84,7 @@ export class Sms019Provider implements SmsProvider {
       },
       this.opts.timeoutMs ?? DEFAULT_SMS_TIMEOUT_MS,
     );
-    const text = await readText(res);
+    const { text } = res;
     if (!res.ok) throw new SmsProviderError(this.name, `HTTP ${res.status}`);
     let json: { status?: unknown; shipment_id?: unknown };
     try {

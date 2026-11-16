@@ -275,3 +275,43 @@ describe('provider selection', () => {
     expect(missingSmsSettings(env({}), 'console')).toEqual([]);
   });
 });
+
+describe('fetchWithTimeout (shared by every provider)', () => {
+  it('times out when headers arrive but the body stalls', async () => {
+    fetchMock.mockImplementationOnce((_url, init) => {
+      const signal = (init as RequestInit).signal!;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('<Status>'));
+          signal.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 200 }));
+    });
+    const { fetchWithTimeout } = await import('../../src/modules/notifications/sms/provider.js');
+    await expect(fetchWithTimeout('inforu', INFORU_URL, { method: 'POST' }, 50)).rejects.toThrow(
+      /inforu timeout after 50ms/,
+    );
+  });
+
+  it('reads at most maxBytes of a huge body and cancels the rest', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(new Uint8Array(1024).fill(97));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    fetchMock.mockResolvedValueOnce(new Response(body, { status: 500 }));
+    const { fetchWithTimeout } = await import('../../src/modules/notifications/sms/provider.js');
+    const res = await fetchWithTimeout('sms019', SMS019_URL, { method: 'POST' }, 1000, 4096);
+    expect(res.status).toBe(500);
+    expect(res.text.length).toBe(4096);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(10);
+  });
+});
