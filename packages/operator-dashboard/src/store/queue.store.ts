@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { QueueSlotWithOrder } from '../api/client.js';
 
-type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
+export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
 
 interface QueueStore {
   slots: QueueSlotWithOrder[];

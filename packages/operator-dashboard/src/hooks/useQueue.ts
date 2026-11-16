@@ -14,11 +14,12 @@ export function useQueue() {
 
   function startPolling() {
     if (pollRef.current) return;
-    pollRef.current = setInterval(async () => {
-      try {
-        const { slots } = await fetchQueue();
-        setSlots(slots);
-      } catch {}
+    pollRef.current = setInterval(() => {
+      fetchQueue()
+        .then(({ slots }) => setSlots(slots))
+        .catch(() => {
+          // Offline or the API is down: the next poll (or the SSE reconnect) tries again
+        });
     }, POLL_INTERVAL_MS);
   }
 
@@ -56,7 +57,9 @@ export function useQueue() {
         } else if (msg.type === 'slot_scanned') {
           removeSlot(msg.slotId);
         }
-      } catch {}
+      } catch {
+        // A malformed event is skipped; the next one (or the poll) brings the queue up to date
+      }
     };
 
     es.onerror = () => {

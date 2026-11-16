@@ -9,7 +9,7 @@ interface Props {
   extra?: boolean;
 }
 
-export function ScanUpload({ slotId, onClose, onSuccess, extra = false }: Props) {
+export function ScanUpload({ slotId, onClose, onSuccess, extra = false }: Readonly<Props>) {
   const [extraDigits, setExtraDigits] = useState('');
   const extraValid = !extra || /^[1-7]{6}$/.test(extraDigits);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -23,19 +23,15 @@ export function ScanUpload({ slotId, onClose, onSuccess, extra = false }: Props)
     setPreview(URL.createObjectURL(file));
   }
 
-  async function handleUpload() {
+  function handleUpload() {
     const file = inputRef.current?.files?.[0];
     if (!file) return;
     setUploading(true);
     setError(null);
-    try {
-      await uploadScan(slotId, file, extra ? extraDigits : undefined);
-      onSuccess();
-    } catch {
-      setError('שגיאה בהעלאה. נסה שוב.');
-    } finally {
-      setUploading(false);
-    }
+    uploadScan(slotId, file, extra ? extraDigits : undefined)
+      .then(() => onSuccess())
+      .catch(() => setError('שגיאה בהעלאה. נסה שוב.'))
+      .finally(() => setUploading(false));
   }
 
   return (
@@ -55,7 +51,7 @@ export function ScanUpload({ slotId, onClose, onSuccess, extra = false }: Props)
               id={`extra-${slotId}`}
               className="input input-digits"
               value={extraDigits}
-              onChange={(e) => setExtraDigits(e.target.value.replace(/[^1-7]/g, '').slice(0, 6))}
+              onChange={(e) => setExtraDigits(e.target.value.replaceAll(/[^1-7]/g, '').slice(0, 6))}
               placeholder="ספרות Extra (6 ספרות, 1-7)"
               inputMode="numeric"
             />
@@ -71,10 +67,10 @@ export function ScanUpload({ slotId, onClose, onSuccess, extra = false }: Props)
         )}
 
         <div className="dialog-actions">
-          <button onClick={handleUpload} disabled={!preview || uploading || !extraValid} className="btn">
+          <button type="button" onClick={handleUpload} disabled={!preview || uploading || !extraValid} className="btn">
             {uploading ? 'מעלה...' : 'אשר ושייך'}
           </button>
-          <button onClick={onClose} className="btn btn-ghost">
+          <button type="button" onClick={onClose} className="btn btn-ghost">
             ביטול
           </button>
         </div>
