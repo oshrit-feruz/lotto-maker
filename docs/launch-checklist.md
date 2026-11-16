@@ -29,9 +29,15 @@ Mark each item with the date and who confirmed it.
       `PAYMENT_WEBHOOK_SECRET`. Until then deposits are closed in production.
 - [ ] **KYC provider** (owner action). Contract for ID + age verification; until it is integrated,
       KYC returns 503 in production (`KYC_PROVIDER` only has `mock`).
-- [ ] **SMS provider** (owner action). Twilio (or a local provider) account with an approved
-      Israeli sender ID; set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
-      Without it nobody can log in (OTP).
+- [ ] **SMS provider** (owner action). Open an account with InforU, 019 SMS or Twilio and get
+      the sender ID approved for Israel (InforU / 019 require the sender name or number to be
+      verified before they deliver). Then set `SMS_PROVIDER` (`inforu` | `sms019` | `twilio`),
+      `SMS_SENDER` and that provider's credentials (`INFORU_USERNAME` + `INFORU_TOKEN`,
+      `SMS019_USERNAME` + `SMS019_TOKEN`, or `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` +
+      `TWILIO_FROM_NUMBER`). Production refuses to start with a chosen provider that is missing
+      its settings; with no provider at all it starts but nobody can log in (OTP returns 503).
+      Send yourself a real OTP after deploying: the request formats follow the providers'
+      public docs but were not tried against a live account.
 
 ## Product checks
 

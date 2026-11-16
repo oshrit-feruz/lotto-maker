@@ -32,8 +32,10 @@ import {
   FcmPushChannel,
   MockChannel,
   setChannelsForTests,
+  SmsChannel,
   UnconfiguredEmailChannel,
 } from '../../src/modules/notifications/channels.js';
+import { Sms019Provider } from '../../src/modules/notifications/sms/index.js';
 import { notificationService } from '../../src/services/notifications.js';
 import { sendOtp } from '../../src/modules/auth/auth.service.js';
 import { AppError } from '../../src/plugins/error-handler.js';
@@ -258,6 +260,21 @@ describe('sign-in OTP', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     await expect(sendOtp('+972502222222')).rejects.toMatchObject({ statusCode: 503, code: 'SMS_NOT_CONFIGURED' });
     expect(h.s.log[0]).toMatchObject({ template: 'otp', status: 'failed' });
+    vi.restoreAllMocks();
+  });
+
+  it('a provider that refuses or times out is a 502, logged without the code', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ status: 4 }), { status: 200 })));
+    setChannelsForTests({
+      ...channels,
+      sms: new SmsChannel(new Sms019Provider({ username: 'me', apiToken: 'secret', sender: 'Lotto' })),
+    });
+    await expect(sendOtp('+972502222222')).rejects.toMatchObject({ statusCode: 502, code: 'NOTIFICATION_NOT_SENT' });
+    const code = (otpStore.storeOtp.mock.calls.at(-1) as unknown as [string, string])[1];
+    expect(h.s.log[0]).toMatchObject({ template: 'otp', status: 'failed', error: 'SMS_PROVIDER_ERROR: sms019 status 4 (not enough credit)' });
+    expect(JSON.stringify(h.s.log)).not.toContain(code);
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 });

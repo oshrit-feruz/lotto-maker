@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  missingSmsSettings,
+  SMS_PROVIDERS,
+  smsSenderProblem,
+} from './modules/notifications/sms/select.js';
 
 // A 32-byte key, base64-encoded (e.g. `openssl rand -base64 32`)
 const base64Key32 = z
@@ -56,9 +61,22 @@ export const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
+  // SMS (sign-in OTP and notifications). Unset: twilio when every TWILIO_* is set, otherwise
+  // console outside production; in production with no provider every SMS fails with 503.
+  SMS_PROVIDER: z.enum(SMS_PROVIDERS).optional(),
+  // Sender ID shown to the recipient (inforu, sms019; twilio when TWILIO_FROM_NUMBER is unset).
+  SMS_SENDER: z.string().optional(),
+  // A provider that has not answered after this long counts as failed.
+  SMS_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_NUMBER: z.string().optional(),
+  INFORU_USERNAME: z.string().optional(),
+  INFORU_TOKEN: z.string().optional(),
+  SMS019_USERNAME: z.string().optional(),
+  SMS019_TOKEN: z.string().optional(),
+  // https://019sms.co.il/api/test accepts requests without sending anything.
+  SMS019_API_URL: z.string().url().default('https://019sms.co.il/api'),
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
@@ -153,6 +171,18 @@ export function productionProblems(env: Env, raw: NodeJS.ProcessEnv): string[] {
   if (!env.BUSINESS_NAME.trim()) missing('BUSINESS_NAME', 'printed on fee receipts');
   if (!env.BUSINESS_ID.trim()) missing('BUSINESS_ID', 'printed on fee receipts');
   if (!env.BUSINESS_ADDRESS.trim()) missing('BUSINESS_ADDRESS', 'printed on fee receipts');
+
+  // SMS: with no provider at all production still starts (every SMS, including the sign-in OTP,
+  // then fails with 503 SMS_NOT_CONFIGURED). A provider that is chosen must be complete, and the
+  // console provider (prints instead of sending) is refused.
+  if (env.SMS_PROVIDER === 'console') problems.push('SMS_PROVIDER=console is not allowed in production');
+  else if (env.SMS_PROVIDER) {
+    for (const name of missingSmsSettings(env, env.SMS_PROVIDER)) {
+      missing(name, `required by SMS_PROVIDER=${env.SMS_PROVIDER}`);
+    }
+    const sender = smsSenderProblem(env, env.SMS_PROVIDER);
+    if (sender) problems.push(sender);
+  }
 
   if (env.RUN_API) {
     if (env.ALLOWED_ORIGINS.length === 0 && env.CORS_ORIGINS.length === 0) {

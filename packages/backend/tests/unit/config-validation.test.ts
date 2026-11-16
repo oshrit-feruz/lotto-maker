@@ -109,6 +109,43 @@ describe('loadConfig: production secrets', () => {
   });
 });
 
+describe('loadConfig: SMS provider', () => {
+  it('production may start without any SMS provider (sends then fail with 503)', () => {
+    expect(errorsOf(prodEnv())).toEqual([]);
+  });
+
+  it('refuses the console provider in production', () => {
+    expect(errorsOf(prodEnv({ SMS_PROVIDER: 'console' }))).toEqual(['SMS_PROVIDER=console is not allowed in production']);
+  });
+
+  it('requires the credentials of the chosen provider in production', () => {
+    expect(errorsOf(prodEnv({ SMS_PROVIDER: 'inforu' }))).toEqual([
+      'INFORU_USERNAME is missing (required by SMS_PROVIDER=inforu)',
+      'INFORU_TOKEN is missing (required by SMS_PROVIDER=inforu)',
+      'SMS_SENDER is missing (required by SMS_PROVIDER=inforu)',
+    ]);
+    expect(errorsOf(prodEnv({ SMS_PROVIDER: 'sms019', SMS019_USERNAME: 'me', SMS019_TOKEN: 't', SMS_SENDER: 'LottoMaker' }))).toEqual([]);
+    expect(errorsOf(prodEnv({ SMS_PROVIDER: 'twilio', TWILIO_ACCOUNT_SID: 'AC1' })).map((e) => e.split(' ')[0])).toEqual([
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_FROM_NUMBER',
+    ]);
+  });
+
+  it('checks the sender ID format of the Israeli gateways', () => {
+    const inforu = { SMS_PROVIDER: 'inforu', INFORU_USERNAME: 'me', INFORU_TOKEN: 't' };
+    expect(errorsOf(prodEnv({ ...inforu, SMS_SENDER: 'Lotto Maker' })).join()).toMatch(/SMS_SENDER/);
+    expect(errorsOf(prodEnv({ ...inforu, SMS_SENDER: 'LottoMakerIL1' })).join()).toMatch(/SMS_SENDER/);
+    expect(errorsOf(prodEnv({ ...inforu, SMS_SENDER: '97250111222333' }))).toEqual([]);
+    expect(errorsOf(prodEnv({ ...inforu, SMS_SENDER: '+972501112222' })).join()).toMatch(/SMS_SENDER/);
+  });
+
+  it('rejects an unknown provider and defaults the timeout', () => {
+    expect(errorsOf(prodEnv({ SMS_PROVIDER: 'nexmo' })).join()).toMatch(/SMS_PROVIDER/);
+    const r = loadConfig(prodEnv());
+    expect(r.ok && r.config.SMS_TIMEOUT_MS).toBe(10000);
+  });
+});
+
 describe('loadConfig: development and test', () => {
   it('needs none of the production secrets and falls back to local origins', () => {
     const r = loadConfig({

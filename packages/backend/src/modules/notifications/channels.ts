@@ -2,6 +2,7 @@ import type { NotificationChannelName, NotificationTemplateName } from '@lotto-m
 import { config } from '../../config.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { notificationService } from '../../services/notifications.js';
+import { createSmsProvider, type SmsProvider } from './sms/index.js';
 
 export interface OutboundMessage {
   userId: string | null;
@@ -39,17 +40,28 @@ export class MockChannel implements NotificationChannel {
   }
 }
 
-export class TwilioSmsChannel implements NotificationChannel {
+/** SMS through the configured provider (see ./sms). OTP bodies are marked sensitive. */
+export class SmsChannel implements NotificationChannel {
   readonly channel = 'sms' as const;
+  constructor(readonly provider: SmsProvider) {}
   async send(m: OutboundMessage): Promise<void> {
     if (!m.to) throw new Error('NO_RECIPIENT');
-    if (!config.TWILIO_ACCOUNT_SID || !config.TWILIO_AUTH_TOKEN || !config.TWILIO_FROM_NUMBER) {
-      throw new AppError(503, 'SMS_NOT_CONFIGURED', 'SMS provider is not configured');
-    }
-    const { default: twilio } = await import('twilio');
-    const client = twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
-    await client.messages.create({ body: m.body, from: config.TWILIO_FROM_NUMBER, to: m.to });
+    await this.provider.send(m.to, m.body, { sensitive: m.template === 'otp' });
   }
+}
+
+/** Production without an SMS provider: every send fails with 503, as before SMS_PROVIDER existed. */
+export class UnconfiguredSmsChannel implements NotificationChannel {
+  readonly channel = 'sms' as const;
+  async send(): Promise<void> {
+    throw new AppError(503, 'SMS_NOT_CONFIGURED', 'SMS provider is not configured');
+  }
+}
+
+/** The SMS channel for this config: the selected provider, or 503 on every send without one. */
+export function createSmsChannel(): NotificationChannel {
+  const provider = createSmsProvider(config);
+  return provider ? new SmsChannel(provider) : new UnconfiguredSmsChannel();
 }
 
 /** Thrown by a channel that has nobody to deliver to (e.g. no registered device): logged as `skipped`. */
@@ -108,11 +120,10 @@ export function getChannels(): ChannelSet {
   if (config.NODE_ENV === 'test') {
     channels = { sms: new MockChannel('sms'), email: new MockChannel('email'), push: new MockChannel('push') };
   } else if (config.NODE_ENV === 'production') {
-    channels = { sms: new TwilioSmsChannel(), email: new UnconfiguredEmailChannel(), push: new FcmPushChannel() };
+    channels = { sms: createSmsChannel(), email: new UnconfiguredEmailChannel(), push: new FcmPushChannel() };
   } else {
-    const twilioReady = config.TWILIO_ACCOUNT_SID && config.TWILIO_AUTH_TOKEN && config.TWILIO_FROM_NUMBER;
     channels = {
-      sms: twilioReady ? new TwilioSmsChannel() : new ConsoleChannel('sms'),
+      sms: createSmsChannel(),
       email: new ConsoleChannel('email'),
       push: new FcmPushChannel(),
     };
