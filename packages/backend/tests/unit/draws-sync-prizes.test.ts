@@ -3,9 +3,9 @@ import { Decimal } from 'decimal.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const db = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), update: vi.fn() }));
+const db = vi.hoisted(() => ({ findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() }));
 vi.mock('../../src/prisma.js', () => ({
-  prisma: { draw: { findUnique: db.findUnique, create: db.create, update: db.update } },
+  prisma: { draw: { findUnique: db.findUnique, findMany: db.findMany, create: db.create, update: db.update } },
 }));
 const axiosGet = vi.hoisted(() => vi.fn());
 vi.mock('axios', async (importOriginal) => {
@@ -14,7 +14,8 @@ vi.mock('axios', async (importOriginal) => {
 });
 vi.mock('../../src/modules/results/settlement.service.js', () => ({ markDrawResultsDelayed: vi.fn() }));
 
-import { syncUpcomingDraws } from '../../src/modules/draws/draws.sync.js';
+import { fetchDueResults, syncUpcomingDraws } from '../../src/modules/draws/draws.sync.js';
+import { SEED_DRAW_NUMBER_BASE } from '../../src/lib/seed-draws.js';
 
 const pais = (fields: Record<string, unknown> = {}) => ({
   data: [{ displayDate: '14/11/2026', displayTime: '22:45', LotteryNumber: 3984, firstPrize: 8000000, secondPrize: 750000, ...fields }],
@@ -66,5 +67,25 @@ describe('syncUpcomingDraws: announced prizes', () => {
     });
     await syncUpcomingDraws();
     expect(db.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchDueResults: dev-seed draws', () => {
+  it('never asks pais for a draw numbered from SEED_DRAW_NUMBER_BASE up', async () => {
+    const rows = [3984, SEED_DRAW_NUMBER_BASE, SEED_DRAW_NUMBER_BASE + 1].map((drawNumber) => ({
+      id: `d${drawNumber}`,
+      drawNumber,
+      status: 'scheduled',
+      drawAt: new Date('2026-11-14T20:45:00Z'),
+    }));
+    // Applies the drawNumber bound the job passes, as the database would
+    db.findMany.mockImplementation(async ({ where }: any) =>
+      rows.filter((r) => where.drawNumber?.lt === undefined || r.drawNumber < where.drawNumber.lt),
+    );
+    axiosGet.mockRejectedValue(new Error('offline'));
+    await fetchDueResults(new Date('2026-11-16T00:00:00Z'));
+    const asked = axiosGet.mock.calls.map(([url]) => String(url));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain('lotteryId=3984');
   });
 });
