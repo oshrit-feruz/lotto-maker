@@ -6,6 +6,7 @@ import { config } from '../../config.js';
 import { storeOtp, verifyOtp } from './otp.store.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { sendRequired } from '../notifications/notify.service.js';
+import { resolveSmsProviderName } from '../notifications/sms/select.js';
 import type { FastifyInstance } from 'fastify';
 
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -18,14 +19,15 @@ export async function sendOtp(phone: string): Promise<void> {
   const code = String(randomInt(100000, 999999));
   await storeOtp(phone, code);
 
-  const twilioReady = config.TWILIO_ACCOUNT_SID && config.TWILIO_AUTH_TOKEN && config.TWILIO_FROM_NUMBER;
-  if (!twilioReady && config.NODE_ENV !== 'production') {
+  // Only when nothing really sends the SMS (the console provider), never in production
+  if (resolveSmsProviderName(config) === 'console' && config.NODE_ENV !== 'production') {
     // Dev/test only — log OTP to server console so it can be retrieved manually
     console.log(`[OTP_DEV] ${phone} → ${code}`); // NOSONAR: dev-only path, gated behind NODE_ENV !== 'production'
   }
 
   // Through the logged notification path (the code itself is never logged). OTP is mandatory:
-  // a failed send fails the request, e.g. 503 SMS_NOT_CONFIGURED in production without Twilio.
+  // a failed send fails the request, e.g. 503 SMS_NOT_CONFIGURED in production without an SMS
+  // provider, 502 NOTIFICATION_NOT_SENT when the provider refused it or timed out.
   await sendRequired(null, 'sms', 'otp', { code }, { to: phone });
 }
 

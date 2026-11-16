@@ -68,7 +68,13 @@ while any required one is missing and prints the whole list at once (`src/config
 | `BUSINESS_NAME`, `BUSINESS_ID`, `BUSINESS_ADDRESS` | yes | Printed on fee receipts |
 | `RUN_JOBS` | – | `false` on the API |
 | `TRUST_PROXY_HOPS` | – | Default 1 in production (Railway's edge). Rate limits key on the client IP, so this must match the real number of proxies |
-| `TWILIO_*`, `FIREBASE_*`, `R2_*` | for those features | SMS, push, ticket-scan storage |
+| `SMS_PROVIDER` | for login | `inforu`, `sms019` or `twilio` (`console` is refused in production). Unset: `twilio` if every `TWILIO_*` is set; otherwise every SMS, including the login OTP, fails with 503 |
+| `SMS_SENDER` | with inforu / sms019 | Approved sender ID: up to 11 Latin letters/digits, or digits only (no `+`). Also Twilio's sender when `TWILIO_FROM_NUMBER` is unset |
+| `INFORU_USERNAME`, `INFORU_TOKEN` | with `SMS_PROVIDER=inforu` | InforU account username and API token |
+| `SMS019_USERNAME`, `SMS019_TOKEN` | with `SMS_PROVIDER=sms019` | 019 SMS account username and API token. `SMS019_API_URL=https://019sms.co.il/api/test` for a dry run |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | with `SMS_PROVIDER=twilio` | |
+| `SMS_TIMEOUT_MS` | – | Default 10000; a slower provider counts as failed (OTP returns 502) |
+| `FIREBASE_*`, `R2_*` | for those features | Push, ticket-scan storage |
 | `LOG_LEVEL`, `BODY_LIMIT_BYTES`, `RATE_LIMIT_GLOBAL_PER_MINUTE`, `ENABLE_API_DOCS`, `SENTRY_DSN` | – | Defaults are production-safe |
 | `DEFAULT_ADMIN_PHONE`, `DEFAULT_OPERATOR_PHONE` | first deploy | Creates the first admin / operator if missing |
 
