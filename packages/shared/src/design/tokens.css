@@ -9,20 +9,20 @@
  * 'Rubik Shekel' @font-face families itself.
  */
 :root {
-  --pine: #0c3b33;
-  --pine-deep: #072620;
-  --pine-2: #145247;
+  --pine: #395c6b;
+  --pine-deep: #284450;
+  --pine-2: #4a7182;
   --sun: #ffc233;
   --sun-deep: #e8a500;
   --sun-soft: #fff4d4;
   --plum: #5b2a86;
   --plum-soft: #efe6f7;
-  --paper: #f0f5f1;
-  --ink: #0f1f1b;
-  --muted: #4a5e58;
-  --line: #d3dfd8;
+  --paper: #eef3f5;
+  --ink: #12232b;
+  --muted: #5a6f78;
+  --line: #d6e0e6;
   --surface: #ffffff;
-  --pine-soft: #e1eee8;
+  --pine-soft: #d3e0e5;
   --ok: #17703f;
   --ok-soft: #e2f3e8;
   --danger: #b3261e;
@@ -31,7 +31,7 @@
   --radius: 14px;
   --radius-sm: 10px;
   --radius-pill: 999px;
-  --shadow: 0 1px 0 rgba(12, 59, 51, 0.06), 0 10px 24px -14px rgba(12, 59, 51, 0.35);
+  --shadow: 0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35);
   --focus: 0 0 0 3px var(--paper), 0 0 0 6px var(--plum);
 
   /* 'Rubik Shekel' covers only U+20AA, so ₪ in display text comes from Rubik. */

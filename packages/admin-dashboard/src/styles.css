@@ -85,7 +85,7 @@ p {
 
 .layout nav {
   background: var(--pine-deep);
-  color: #d5e2dd;
+  color: #d5e0e5;
   padding: 20px 14px;
 }
 
@@ -105,7 +105,7 @@ p {
   gap: 10px;
   padding: 4px 12px 18px;
   margin-bottom: 10px;
-  border-bottom: 1px solid #1d4a41;
+  border-bottom: 1px solid #34586a;
   font-family: var(--font-display);
   font-size: 1.3rem;
   color: #ffffff;
@@ -148,7 +148,7 @@ p {
   min-height: 42px;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
-  color: #d5e2dd;
+  color: #d5e0e5;
   font-weight: 500;
   text-decoration: none;
 }
@@ -159,7 +159,7 @@ p {
 }
 
 .layout nav a.active {
-  background: rgba(255, 194, 51, 0.13);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--sun);
   font-weight: 700;
 }
@@ -186,7 +186,7 @@ p {
   margin-top: auto;
   background: transparent;
   color: #ffffff;
-  border-color: #2f5a50;
+  border-color: #4a6f80;
 }
 
 .layout nav button.secondary:hover {
@@ -321,8 +321,8 @@ button:active:not(:disabled) {
 }
 
 button:disabled {
-  background: #b9c8c2;
-  color: #33463f;
+  background: #b9c6cd;
+  color: #33444c;
   cursor: not-allowed;
 }
 
@@ -356,7 +356,7 @@ button.secondary:hover {
 
 button.secondary:disabled {
   background: transparent;
-  color: #7f918b;
+  color: #7d8f98;
 }
 
 /* Danger: outlined, as on the website. */
@@ -414,7 +414,7 @@ select,
 textarea {
   min-height: 40px;
   padding: 8px 12px;
-  border: 1.5px solid #b8c9c1;
+  border: 1.5px solid #b8c8d0;
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
@@ -443,7 +443,7 @@ textarea:focus {
 
 input:disabled,
 select:disabled {
-  background: #f4f7f5;
+  background: #f4f6f8;
   color: var(--muted);
   border-color: var(--line);
 }
@@ -554,7 +554,7 @@ th {
   font-size: 0.82rem;
   font-weight: 700;
   white-space: nowrap;
-  border-bottom-color: #c3d6cc;
+  border-bottom-color: #c3d1d8;
 }
 
 tbody tr:last-child td {
@@ -562,7 +562,7 @@ tbody tr:last-child td {
 }
 
 tbody tr:nth-child(even) {
-  background: #f7faf8;
+  background: #f7f9fa;
 }
 
 tbody tr:hover {
@@ -584,7 +584,7 @@ main > table + .row {
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(7, 38, 32, 0.55);
+  background: rgba(40, 68, 80, 0.55);
   display: grid;
   place-items: center;
   z-index: 10;
@@ -598,7 +598,7 @@ main > table + .row {
   max-width: 95vw;
   max-height: 90vh;
   overflow: auto;
-  box-shadow: 0 30px 60px -20px rgba(7, 38, 32, 0.6);
+  box-shadow: 0 30px 60px -20px rgba(40, 68, 80, 0.6);
 }
 
 .dialog h2 {
@@ -690,7 +690,7 @@ main > table + .row {
   min-height: 0;
   padding: 0;
   border-radius: 50%;
-  border: 2px solid #c7d6cf;
+  border: 2px solid #c7d4db;
   text-align: center;
   font-family: var(--font-display);
   font-size: 1.2rem;
@@ -709,7 +709,7 @@ main > table + .row {
 }
 
 .ball-input::placeholder {
-  color: #a8bdb4;
+  color: #a8bac3;
 }
 
 .ball-input:disabled {
@@ -801,7 +801,7 @@ main > table + .row {
 .perf {
   position: relative;
   height: 0;
-  border-top: 2px dashed #c3d3cb;
+  border-top: 2px dashed #c3d1d8;
   margin: 4px -24px;
 }
 

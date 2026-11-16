@@ -147,7 +147,7 @@ p {
 
 .nav-btn.logout {
   margin-inline-start: auto;
-  border-color: #2f5a50;
+  border-color: #4a6f80;
 }
 
 /* ---------- Page ---------- */
@@ -195,8 +195,8 @@ p {
 }
 
 .btn:disabled {
-  background: #b9c8c2;
-  color: #33463f;
+  background: #b9c6cd;
+  color: #33444c;
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -237,7 +237,7 @@ label {
   width: 100%;
   min-height: 56px;
   padding: 10px 16px;
-  border: 1.5px solid #b8c9c1;
+  border: 1.5px solid #b8c8d0;
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
@@ -416,7 +416,7 @@ label {
 .perf {
   position: relative;
   height: 0;
-  border-top: 2px dashed #c3d3cb;
+  border-top: 2px dashed #c3d1d8;
   margin: 18px calc(-1 * var(--pad));
 }
 
@@ -540,7 +540,7 @@ label {
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(7, 38, 32, 0.6);
+  background: rgba(40, 68, 80, 0.6);
   display: grid;
   place-items: center;
   padding: 16px;
@@ -555,7 +555,7 @@ label {
   background: var(--surface);
   border-radius: var(--radius);
   padding: 24px;
-  box-shadow: 0 30px 60px -20px rgba(7, 38, 32, 0.6);
+  box-shadow: 0 30px 60px -20px rgba(40, 68, 80, 0.6);
 }
 
 .dialog h2 {
@@ -569,9 +569,9 @@ label {
   min-height: 120px;
   padding: 18px;
   margin-bottom: 16px;
-  border: 2px dashed #a8bdb4;
+  border: 2px dashed #a8bac3;
   border-radius: var(--radius);
-  background: #f7faf8;
+  background: #f7f9fa;
   text-align: center;
   cursor: pointer;
 }
@@ -605,7 +605,7 @@ label {
   width: 100%;
   max-height: 38vh;
   object-fit: contain;
-  background: #f7faf8;
+  background: #f7f9fa;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   margin-bottom: 16px;
