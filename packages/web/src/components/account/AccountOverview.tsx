@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { formatShekel } from '@/lib/format';
+import { formatPhoneLocal } from '@/lib/phone';
 import type { Me } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 import { ProfileForm } from '../ProfileForm';
@@ -24,8 +25,8 @@ export function AccountOverview() {
             <dt className="muted">שם</dt>
             <dd>{u.fullName ?? '—'}</dd>
             <dt className="muted">טלפון</dt>
-            <dd dir="ltr" style={{ textAlign: 'end' }}>
-              {u.phone}
+            <dd>
+              <span dir="ltr">{formatPhoneLocal(u.phone)}</span>
             </dd>
             <dt className="muted">תעודת זהות</dt>
             <dd>{u.idLast4 ? `מסתיימת ב־${u.idLast4}` : '—'}</dd>

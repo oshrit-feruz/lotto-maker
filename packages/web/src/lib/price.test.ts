@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildPriceDisplay, topUpAmount } from './price';
+import type { TicketInput } from '@lotto-maker/shared';
+import { buildPriceDisplay, priceFromList, topUpAmount } from './price';
 import { formatShekel } from './format';
-import type { CalculateResponse } from './types';
+import type { CalculateResponse, PricesResponse } from './types';
 
 const calc = (over: Partial<CalculateResponse> = {}): CalculateResponse => ({
   type: 'regular',
@@ -57,6 +58,51 @@ describe('buildPriceDisplay', () => {
   it('warns when not enough draws are announced', () => {
     const d = buildPriceDisplay(calc({ drawCount: 3, enoughDraws: false }));
     expect(d.warning).toContain('1');
+  });
+});
+
+describe('priceFromList (GET /prices, logged-out calculator)', () => {
+  const prices: PricesResponse = {
+    currency: 'ILS',
+    regular: { pricePerTable: '2.90', extraPricePerForm: '3.00', feePerOrder: '3.00', effectiveFrom: '2026-01-01T00:00:00.000Z' },
+    double: { pricePerTable: '5.80', extraPricePerForm: null, feePerOrder: '4.00', effectiveFrom: '2026-01-01T00:00:00.000Z' },
+  };
+  const tables = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ numbers: [1, 2, 3, 4, 5, 6 + i], strongNumbers: [1] }));
+  const input = (over: Partial<TicketInput> = {}): TicketInput => ({
+    type: 'regular',
+    systematicType: null,
+    extra: false,
+    drawCount: 1,
+    tables: tables(2),
+    ...over,
+  });
+
+  it('uses the backend formula: tables × price + Extra once + fee, per draw', () => {
+    const r = priceFromList(prices, input({ extra: true, drawCount: 3 }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.calc.perOrder).toEqual({ paisPrice: '5.80', extraPrice: '3.00', fee: '3.00', total: '11.80' });
+    expect(r.calc.total).toBe('35.40');
+    expect(norm(buildPriceDisplay(r.calc).total)).toBe('₪35.40');
+  });
+
+  it('counts the combinations of a systematic form', () => {
+    const r = priceFromList(prices, input({ systematicType: 'full_8', tables: [{ numbers: [1, 2, 3, 4, 5, 6, 7, 8], strongNumbers: [1] }] }));
+    if (!r.ok) throw new Error('expected a price');
+    expect(r.calc.combinations).toBe(28);
+    expect(r.calc.perOrder.paisPrice).toBe('81.20');
+  });
+
+  it('uses the double row for a double ticket, and refuses Extra where it has no price', () => {
+    const r = priceFromList(prices, input({ type: 'double' }));
+    if (!r.ok) throw new Error('expected a price');
+    expect(r.calc.perOrder.total).toBe('15.60');
+    expect(priceFromList(prices, input({ type: 'double', extra: true }))).toEqual({ ok: false, reason: 'EXTRA_NOT_AVAILABLE' });
+  });
+
+  it('reports a missing price row', () => {
+    expect(priceFromList({ ...prices, regular: null }, input())).toEqual({ ok: false, reason: 'NO_PRICE' });
   });
 });
 

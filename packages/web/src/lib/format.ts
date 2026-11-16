@@ -45,3 +45,40 @@ export function formatDate(iso: string | Date | null | undefined): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
   return Number.isNaN(d.getTime()) ? '—' : dateOnly.format(d);
 }
+
+const NBSP = '\u00a0';
+
+/** Parts of an instant in Asia/Jerusalem, zero-padded, 24h. */
+function jerusalemParts(d: Date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  return { day: get('day'), month: get('month'), year: get('year'), hour: get('hour'), minute: get('minute') };
+}
+
+/**
+ * "11.11.2026 08:10" in Asia/Jerusalem: no weekday and no comma, with a no-break space so it never
+ * wraps into ",11.11.2026" in a narrow RTL cell. For tables and lists.
+ */
+export function formatShortDateTime(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '—';
+  const p = jerusalemParts(d);
+  return `${p.day}.${p.month}.${p.year}${NBSP}${p.hour}:${p.minute}`;
+}
+
+/** A whole count with thousands separators: 57052 → "57,052". Formatted by hand, like formatShekel. */
+export function formatCount(value: number | string | null | undefined): string {
+  const n = toAmount(value);
+  if (n === null) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}

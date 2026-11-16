@@ -1,24 +1,63 @@
 // Response shapes of the backend routes this site calls. Copied from
 // packages/backend/src/modules/*; keep in sync when the backend changes.
 
-export interface UpcomingDraw {
-  gameType: string;
-  drawNumber?: number;
-  drawTime: string;
-  salesCloseAt?: string;
+/** GET /draws/next (public): the next lotto draw open for orders. 404 NO_OPEN_DRAW when there is none. */
+export interface NextDraw {
+  id: string;
+  gameType: 'lotto';
+  drawNumber: number;
+  drawAt: string;
+  salesCloseAt: string;
+  /** Last moment an order is accepted. */
   hardCutoff: string;
-  /** Not returned yet: see the "next draw prize" gap in the README. */
-  firstPrize?: string | null;
+  /** The earlier cutoff shown to users. */
+  visibleCutoff: string;
+  /** Announced first prize in ILS ("5000000.00"), null if not announced. */
+  firstPrize: string | null;
+  /** Announced double-lotto first prize in ILS, null if not announced. */
+  doublePrize: string | null;
 }
 
-export interface LatestResult {
+/** GET /results/latest?game=lotto (public). 404 RESULTS_NOT_AVAILABLE before the first confirmed draw. */
+export interface LottoResult {
+  drawId: string;
+  gameType: 'lotto';
   drawNumber: number;
-  gameType: string;
-  winningNumbers: number[];
-  strongNumber: number | null;
-  drawDate: string;
-  /** Not returned yet (gap): the draw's prize table. */
-  prizeTiers?: PrizeTierView[];
+  drawAt: string;
+  status: string;
+  confirmedAt: string | null;
+  numbers: number[];
+  strong: number | null;
+  extraDigits: number[];
+  /** All three tables, best tier first. */
+  prizeTiers: PrizeTierView[];
+  prizes?: Record<'lotto' | 'double' | 'extra', Omit<PrizeTierView, 'game'>[]>;
+}
+
+/** One row of GET /prices. */
+export interface PriceRowView {
+  pricePerTable: string;
+  /** Null: Extra cannot be added to this ticket type. */
+  extraPricePerForm: string | null;
+  feePerOrder: string;
+  effectiveFrom: string;
+}
+
+/** GET /prices (public). */
+export interface PricesResponse {
+  currency: 'ILS';
+  regular: PriceRowView | null;
+  double: PriceRowView | null;
+}
+
+/** GET /wallet/withdrawals/quote?amount=&method= */
+export interface WithdrawalQuote {
+  amount: string;
+  method: 'card' | 'bank';
+  fee: string;
+  net: string;
+  min: string;
+  belowMinimum: boolean;
 }
 
 export interface PrizeTierView {
@@ -58,11 +97,13 @@ export interface DuplicateResponse {
 export interface CreateOrderResponse {
   ticketId: string;
   orderId: string;
-  status: 'in_queue';
+  status: string;
   totalCharged: string;
   drawTime: string;
   visibleCutoff: string;
   orders: { orderId: string; drawNumber: number; drawAt: string; visibleCutoff: string }[];
+  /** True when the backend answered a repeat of an earlier request with the same Idempotency-Key. */
+  replayed?: boolean;
 }
 
 export interface CheckoutResponse {

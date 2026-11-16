@@ -25,11 +25,28 @@ No token is ever readable by browser JavaScript (nothing in localStorage).
   `/account/*` when there is no session cookie. The backend still authorises every call.
 
 Public pages (home, results, about, terms, privacy) are server-rendered and fetch the backend
-directly from the server.
+directly from the server:
+
+- Home: `GET /draws/next` (prizes, countdown to `visibleCutoff`). 404 `NO_OPEN_DRAW` shows an empty state.
+- Results: `GET /results/latest?game=lotto` with the lotto, double and Extra prize tables.
+  404 `RESULTS_NOT_AVAILABLE` shows an empty state.
+- `/fees` prices a sample ticket in the browser from the public `GET /prices` (through the proxy,
+  no session needed), with the backend's formula (`priceFromList` in `src/lib/price.ts`).
 
 ## Payment flow
 
 `/checkout` pays from the wallet (`POST /orders`) when the balance covers the total. Otherwise it
-tops up the missing amount (`POST /payments/checkout`) and redirects to the hosted page. The ticket
-(numbers only) and the payment id wait in `sessionStorage`. `/payment/success` polls
+tops up the missing amount (`POST /payments/checkout`) and redirects to the hosted page, with
+`successUrl` = `<origin>/payment/success` and `cancelUrl` = `<origin>/payment/canceled`. The backend
+adds `?paymentId=` to both, and refuses an origin missing from its `CHECKOUT_RETURN_ORIGINS`
+(422 `INVALID_RETURN_URL`), so set that to this site's origin. The ticket (numbers only) waits in
+`sessionStorage`, with the payment id as a fallback for the query string. `/payment/success` polls
 `GET /payments/:id` and, once approved, places the order. `/payment/canceled` checks the status once.
+
+Every `POST /orders` carries an `Idempotency-Key` (`src/lib/order-key.ts`): one key per ticket,
+kept in `sessionStorage` until the order succeeds. A retry or a reload after payment sends the same
+key, and the backend returns the original order (`replayed: true`) without charging again. Editing
+the ticket gets a new key; 409 `IDEMPOTENCY_KEY_REUSED` drops the key so the next try starts fresh.
+
+Withdrawals show the fee, the net amount and the minimum from `GET /wallet/withdrawals/quote`
+(debounced) before the request is sent.

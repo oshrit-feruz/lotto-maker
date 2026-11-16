@@ -1,22 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Balls } from '@/components/Balls';
-import { formatDate, formatShekel } from '@/lib/format';
-import { PRIZE_TIER_GAME_LABELS } from '@/lib/labels';
-import { publicGet } from '@/lib/server-api';
-import type { LatestResult, PrizeTierView } from '@/lib/types';
+import { formatCount, formatDate, formatShekel } from '@/lib/format';
+import { prizeTables, type PrizeTable as PrizeTableData } from '@/lib/results';
+import { publicFetch } from '@/lib/server-api';
+import type { LottoResult } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'תוצאות לוטו' };
 // Rendered per request (never baked at build time); the backend data itself is cached by fetch.
 export const dynamic = 'force-dynamic';
 
-const TIER_ORDER = ['6+s', '6', '5+s', '5', '4+s', '4', '3+s', '3', '2'];
-
-function PrizeTable({ game, tiers }: { game: string; tiers: PrizeTierView[] }) {
-  const rows = [...tiers].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+function PrizeTable({ table }: { table: PrizeTableData }) {
   return (
     <div className="table-wrap">
-      <h3>{PRIZE_TIER_GAME_LABELS[game] ?? game}</h3>
+      <h3>{table.title}</h3>
       <table className="table">
         <thead>
           <tr>
@@ -26,12 +23,12 @@ function PrizeTable({ game, tiers }: { game: string; tiers: PrizeTierView[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((t) => (
+          {table.rows.map((t) => (
             <tr key={t.tier}>
-              <td dir="ltr" style={{ textAlign: 'end' }}>
-                {t.tier.replace('+s', ' + חזק')}
+              <td dir={t.ltr ? 'ltr' : undefined} style={t.ltr ? { textAlign: 'end' } : undefined}>
+                {t.label}
               </td>
-              <td>{t.winnersCount}</td>
+              <td>{formatCount(t.winnersCount)}</td>
               <td dir="ltr" style={{ textAlign: 'end' }}>
                 {formatShekel(t.prizeAmount)}
               </td>
@@ -44,9 +41,11 @@ function PrizeTable({ game, tiers }: { game: string; tiers: PrizeTierView[] }) {
 }
 
 export default async function ResultsPage() {
-  const result = await publicGet<LatestResult>('/results/lotto/latest', 300);
-  const tiers = result?.prizeTiers ?? [];
-  const games = ['lotto', 'double', 'extra'].filter((g) => tiers.some((t) => t.game === g));
+  const res = await publicFetch<LottoResult>('/results/latest?game=lotto', 300);
+  const result = res.ok ? res.data : null;
+  // 404 RESULTS_NOT_AVAILABLE: no draw has confirmed results yet.
+  const notYet = !res.ok && res.status === 404;
+  const tables = result ? prizeTables(result) : [];
 
   return (
     <>
@@ -58,13 +57,18 @@ export default async function ResultsPage() {
       {result ? (
         <section className="card">
           <h2>
-            הגרלה {result.drawNumber} · {formatDate(result.drawDate)}
+            הגרלה {result.drawNumber} · {formatDate(result.drawAt)}
           </h2>
-          <Balls numbers={result.winningNumbers} strong={result.strongNumber} />
-          {games.length > 0 ? (
+          <Balls numbers={result.numbers} strong={result.strong} />
+          {result.extraDigits?.length ? (
+            <p style={{ marginTop: 12 }}>
+              ספרות אקסטרה: <strong dir="ltr">{result.extraDigits.join(' ')}</strong>
+            </p>
+          ) : null}
+          {tables.length > 0 ? (
             <div className="stack" style={{ marginTop: 16 }}>
-              {games.map((g) => (
-                <PrizeTable key={g} game={g} tiers={tiers.filter((t) => t.game === g)} />
+              {tables.map((t) => (
+                <PrizeTable key={t.game} table={t} />
               ))}
             </div>
           ) : (
@@ -73,6 +77,10 @@ export default async function ResultsPage() {
             </p>
           )}
         </section>
+      ) : notYet ? (
+        <div className="card empty">
+          <p>עדיין אין תוצאות מאושרות להצגה. התוצאות יופיעו כאן אחרי ההגרלה הקרובה.</p>
+        </div>
       ) : (
         <div className="card">
           <p>התוצאות אינן זמינות כרגע. נסו שוב מאוחר יותר.</p>

@@ -19,11 +19,14 @@ const RULES: Array<{ methods: HttpMethod[]; pattern: RegExp }> = [
   { methods: ['GET'], pattern: new RegExp(`^orders/${ID}(/scan)?$`) },
   { methods: ['GET'], pattern: /^wallet\/(balance|transactions)$/ },
   { methods: ['GET', 'POST'], pattern: /^wallet\/withdrawals$/ },
+  { methods: ['GET'], pattern: /^wallet\/withdrawals\/quote$/ },
   { methods: ['POST'], pattern: new RegExp(`^wallet/withdrawals/${ID}/cancel$`) },
   { methods: ['POST'], pattern: /^payments\/checkout$/ },
   { methods: ['GET'], pattern: new RegExp(`^payments/${ID}$`) },
-  { methods: ['GET'], pattern: /^draws\/upcoming$/ },
-  { methods: ['GET'], pattern: /^results\/lotto\/latest$/ },
+  // Public (no session needed): the next draw, confirmed results and the price list.
+  { methods: ['GET'], pattern: /^draws\/(upcoming|next)$/ },
+  { methods: ['GET'], pattern: /^results\/(lotto\/)?latest$/ },
+  { methods: ['GET'], pattern: /^prices$/ },
 ];
 
 /** True when `method path` (path without leading slash, e.g. "orders/abc/scan") may be proxied. */

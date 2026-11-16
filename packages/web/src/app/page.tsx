@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { Countdown } from '@/components/Countdown';
 import { BRAND_NAME } from '@/lib/config';
 import { formatDateTime, formatShekel } from '@/lib/format';
-import { publicGet } from '@/lib/server-api';
-import type { UpcomingDraw } from '@/lib/types';
+import { publicFetch } from '@/lib/server-api';
+import type { NextDraw } from '@/lib/types';
 
 // Rendered per request (never baked at build time); the backend data itself is cached by fetch.
 export const dynamic = 'force-dynamic';
@@ -21,8 +21,12 @@ function PrizeAmount({ value }: { value: string }) {
 }
 
 export default async function HomePage() {
-  const upcoming = await publicGet<UpcomingDraw[]>('/draws/upcoming');
-  const next = upcoming?.find((d) => d.gameType === 'lotto') ?? null;
+  const res = await publicFetch<NextDraw>('/draws/next');
+  const next = res.ok ? res.data : null;
+  // 404 NO_OPEN_DRAW: no draw is open for orders right now (e.g. between the sales close and the next sync).
+  const noOpenDraw = !res.ok && res.status === 404;
+  // The countdown runs to the cutoff shown to users, which is a little before the backend's hard cutoff.
+  const cutoff = next ? next.visibleCutoff || next.hardCutoff : null;
 
   return (
     <>
@@ -44,21 +48,31 @@ export default async function HomePage() {
             <>
               <div className="draw-meta">
                 <span>ההגרלה הבאה{next.drawNumber ? ` (מס׳ ${next.drawNumber})` : ''}</span>
-                <strong>{formatDateTime(next.drawTime)}</strong>
+                <strong>{formatDateTime(next.drawAt)}</strong>
               </div>
               {next.firstPrize ? (
                 <>
                   <p className="prize-label">פרס ראשון משוער</p>
                   <PrizeAmount value={next.firstPrize} />
+                  {next.doublePrize ? (
+                    <p className="prize-label">
+                      בדאבל לוטו: <span dir="ltr">{formatShekel(next.doublePrize).replace(/\.00$/, '')}</span>
+                    </p>
+                  ) : null}
                 </>
               ) : null}
               <div className="perf" aria-hidden="true" />
               <p className="countdown-label">ההזמנות נסגרות בעוד</p>
-              <Countdown until={next.hardCutoff} />
-              <p className="cutoff-line">הזמנות נסגרות: {formatDateTime(next.hardCutoff)}</p>
+              <Countdown until={cutoff!} />
+              <p className="cutoff-line">הזמנות נסגרות: {formatDateTime(cutoff)}</p>
             </>
+          ) : noOpenDraw ? (
+            <div style={{ marginBottom: 16 }}>
+              <p className="prize-label">אין כרגע הגרלה פתוחה להזמנות</p>
+              <p>ההזמנות להגרלה האחרונה נסגרו, ומועד ההגרלה הבאה יתפרסם כאן בקרוב.</p>
+            </div>
           ) : (
-            <p style={{ marginBottom: 16 }}>מועד ההגרלה הבאה יתפרסם בקרוב.</p>
+            <p style={{ marginBottom: 16 }}>לא הצלחנו לטעון את פרטי ההגרלה הבאה. נסו לרענן את העמוד בעוד רגע.</p>
           )}
           <Link href="/ticket" className="btn btn-accent btn-lg btn-block">
             למילוי טופס

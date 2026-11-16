@@ -6,7 +6,7 @@ import { TICKET_TYPE_LABELS, getSystematicRule } from '@lotto-maker/shared';
 import { api, errorMessage } from '@/lib/api-client';
 import { clearDraft, loadDraft, savePendingPayment } from '@/lib/draft';
 import { formatShekel } from '@/lib/format';
-import { isSafeRedirect, newIdempotencyKey, placeOrder } from '@/lib/orders';
+import { checkoutReturnUrls, isSafeRedirect, newIdempotencyKey, placeOrder } from '@/lib/orders';
 import { buildPriceDisplay, topUpAmount } from '@/lib/price';
 import { isTicketComplete, sanitize, toTicketInput, type TicketState } from '@/lib/ticket-state';
 import type { CalculateResponse, CheckoutResponse, CreateOrderResponse, Me } from '@/lib/types';
@@ -88,6 +88,9 @@ export function CheckoutView() {
       const res = await api.post<CheckoutResponse>('payments/checkout', {
         amount: missing,
         idempotencyKey: newIdempotencyKey(),
+        // The hosted page sends the user back here with ?paymentId=<id> (422 INVALID_RETURN_URL
+        // when this origin is not in the backend's CHECKOUT_RETURN_ORIGINS).
+        ...checkoutReturnUrls(window.location.origin),
       });
       if (!isSafeRedirect(res.checkoutUrl)) throw new Error('bad checkout url');
       savePendingPayment({ paymentId: res.paymentId, total: calc.total });

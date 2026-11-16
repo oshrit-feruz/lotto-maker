@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { formatDateTime, formatShekel } from '@/lib/format';
+import { formatShekel, formatShortDateTime } from '@/lib/format';
 import { TX_TYPE_LABELS } from '@/lib/labels';
 import type { Paged, WalletTransactionView } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
@@ -36,7 +36,7 @@ export function WalletView() {
         {txs.data && txs.data.data.length === 0 ? <p className="muted empty-note">אין תנועות עדיין.</p> : null}
         {txs.data && txs.data.data.length > 0 ? (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table-cards tx-table">
               <thead>
                 <tr>
                   <th>תאריך</th>
@@ -48,10 +48,14 @@ export function WalletView() {
               <tbody>
                 {txs.data.data.map((t) => (
                   <tr key={t.id}>
-                    <td className="small">{formatDateTime(t.createdAt)}</td>
-                    <td>{TX_TYPE_LABELS[t.type] ?? t.type}</td>
-                    <td className="small">{t.description}</td>
-                    <td dir="ltr">{formatShekel(t.amount)}</td>
+                    <td className="small cell-date nowrap">{formatShortDateTime(t.createdAt)}</td>
+                    <td className="cell-type">{TX_TYPE_LABELS[t.type] ?? t.type}</td>
+                    <td className="small cell-desc">{t.description}</td>
+                    <td className="cell-amount">
+                      <span dir="ltr" className="amount">
+                        {formatShekel(t.amount)}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

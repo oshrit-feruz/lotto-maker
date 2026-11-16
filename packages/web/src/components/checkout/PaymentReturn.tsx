@@ -13,6 +13,7 @@ import { OrderPlaced } from './OrderPlaced';
 
 const POLL_MS = 2000;
 const POLL_LIMIT = 45; // about 90 seconds
+const PAYMENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 type Phase = 'checking' | 'approved' | 'ordering' | 'done' | 'failed' | 'timeout' | 'missing' | 'error';
 
@@ -30,7 +31,11 @@ export function PaymentReturn({ mode }: { mode: 'success' | 'canceled' }) {
   const attempts = useRef(0);
   const ordering = useRef(false);
 
-  const paymentId = params.get('paymentId') ?? loadPendingPayment()?.paymentId ?? null;
+  // The backend adds ?paymentId=<id> to the return URLs; sessionStorage is the fallback (e.g. a
+  // provider that drops the query string).
+  const fromQuery = params.get('paymentId');
+  const paymentId =
+    (fromQuery && PAYMENT_ID.test(fromQuery) ? fromQuery : null) ?? loadPendingPayment()?.paymentId ?? null;
 
   const finishOrder = useCallback(async () => {
     if (ordering.current) return;
@@ -43,12 +48,17 @@ export function PaymentReturn({ mode }: { mode: 'success' | 'canceled' }) {
       return;
     }
     setPhase('ordering');
-    // Cleared first so a reload cannot place the same ticket twice.
-    clearDraft();
+    // The draft stays until the order succeeds: placeOrder sends the ticket's Idempotency-Key, so a
+    // reload here repeats the same request and gets the original order back (`replayed: true`)
+    // instead of a second charge.
     try {
-      setOrder(await placeOrder(ticket));
+      const result = await placeOrder(ticket);
+      clearDraft();
+      setOrder(result);
       setPhase('done');
     } catch (err) {
+      // Allow "try again" from this page after a failure.
+      ordering.current = false;
       setError(errorMessage(err));
       setPhase('error');
     }
@@ -160,7 +170,12 @@ export function PaymentReturn({ mode }: { mode: 'success' | 'canceled' }) {
           </div>
           <p className="small muted">אם התשלום אושר, הסכום נמצא בארנק ואפשר להשלים את ההזמנה משם.</p>
           <div className="row">
-            <Link className="btn" href="/ticket">
+            {mode === 'success' && payment?.status === 'approved' ? (
+              <button className="btn" onClick={() => void finishOrder()}>
+                ניסיון חוזר להזמנה
+              </button>
+            ) : null}
+            <Link className={mode === 'success' && payment?.status === 'approved' ? 'btn btn-ghost' : 'btn'} href="/ticket">
               לטופס
             </Link>
             <Link className="btn btn-ghost" href="/account/wallet">

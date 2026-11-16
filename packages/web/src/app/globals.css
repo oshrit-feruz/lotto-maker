@@ -1464,3 +1464,229 @@ table.table {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---------- Polish: amounts, dates, balls, tabs, sticky price bar, mobile card tables ---------- */
+.nowrap,
+.amount {
+  white-space: nowrap;
+}
+
+.amount {
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Balls stay on one line and shrink to fit a narrow row instead of wrapping. */
+.balls {
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.balls .ball {
+  flex: 0 1 36px;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  aspect-ratio: 1;
+  font-size: clamp(0.8rem, 2.9vw, 1.05rem);
+}
+
+.ticket-tables li .balls {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.balls .ball-strong {
+  margin-inline-start: 4px;
+}
+
+/* Account tabs wrap on a narrow screen instead of being cut off. */
+@media (max-width: 719px) {
+  .tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    border-radius: 22px;
+    gap: 4px;
+  }
+
+  .tabs a {
+    padding: 0 12px;
+    min-height: 36px;
+  }
+}
+
+/* Sticky price bar: on mobile one line (total, details toggle, CTA); the breakdown opens on demand. */
+.price-bar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.price-bar-sum {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.price-bar-note {
+  margin: 0 0 8px;
+}
+
+.price-bar-toggle {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--pine);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 719px) {
+  .price-bar {
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .price-bar-details {
+    display: none;
+  }
+
+  .price-bar.details-open .price-bar-details {
+    display: block;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .price-bar .price-total {
+    font-size: 1.4rem;
+  }
+
+  .price-bar-note {
+    margin: 0 0 6px;
+  }
+
+  .price-bar .btn {
+    min-height: 44px;
+    padding: 0 18px;
+  }
+}
+
+@media (min-width: 720px) {
+  .price-bar-toggle {
+    display: none;
+  }
+}
+
+/* Tables that become a stacked card list on mobile. */
+@media (max-width: 719px) {
+  .table-cards thead {
+    display: none;
+  }
+
+  .table-cards,
+  .table-cards tbody {
+    display: block;
+  }
+
+  .table-cards tbody tr,
+  .table-cards tbody tr:nth-child(odd) {
+    display: grid;
+    gap: 2px 12px;
+    align-items: baseline;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .table-cards td {
+    display: block;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .table-cards td:empty {
+    display: none;
+  }
+
+  .table-cards .cell-amount {
+    text-align: end;
+    font-weight: 700;
+  }
+
+  .table-cards .cell-date,
+  .table-cards .cell-type,
+  .table-cards .cell-dest {
+    color: var(--muted);
+  }
+
+  /* Wallet: description and amount, then type and date. */
+  .tx-table tbody tr {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'desc amount'
+      'type date';
+  }
+
+  .tx-table .cell-desc {
+    grid-area: desc;
+    font-size: 0.95rem;
+  }
+
+  .tx-table .cell-amount {
+    grid-area: amount;
+  }
+
+  .tx-table .cell-type {
+    grid-area: type;
+    font-size: 0.85rem;
+  }
+
+  .tx-table .cell-date {
+    grid-area: date;
+    text-align: end;
+  }
+
+  /* Withdrawals: amount and status, then destination and date, then the cancel button. */
+  .withdrawal-table tbody tr {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'amount status'
+      'dest date'
+      'action action';
+  }
+
+  .withdrawal-table .cell-amount {
+    grid-area: amount;
+    text-align: start;
+  }
+
+  .withdrawal-table .cell-status {
+    grid-area: status;
+    text-align: end;
+  }
+
+  .withdrawal-table .cell-dest {
+    grid-area: dest;
+  }
+
+  .withdrawal-table .cell-date {
+    grid-area: date;
+    text-align: end;
+  }
+
+  .withdrawal-table .cell-action {
+    grid-area: action;
+    margin-top: 6px;
+  }
+
+  .withdrawal-table .cell-action .btn {
+    width: 100%;
+  }
+}
