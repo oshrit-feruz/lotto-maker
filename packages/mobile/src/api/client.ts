@@ -64,7 +64,7 @@ export const authApi = {
   verifyOtp: (phone: string, code: string) =>
     request<{ accessToken: string; refreshToken: string; isNewUser: boolean }>(
       'auth/verify-otp',
-      { method: 'POST', body: JSON.stringify({ phone, code }) },
+      { method: 'POST', body: JSON.stringify({ phone, code, audience: 'user' }) },
     ),
 };
 

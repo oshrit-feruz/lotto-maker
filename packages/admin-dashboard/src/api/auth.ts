@@ -7,9 +7,13 @@ export interface Tokens extends TokenPair {
 export const sendOtp = (phone: string) =>
   request<{ message: string; expiresIn: number }>('POST', '/auth/send-otp', { body: { phone }, auth: false });
 
-/** Logs in; rejects with "המספר אינו מורשה כמנהל" (and keeps no tokens) for a non-admin phone. */
+/**
+ * Logs in as an admin (`audience: 'admin'`: the backend answers 403 NOT_AN_ADMIN for a phone with
+ * no active admin, even if it is a customer or an operator). Rejects with "המספר אינו מורשה כמנהל"
+ * and keeps no tokens in that case.
+ */
 export async function verifyOtp(phone: string, code: string): Promise<void> {
-  const t = await request<Tokens>('POST', '/auth/verify-otp', { body: { phone, code }, auth: false });
+  const t = await request<Tokens>('POST', '/auth/verify-otp', { body: { phone, code, audience: 'admin' }, auth: false });
   startSession(t);
 }
 

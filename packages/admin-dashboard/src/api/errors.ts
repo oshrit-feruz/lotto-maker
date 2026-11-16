@@ -7,6 +7,12 @@ export const ERROR_MESSAGES: Record<string, string> = {
   INTERNAL_ERROR: 'שגיאת שרת – נסה שוב',
   INVALID_DATE: 'תאריך לא תקין',
 
+  // Login
+  NOT_AN_ADMIN: 'המספר הזה לא רשום כמנהל',
+  ADMIN_INACTIVE: 'המספר הזה לא רשום כמנהל',
+  OTP_INVALID: 'קוד שגוי. נסה שנית.',
+  OTP_EXPIRED: 'תוקף הקוד פג. שלח קוד חדש.',
+
   // Users
   INVALID_PHONE_QUERY: 'יש להזין לפחות 3 ספרות של מספר טלפון ישראלי, למשל 050-123',
   USER_NOT_FOUND: 'המשתמש לא נמצא',
