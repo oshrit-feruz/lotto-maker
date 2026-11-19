@@ -85,7 +85,7 @@ Same as the API (use Railway shared variables), plus `RUN_API=false` and `RUN_MI
 
 ### Web (Vercel)
 
-`NEXT_PUBLIC_API_URL` (public API URL), `NEXT_PUBLIC_BRAND_NAME`, optional `API_URL` (server-side
+`NEXT_PUBLIC_API_URL` (public API URL), optional `API_URL` (server-side
 override). See `packages/web/.env.example`.
 
 ### Admin / operator dashboards

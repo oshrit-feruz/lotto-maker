@@ -2,16 +2,21 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
+import { BRAND_NAME } from '../shared/src/constants/brand';
+
+const APP_NAME = `${BRAND_NAME} – עמדת הקלדה`;
 
 export default defineConfig({
   base: process.env.BASE_PATH || '/',
   plugins: [
     react(),
+    // index.html's <title> takes the shared brand name (%BRAND_NAME%).
+    { name: 'brand-name', transformIndexHtml: (html) => html.replaceAll('%BRAND_NAME%', BRAND_NAME) },
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Lotto Operator Dashboard',
-        short_name: 'Lotto Ops',
+        name: APP_NAME,
+        short_name: 'עמדת הקלדה',
         display: 'standalone',
         orientation: 'portrait',
         // Design tokens (packages/shared/src/design): paper and pine.

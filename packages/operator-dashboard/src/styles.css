@@ -142,7 +142,7 @@ p {
 }
 
 .nav-btn:focus-visible {
-  box-shadow: 0 0 0 3px var(--sun);
+  box-shadow: var(--focus-on-dark);
 }
 
 .nav-btn.logout {

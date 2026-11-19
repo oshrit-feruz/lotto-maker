@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AuthLayout, Button, Field } from '../../components/ui/index.js';
 import { authApi } from '../../api/client.js';
+import { BRAND_NAME } from '../../config.js';
 import { notify } from '../../lib/confirm.js';
 
 interface Props {
@@ -25,7 +26,7 @@ export function PhoneScreen({ onOtpSent }: Readonly<Props>) {
   }
 
   return (
-    <AuthLayout title="ברוך הבא ללוטו מייקר" subtitle="הזן את מספר הטלפון שלך">
+    <AuthLayout title={`ברוך הבא ל${BRAND_NAME}`} subtitle="הזן את מספר הטלפון שלך">
       <Field
         label="מספר טלפון"
         placeholder="050-000-0000"

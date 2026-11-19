@@ -27,14 +27,23 @@
   --accent: var(--sun);
   --accent-soft: var(--sun-soft);
   --danger: #b3261e;
+  --danger-hover: #912018;
+  --danger-pressed: #7a1a14;
   --danger-soft: #fdecea;
+  /* Secondary colour (packages/shared design tokens). Sky itself fails as text on
+     white, so text and light-surface focus rings use sky-deep. */
+  --sky: #80a4ed;
+  --sky-deep: #3d63b8;
+  --sky-ink: #2f4f99;
+  --sky-soft: #e8eefc;
   --ok: #17703f;
   --ok-soft: #e2f3e8;
 
   --radius: 14px;
   --radius-sm: 10px;
   --shadow: 0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35);
-  --focus: 0 0 0 3px var(--paper), 0 0 0 6px var(--plum);
+  --focus: 0 0 0 3px var(--paper), 0 0 0 6px var(--sky-deep);
+  --focus-on-dark: 0 0 0 2px var(--pine-deep), 0 0 0 5px var(--sky);
   --font-display: var(--font-shekel), var(--font-secular-he), var(--font-secular-latin), var(--font-rubik-he), system-ui, sans-serif;
   --font-body: var(--font-rubik-he), var(--font-rubik-latin), system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   color-scheme: light;
@@ -62,13 +71,13 @@ body {
 }
 
 a {
-  color: var(--pine-2);
+  color: var(--sky-deep);
   text-underline-offset: 3px;
   text-decoration-thickness: 1.5px;
 }
 
 a:hover {
-  color: var(--pine);
+  color: var(--sky-ink);
 }
 
 :focus-visible {
@@ -211,7 +220,7 @@ main {
 }
 
 .nav a:focus-visible {
-  box-shadow: 0 0 0 3px var(--sun);
+  box-shadow: var(--focus-on-dark);
 }
 
 .nav a.nav-cta {
@@ -238,7 +247,7 @@ main {
 }
 
 .site-footer a:focus-visible {
-  box-shadow: 0 0 0 3px var(--sun);
+  box-shadow: var(--focus-on-dark);
 }
 
 .footer-brand {
@@ -575,9 +584,9 @@ input[type='radio'] {
 }
 
 .alert-info {
-  background: var(--brand-soft);
-  border-color: #bccdd6;
-  border-inline-start-color: var(--pine-2);
+  background: var(--sky-soft);
+  border-color: var(--sky);
+  border-inline-start-color: var(--sky-deep);
 }
 
 .alert .btn-sm {

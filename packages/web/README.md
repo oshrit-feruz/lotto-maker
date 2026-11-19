@@ -3,7 +3,7 @@
 Customer website (Next.js 14 App Router, TypeScript, Hebrew RTL, mobile first).
 
 ```bash
-cp .env.example .env.local      # NEXT_PUBLIC_API_URL, NEXT_PUBLIC_BRAND_NAME
+cp .env.example .env.local      # NEXT_PUBLIC_API_URL
 npm run dev -w packages/web     # http://localhost:3002 (the backend uses 3000)
 npm run build -w packages/web   # builds @lotto-maker/shared first
 npm test -w packages/web        # Vitest

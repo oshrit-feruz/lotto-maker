@@ -31,8 +31,19 @@ export const colors = {
   brandInk: '#ffffff',
   brandSoft: '#d3e0e5',
   danger: '#b3261e',
+  /** Solid danger button, hover and pressed (white text on it). */
+  dangerHover: '#912018',
+  dangerPressed: '#7a1a14',
   dangerSoft: '#fdecea',
   dangerInk: '#8f1d17',
+  /** Secondary colour: focus rings on dark surfaces only (2.5:1 on white). */
+  sky: '#80a4ed',
+  /** Text-safe sky: links and focus rings on light surfaces. */
+  skyDeep: '#3d63b8',
+  /** Link pressed. */
+  skyInk: '#2f4f99',
+  /** Info notices. */
+  skySoft: '#e8eefc',
   ok: '#17703f',
   okSoft: '#e2f3e8',
   okInk: '#0f5530',
@@ -40,7 +51,6 @@ export const colors = {
   warnLine: '#f2d58a',
   errorLine: '#efb7b1',
   okLine: '#b4dcc2',
-  infoLine: '#bccdd6',
   neutralSoft: '#e6ebee',
   /** Placeholder text and disabled ghost-button text. */
   faint: '#7d8f98',

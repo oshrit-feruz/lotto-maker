@@ -9,7 +9,7 @@ const TONES: Record<Tone, { bg: string; line: string; strip: string; ink: string
   warn: { bg: colors.sunSoft, line: colors.warnLine, strip: colors.sunDeep, ink: colors.warnInk },
   error: { bg: colors.dangerSoft, line: colors.errorLine, strip: colors.danger, ink: colors.dangerInk },
   ok: { bg: colors.okSoft, line: colors.okLine, strip: colors.ok, ink: colors.okInk },
-  info: { bg: colors.brandSoft, line: colors.infoLine, strip: colors.pine2, ink: colors.ink },
+  info: { bg: colors.skySoft, line: colors.sky, strip: colors.skyDeep, ink: colors.ink },
 };
 
 /** An inline message with a coloured strip on its start edge. */

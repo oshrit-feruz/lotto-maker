@@ -29,8 +29,24 @@ export const colors = {
   pineSoft: '#d3e0e5',
   ok: '#17703f',
   okSoft: '#e2f3e8',
+  /** Destructive actions. White text on it: 6.5:1. */
   danger: '#b3261e',
+  /** Solid danger button, hover (8.7:1 with white). */
+  dangerHover: '#912018',
+  /** Solid danger button, pressed (10.6:1 with white). */
+  dangerPressed: '#7a1a14',
   dangerSoft: '#fdecea',
+  /**
+   * Secondary colour. Fails as text on white (2.5:1), so it is used only as a
+   * focus ring on dark surfaces and for decorative lines.
+   */
+  sky: '#80a4ed',
+  /** Text-safe sky: links, focus rings on light surfaces (5.7:1 on white, 5.1:1 on paper). */
+  skyDeep: '#3d63b8',
+  /** Link hover. */
+  skyInk: '#2f4f99',
+  /** Info notices and badges (sky-deep text on it: 4.9:1). */
+  skySoft: '#e8eefc',
 } as const;
 
 export const radii = {
@@ -45,8 +61,10 @@ export const radii = {
 export const shadows = {
   /** The one card shadow: a hairline plus a soft pine drop. */
   card: '0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35)',
-  /** Keyboard focus: a paper gap, then a plum ring. */
-  focus: `0 0 0 3px ${colors.paper}, 0 0 0 6px ${colors.plum}`,
+  /** Keyboard focus on light surfaces: a paper gap, then a sky-deep ring. */
+  focus: `0 0 0 3px ${colors.paper}, 0 0 0 6px ${colors.skyDeep}`,
+  /** Keyboard focus on dark (pine) surfaces: a pine-deep gap, then a sky ring (4.2:1 against the gap). */
+  focusOnDark: `0 0 0 2px ${colors.pineDeep}, 0 0 0 5px ${colors.sky}`,
 } as const;
 
 /**

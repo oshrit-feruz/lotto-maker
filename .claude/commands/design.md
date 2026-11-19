@@ -15,7 +15,7 @@ A licensed agency that sends Israeli lottery forms on behalf of customers. Energ
 ## Hard constraints
 
 - **Hebrew, RTL, mobile first.** `<html lang="he" dir="rtl">`. Use logical CSS properties (`margin-inline-start`, `inset-inline-end`, `text-align: start`). Design at 390px first, then widen. Numbers, phone numbers and prices stay readable LTR inside RTL text.
-- **Brand name comes from `NEXT_PUBLIC_BRAND_NAME`** (via `src/lib/config.ts`). Never hard-code a brand name.
+- **Brand name comes from `BRAND_NAME` in `packages/shared`** (re-exported by `src/lib/config.ts`). Never hard-code a brand name.
 - **No Mifal HaPais (מפעל הפיס) branding.** Do not use its name, logo, colours or slogans as our branding. Factual mentions in legal text and fee pages stay as they are.
 - **Legal text stays prominent and unchanged:** the footer disclaimer, the 118 gambling-help line, the 18+ notice and every `PlaceholderBanner` (lawyer-review placeholders). Do not shrink them into fine print, hide them behind toggles or rewrite their wording.
 - **Accessible contrast:** WCAG 2.1 AA (4.5:1 body text, 3:1 large text and UI parts), visible keyboard focus, touch targets of at least 44px, and honour `prefers-reduced-motion`.

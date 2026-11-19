@@ -114,6 +114,6 @@ const styles = StyleSheet.create({
   verifying: { flexDirection: rtl.row, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 },
   resendBtn: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill, alignSelf: 'center', paddingHorizontal: 16 },
   resendPressed: { backgroundColor: colors.brandSoft },
-  resendText: { fontFamily: fonts.bodyBold, color: colors.pine, fontSize: 15, textDecorationLine: 'underline' },
+  resendText: { fontFamily: fonts.bodyBold, color: colors.skyDeep, fontSize: 15, textDecorationLine: 'underline' },
   resendWaiting: { color: colors.muted, textDecorationLine: 'none', fontFamily: fonts.body },
 });
