@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BRAND_NAME } from '@lotto-maker/shared';
 import { LoginPage } from './pages/LoginPage.js';
 import { QueuePage } from './pages/QueuePage.js';
 import { ShiftLogPage } from './pages/ShiftLogPage.js';
@@ -20,7 +21,7 @@ export function App() {
         <div className="topbar-inner">
           <span className="brand">
             <span className="brand-mark" aria-hidden="true" />
-            לוטו מייקר
+            {BRAND_NAME}
           </span>
           <button type="button" className="nav-btn" aria-current={page === 'queue' ? 'page' : undefined} onClick={() => setPage('queue')}>
             תור

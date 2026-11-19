@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import type { TextInputProps, StyleProp, ViewStyle } from 'react-native';
 import { colors, fonts, radii, rtl, spacing, type } from '../../theme/index.js';
 
-/** A labelled text input (48pt tall, pine focus ring). */
+/** A labelled text input (48pt tall, sky focus ring). */
 export const Field = forwardRef<TextInput, Readonly<TextInputProps & { label: string; hint?: string; ltr?: boolean }>>(
   function Field({ label, hint, ltr, style, onFocus, onBlur, ...props }, ref) {
     const [focused, setFocused] = useState(false);
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   ltr: { writingDirection: 'ltr' },
-  focused: { borderColor: colors.pine, borderWidth: 2 },
+  focused: { borderColor: colors.skyDeep, borderWidth: 2 },
   hint: { ...type.caption, marginTop: 6, textAlign: rtl.textStart },
   segmented: {
     flexDirection: rtl.row,

@@ -26,13 +26,20 @@
   --ok: #17703f;
   --ok-soft: #e2f3e8;
   --danger: #b3261e;
+  --danger-hover: #912018;
+  --danger-pressed: #7a1a14;
   --danger-soft: #fdecea;
+  --sky: #80a4ed;
+  --sky-deep: #3d63b8;
+  --sky-ink: #2f4f99;
+  --sky-soft: #e8eefc;
 
   --radius: 14px;
   --radius-sm: 10px;
   --radius-pill: 999px;
   --shadow: 0 1px 0 rgba(57, 92, 107, 0.06), 0 10px 24px -14px rgba(57, 92, 107, 0.35);
-  --focus: 0 0 0 3px var(--paper), 0 0 0 6px var(--plum);
+  --focus: 0 0 0 3px var(--paper), 0 0 0 6px var(--sky-deep);
+  --focus-on-dark: 0 0 0 2px var(--pine-deep), 0 0 0 5px var(--sky);
 
   /* 'Rubik Shekel' covers only U+20AA, so ₪ in display text comes from Rubik. */
   --font-display: 'Rubik Shekel', 'Secular One', 'Rubik', system-ui, sans-serif;

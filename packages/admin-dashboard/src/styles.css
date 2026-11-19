@@ -28,14 +28,14 @@ body {
 }
 
 a {
-  color: var(--pine-2);
+  color: var(--sky-deep);
   font-weight: 500;
   text-underline-offset: 3px;
   text-decoration-thickness: 1.5px;
 }
 
 a:hover {
-  color: var(--pine);
+  color: var(--sky-ink);
 }
 
 :focus-visible {
@@ -179,7 +179,7 @@ p {
 
 .layout nav a:focus-visible,
 .layout nav button:focus-visible {
-  box-shadow: 0 0 0 3px var(--sun);
+  box-shadow: var(--focus-on-dark);
 }
 
 .layout nav button.secondary {
@@ -376,13 +376,36 @@ button.danger:disabled {
   border-color: #e3bdb9;
 }
 
+/* The confirm button of a destructive dialog: solid red, white text. */
+.dialog button.danger {
+  background: var(--danger);
+  color: #ffffff;
+  border-color: var(--danger);
+}
+
+.dialog button.danger:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.dialog button.danger:active:not(:disabled) {
+  background: var(--danger-pressed);
+  border-color: var(--danger-pressed);
+}
+
+.dialog button.danger:disabled {
+  background: #e3bdb9;
+  color: #5c2a26;
+  border-color: #e3bdb9;
+}
+
 button.link {
   min-height: 0;
   padding: 0;
   border: 0;
   border-radius: 4px;
   background: none;
-  color: var(--pine-2);
+  color: var(--sky-deep);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -390,7 +413,7 @@ button.link {
 
 button.link:hover {
   background: none;
-  color: var(--pine);
+  color: var(--sky-ink);
 }
 
 td button {
@@ -520,10 +543,10 @@ input[type='radio'] {
   box-shadow: inset 0 0 0 1px #f2d58a;
 }
 
-/* In progress / informational: plum. */
+/* In progress / informational: sky. */
 .badge.blue {
-  background: var(--plum-soft);
-  color: var(--plum);
+  background: var(--sky-soft);
+  color: var(--sky-deep);
 }
 
 /* ---------- Tables: white card, tinted header, zebra + hover rows ---------- */

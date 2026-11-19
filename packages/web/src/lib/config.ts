@@ -1,5 +1,5 @@
-/** Brand name, from the environment. Never Mifal HaPais's name. */
-export const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME?.trim() || 'שליח לוטו';
+/** The brand name is defined once, in packages/shared (constants/brand.ts). */
+export { BRAND_NAME } from '@lotto-maker/shared';
 
 /**
  * Backend base URL (no trailing slash). Used server-side only, by SSR pages and

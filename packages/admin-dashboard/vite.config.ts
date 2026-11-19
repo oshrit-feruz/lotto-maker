@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
+import { BRAND_NAME } from '../shared/src/constants/brand';
 
 // The monorepo root has React 18.2 (from mobile). Tests must use this package's own copy,
 // or Testing Library renders with a second React and hooks break.
@@ -9,7 +10,11 @@ const local = (p: string) => fileURLToPath(new URL(`./node_modules/${p}`, import
 
 export default defineConfig({
   base: process.env.BASE_PATH || '/',
-  plugins: [react()],
+  plugins: [
+    react(),
+    // index.html's <title> takes the shared brand name (%BRAND_NAME%).
+    { name: 'brand-name', transformIndexHtml: (html) => html.replaceAll('%BRAND_NAME%', BRAND_NAME) },
+  ],
   server: { port: 5174 },
   test: {
     environment: 'jsdom',
