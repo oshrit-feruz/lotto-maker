@@ -1,32 +1,24 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { MAX_DRAW_COUNT, TICKET_TYPE_LABELS, binomial, type TicketType } from '@lotto-maker/shared';
-import { ApiError, api, auth, errorMessage } from '@/lib/api-client';
-import { clearSubmitAfterLogin, loadDraft, markSubmitAfterLogin, saveDraft, takeSubmitAfterLogin } from '@/lib/draft';
-import { formatDateTime } from '@/lib/format';
+import { useEffect, useState } from 'react';
 import { buildPriceDisplay, listPriceFor } from '@/lib/price';
-import { DRAFT_STORAGE_ERROR, resumeAfterLogin, resumeWithTicket } from '@/lib/resume-order';
 import {
   cryptoRng,
-  enabledSystematicRules,
-  initialTicketState,
   isTableComplete,
   isTicketComplete,
   numbersPerTable,
   strongPerTable,
-  tableCountOptions,
   ticketErrors,
-  ticketReducer,
   toTicketInput,
 } from '@/lib/ticket-state';
-import type { CalculateResponse, DuplicateResponse, PricesResponse } from '@/lib/types';
+import type { PricesResponse } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
-import { Balls } from '../Balls';
 import { LoginDialog } from './LoginDialog';
-import { PriceSummary } from './PriceSummary';
-import { TablePicker } from './TablePicker';
+import { PriceBar, ticketSummary } from './PriceBar';
+import { TableCard } from './TableCard';
+import { TicketOptions } from './TicketOptions';
+import { useCheckoutGate, useDraftTicket, useLivePrice, useRolling, useSession } from './ticket-form-hooks';
 
 const ERROR_TEXT: Record<string, string> = {
   ODD_TABLE_COUNT: 'מספר הטבלאות חייב להיות זוגי.',
@@ -38,116 +30,21 @@ const ERROR_TEXT: Record<string, string> = {
 
 export function TicketForm() {
   const router = useRouter();
-  const [state, dispatch] = useReducer(ticketReducer, undefined, initialTicketState);
+  const [state, dispatch] = useDraftTicket();
   const [active, setActive] = useState(0);
-  const [calc, setCalc] = useState<CalculateResponse | null>(null);
-  const [dup, setDup] = useState<DuplicateResponse | null>(null);
-  const [priceError, setPriceError] = useState<string | null>(null);
-  // Mobile only: the price breakdown is collapsed so the sticky bar stays one line high.
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [loadingPrice, setLoadingPrice] = useState(false);
-  const seq = useRef(0);
-  // Visual only: which table(s) the Lottomat just filled, so the balls drop in.
-  const [rolling, setRolling] = useState<{ target: number | 'all'; n: number } | null>(null);
-  const rollSeq = useRef(0);
-  // null until /api/auth/session answers. Logged out, the form works the same and is priced from
-  // the public price list; "continue" opens the login dialog in place.
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [loginOpen, setLoginOpen] = useState(false);
-  // The stored draft is read once per mount (a ref survives Strict Mode's effect re-run), and
-  // nothing is autosaved until it has been applied, so the empty initial state never overwrites it.
-  const restoreRead = useRef(false);
-  const [restored, setRestored] = useState(false);
-  // In-memory copy of the "pay after login" intent, for when sessionStorage refuses the write.
-  const submitRequested = useRef(false);
-  const [storageError, setStorageError] = useState<string | null>(null);
+  const { rolling, roll } = useRolling();
+  const [authenticated, setAuthenticated] = useSession(router);
   const prices = useApi<PricesResponse>('prices');
 
-  // Restore the ticket (back from checkout, a reload, or a login).
-  useEffect(() => {
-    if (restoreRead.current) return;
-    restoreRead.current = true;
-    const draft = loadDraft();
-    if (draft) dispatch({ type: 'load', state: draft as never });
-    setRestored(true);
-  }, []);
-
-  // Session status, then resume an order submitted before a login (or a reload during it).
-  useEffect(() => {
-    let alive = true;
-    auth
-      .session()
-      .then(({ authenticated: loggedIn }) => {
-        if (!alive) return;
-        setAuthenticated(loggedIn);
-        if (!loggedIn) return;
-        const next = resumeAfterLogin({ authenticated: true, submitPending: takeSubmitAfterLogin(), draft: loadDraft() });
-        if (next) router.push(next);
-      })
-      .catch(() => alive && setAuthenticated(false));
-    return () => {
-      alive = false;
-    };
-  }, [router]);
-
-  // Every change is kept for this tab, so a login or a reload never loses the filled ticket.
-  useEffect(() => {
-    if (restored) saveDraft(state);
-  }, [state, restored]);
-
-  const systematicRules = useMemo(() => enabledSystematicRules(), []);
   const needNumbers = numbersPerTable(state);
   const needStrong = strongPerTable(state);
   const complete = isTicketComplete(state);
   const errors = complete ? ticketErrors(state) : [];
   const loggedIn = authenticated === true;
-  const requestKey = loggedIn && complete && errors.length === 0 ? JSON.stringify(toTicketInput(state)) : null;
+  const ready = complete && errors.length === 0;
+  const requestKey = loggedIn && ready ? JSON.stringify(toTicketInput(state)) : null;
   const filledCount = state.tables.filter((_, i) => isTableComplete(state, i)).length;
-
-  // Live price and duplicate warning, debounced; stale answers are dropped.
-  useEffect(() => {
-    const mySeq = ++seq.current;
-    if (!requestKey) {
-      setCalc(null);
-      setDup(null);
-      setPriceError(null);
-      setLoadingPrice(false);
-      return;
-    }
-    setLoadingPrice(true);
-    const timer = setTimeout(async () => {
-      const body = JSON.parse(requestKey) as unknown;
-      const [c, d] = await Promise.allSettled([
-        api.post<CalculateResponse>('tickets/calculate', body),
-        api.post<DuplicateResponse>('tickets/check-duplicate', body),
-      ]);
-      if (mySeq !== seq.current) return;
-      setLoadingPrice(false);
-      if (c.status === 'fulfilled') {
-        setCalc(c.value);
-        setPriceError(null);
-      } else {
-        setCalc(null);
-        const err = c.reason;
-        setPriceError(
-          err instanceof ApiError && err.status === 401 ? 'יש להתחבר מחדש כדי לראות מחיר.' : errorMessage(err),
-        );
-      }
-      setDup(d.status === 'fulfilled' ? d.value : null);
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [requestKey]);
-
-  useEffect(() => {
-    if (!rolling) return;
-    const timer = setTimeout(() => setRolling(null), 1100);
-    return () => clearTimeout(timer);
-  }, [rolling]);
-
-  function roll(target: number | 'all') {
-    rollSeq.current += 1;
-    setRolling({ target, n: rollSeq.current });
-  }
+  const { calc, dup, priceError, loadingPrice } = useLivePrice(requestKey);
 
   // Keep the open table inside the range when the count shrinks.
   useEffect(() => {
@@ -158,47 +55,15 @@ export function TicketForm() {
   const listPriced = prices.data ? listPriceFor(prices.data, state) : null;
   const listPrice = listPriced?.ok ? buildPriceDisplay(listPriced.calc) : null;
   const price = calc ? buildPriceDisplay(calc) : listPrice;
-  const ready = complete && errors.length === 0;
   const canContinue = loggedIn
     ? Boolean(requestKey && calc?.enoughDraws && !loadingPrice)
     : authenticated === false && ready && listPrice !== null;
 
-  // /checkout reads the ticket from sessionStorage, so if the browser refuses to store it
-  // (private mode, blocked storage, quota) we stay on the form and say so instead of navigating.
-  function goToCheckout() {
-    if (!canContinue) return;
-    if (!saveDraft(state)) {
-      setStorageError(DRAFT_STORAGE_ERROR);
-      return;
-    }
-    setStorageError(null);
-    if (loggedIn) {
-      router.push('/checkout');
-      return;
-    }
-    submitRequested.current = true;
-    markSubmitAfterLogin();
-    setLoginOpen(true);
-  }
+  const gate = useCheckoutGate({ router, state, canContinue, loggedIn, setAuthenticated });
 
-  function onLoggedIn() {
-    setAuthenticated(true);
-    const pending = takeSubmitAfterLogin() || submitRequested.current;
-    submitRequested.current = false;
-    // The ticket just submitted is in memory; the stored draft is only for the reload path (see the session effect).
-    const next = resumeWithTicket(state, pending, saveDraft);
-    if (next === '/checkout') {
-      router.push(next);
-      return;
-    }
-    if (next === 'storage-error') setStorageError(DRAFT_STORAGE_ERROR);
-    setLoginOpen(false);
-  }
-
-  function closeLogin() {
-    submitRequested.current = false;
-    clearSubmitAfterLogin();
-    setLoginOpen(false);
+  function lottomatAll() {
+    dispatch({ type: 'lottomatAll', rng: cryptoRng });
+    roll('all');
   }
 
   function fillRest() {
@@ -206,156 +71,9 @@ export function TicketForm() {
     roll('all');
   }
 
-  const summary = [
-    state.tables.length === 1 ? 'טבלה אחת' : `${state.tables.length} טבלאות`,
-    state.drawCount === 1 ? 'הגרלה אחת' : `${state.drawCount} הגרלות`,
-    state.extra ? 'עם אקסטרה' : 'בלי אקסטרה',
-  ].join(' · ');
-
-  const firstDraw = calc?.draws[0];
-  let notice: ReactNode = null;
-  if (storageError) {
-    notice = (
-      <div className="alert alert-error small" role="alert">
-        {storageError}
-      </div>
-    );
-  } else if (priceError) {
-    notice = <div className="alert alert-error small">{priceError}</div>;
-  } else if (listPriced?.ok === false && !calc) {
-    notice = (
-      <div className="alert alert-warn small">
-        {listPriced.reason === 'EXTRA_NOT_AVAILABLE'
-          ? errorMessage(new ApiError(422, 'EXTRA_NOT_AVAILABLE', ''))
-          : 'המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.'}
-      </div>
-    );
-  } else if (!calc && prices.error) {
-    notice = (
-      <div className="alert alert-error small" role="alert">
-        {`לא הצלחנו לטעון את המחירון. ${prices.error}`}{' '}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={prices.reload}>
-          נסו שוב
-        </button>
-      </div>
-    );
-  } else if (!calc && prices.notAvailable) {
-    notice = <div className="alert alert-warn small">המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.</div>;
-  } else if (!price && prices.loading) {
-    notice = <p className="muted small loading price-bar-note">טוען מחירון…</p>;
-  } else if (!complete) {
-    notice = (
-      <p className="muted small price-bar-note">
-        {filledCount}/{state.tables.length} טבלאות מלאות. השלימו או השתמשו בלוטומט.
-      </p>
-    );
-  } else if (loadingPrice && !price) {
-    notice = <p className="muted small loading price-bar-note">מחשב מחיר…</p>;
-  }
-  let priceStatus: ReactNode = notice;
-  if (price) {
-    priceStatus = (
-      <>
-        {notice}
-        <div className="price-bar-details" id="price-bar-details">
-          <PriceSummary price={price} hideWarning />
-          {firstDraw ? (
-            <p className="small muted" style={{ margin: '0 0 8px' }}>
-              הגרלה {firstDraw.drawNumber}, {formatDateTime(firstDraw.drawAt)}. ההזמנה נסגרת{' '}
-              {formatDateTime(firstDraw.orderCutoff)}.
-            </p>
-          ) : null}
-        </div>
-        {price.warning ? <div className="alert alert-warn small">{price.warning}</div> : null}
-      </>
-    );
-  }
-
   return (
     <div>
-      <section className="card stack" aria-label="סוג הטופס">
-        <div>
-          <div className="small muted" style={{ marginBottom: 4 }}>
-            סוג הטופס
-          </div>
-          <div className="segmented" role="group" aria-label="סוג הטופס">
-            {(['regular', 'double'] as TicketType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                aria-pressed={state.type === t}
-                onClick={() => dispatch({ type: 'setType', ticketType: t })}
-              >
-                {TICKET_TYPE_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {systematicRules.length > 0 ? (
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="systematic">מילוי</label>
-            <select
-              id="systematic"
-              value={state.systematicType ?? ''}
-              onChange={(e) => {
-                dispatch({ type: 'setSystematic', systematicType: e.target.value || null });
-                setActive(0);
-              }}
-            >
-              <option value="">טבלאות רגילות (6 מספרים)</option>
-              {systematicRules.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                  {r.kind === 'full' && r.numbersCount ? ` (${binomial(r.numbersCount, 6)} צירופים)` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-
-        <div className="grid-2">
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="tables">מספר טבלאות</label>
-            <select
-              id="tables"
-              value={state.tables.length}
-              disabled={tableCountOptions(state).length === 1}
-              onChange={(e) => dispatch({ type: 'setTableCount', count: Number(e.target.value) })}
-            >
-              {tableCountOptions(state).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="draws">מספר הגרלות</label>
-            <select
-              id="draws"
-              value={state.drawCount}
-              onChange={(e) => dispatch({ type: 'setDrawCount', count: Number(e.target.value) })}
-            >
-              {Array.from({ length: MAX_DRAW_COUNT }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n === 1 ? 'הגרלה אחת' : `${n} הגרלות רצופות`}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <label className="row" style={{ fontWeight: 600, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={state.extra}
-            onChange={(e) => dispatch({ type: 'setExtra', extra: e.target.checked })}
-            style={{ width: 20, height: 20 }}
-          />
-          {'להוסיף אקסטרה'}
-        </label>
-      </section>
+      <TicketOptions state={state} dispatch={dispatch} onSystematicChange={() => setActive(0)} />
 
       <section aria-label="טבלאות">
         <div className="spread" style={{ marginBottom: 8 }}>
@@ -368,10 +86,7 @@ export function TicketForm() {
           <button
             type="button"
             className={`btn btn-accent btn-sm lottomat-all${rolling?.target === 'all' ? ' rolling' : ''}`}
-            onClick={() => {
-              dispatch({ type: 'lottomatAll', rng: cryptoRng });
-              roll('all');
-            }}
+            onClick={lottomatAll}
           >
             <span className="lottomat-icon" aria-hidden="true" />
             {'לוטומט לכל הטבלאות'}
@@ -379,63 +94,26 @@ export function TicketForm() {
         </div>
 
         {state.tables.map((table, i) => {
-          const done = isTableComplete(state, i);
           const open = i === active;
-          const rollingClass = rolling && (rolling.target === 'all' || rolling.target === i) ? ' rolling' : '';
-          let body: ReactNode;
-          if (open) {
-            body = (
-              <TablePicker
-                index={i}
-                table={table}
-                needNumbers={needNumbers}
-                needStrong={needStrong}
-                onNumber={(n) => dispatch({ type: 'toggleNumber', table: i, number: n })}
-                onStrong={(n) => dispatch({ type: 'toggleStrong', table: i, number: n })}
-              />
-            );
-          } else if (table.numbers.length > 0 || table.strongNumbers.length > 0) {
-            body = <Balls numbers={table.numbers} strong={table.strongNumbers} />;
-          } else {
-            body = <span className="small muted">ריקה. לחצו לעריכה או השתמשו בלוטומט.</span>;
-          }
           return (
-            <div key={i} className={`table-card${done ? ' complete' : ''}${rollingClass}`}>
-              <div className="spread">
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  aria-expanded={open}
-                  onClick={() => setActive(open ? -1 : i)}
-                  style={{ border: 0, paddingInline: 4 }}
-                >
-                  <span className="table-title">טבלה {i + 1}</span>
-                  {done ? <span className="table-done">✓</span> : null}
-                </button>
-                <div className="row">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => {
-                      dispatch({ type: 'lottomatTable', table: i, rng: cryptoRng });
-                      roll(i);
-                    }}
-                  >
-                    <span className="lottomat-icon" aria-hidden="true" />
-                    {'לוטומט'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => dispatch({ type: 'clearTable', table: i })}
-                    disabled={table.numbers.length === 0 && table.strongNumbers.length === 0}
-                  >
-                    ניקוי
-                  </button>
-                </div>
-              </div>
-              {body}
-            </div>
+            <TableCard
+              key={i}
+              index={i}
+              table={table}
+              needNumbers={needNumbers}
+              needStrong={needStrong}
+              complete={isTableComplete(state, i)}
+              open={open}
+              rolling={Boolean(rolling && (rolling.target === 'all' || rolling.target === i))}
+              onToggleOpen={() => setActive(open ? -1 : i)}
+              onNumber={(n) => dispatch({ type: 'toggleNumber', table: i, number: n })}
+              onStrong={(n) => dispatch({ type: 'toggleStrong', table: i, number: n })}
+              onLottomat={() => {
+                dispatch({ type: 'lottomatTable', table: i, rng: cryptoRng });
+                roll(i);
+              }}
+              onClear={() => dispatch({ type: 'clearTable', table: i })}
+            />
           );
         })}
       </section>
@@ -452,38 +130,26 @@ export function TicketForm() {
         </div>
       ) : null}
 
-      <div className={`price-bar${detailsOpen ? ' details-open' : ''}`} aria-live="polite">
-        {priceStatus}
-        <div className="price-bar-main">
-          <div className="price-bar-sum">
-            <span className="small muted price-bar-summary">{summary}</span>
-            <div className="price-total">{price ? <span dir="ltr">{price.total}</span> : null}</div>
-            {price && !priceError ? (
-              <button
-                type="button"
-                className="price-bar-toggle"
-                aria-expanded={detailsOpen}
-                aria-controls="price-bar-details"
-                onClick={() => setDetailsOpen((o) => !o)}
-              >
-                {detailsOpen ? 'הסתרת פירוט' : 'פירוט המחיר'}
-              </button>
-            ) : null}
-          </div>
-          {complete ? (
-            <button type="button" className="btn" disabled={!canContinue} onClick={goToCheckout}>
-              המשך לתשלום
-            </button>
-          ) : (
-            <button type="button" className="btn btn-accent" onClick={fillRest}>
-              <span className="lottomat-icon" aria-hidden="true" />
-              {filledCount === 0 ? 'לוטומט לכל הטבלאות' : 'השלמה בלוטומט'}
-            </button>
-          )}
-        </div>
-      </div>
+      <PriceBar
+        notice={{
+          storageError: gate.storageError,
+          priceError,
+          listPriced,
+          prices,
+          calc,
+          price,
+          complete,
+          loadingPrice,
+          filledCount,
+          tableCount: state.tables.length,
+        }}
+        summary={ticketSummary(state)}
+        canContinue={canContinue}
+        onContinue={gate.goToCheckout}
+        onFillRest={fillRest}
+      />
 
-      <LoginDialog open={loginOpen} onClose={closeLogin} onVerified={onLoggedIn} />
+      <LoginDialog open={gate.loginOpen} onClose={gate.closeLogin} onVerified={gate.onLoggedIn} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // After an in-place login the pending order goes straight on to checkout, as long as the ticket
 // the visitor filled before logging in (kept in sessionStorage) is still complete and valid.
-import { isTicketComplete, sanitize, ticketErrors, type TicketState } from './ticket-state';
+import { completeTicketFrom, ticketErrors, type TicketState } from './ticket-state';
 
 export interface ResumeInput {
   authenticated: boolean;
@@ -12,9 +12,9 @@ export interface ResumeInput {
 
 /** Where to go once logged in: the checkout, or null to stay on the form. */
 export function resumeAfterLogin({ authenticated, submitPending, draft }: ResumeInput): '/checkout' | null {
-  if (!authenticated || !submitPending || !draft) return null;
-  const ticket = sanitize(draft);
-  return isTicketComplete(ticket) && ticketErrors(ticket).length === 0 ? '/checkout' : null;
+  if (!authenticated || !submitPending) return null;
+  const ticket = completeTicketFrom(draft);
+  return ticket && ticketErrors(ticket).length === 0 ? '/checkout' : null;
 }
 
 /** Hebrew message when the browser refuses to keep the ticket, which the checkout page reads. */
