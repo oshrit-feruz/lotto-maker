@@ -1,15 +1,17 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { applyVercelEnv } from './lib/platform-env.js';
+import { stripServicePrefix } from './lib/service-prefix.js';
 
 /**
- * Vercel Functions entry (api/index.js re-exports the handler). The same Fastify app as
+ * Vercel Functions entry (vercel-entry.js re-exports the handler). The same Fastify app as
  * src/main.ts, without listen(): Vercel hands each request to the handler, which passes it to
  * Fastify's server (https://fastify.dev/docs/latest/Guides/Serverless/#vercel).
  *
  * Differences from main.ts, all because a function has no long-running process:
  * - no node-cron schedulers: Vercel Cron calls GET /cron/:job (src/cron/http.ts);
  * - no SIGTERM handling: the platform freezes or stops the instance;
- * - the startup seed runs once per instance, on its first request.
+ * - the startup seed runs once per instance, on its first request;
+ * - the public path prefix is removed (stripServicePrefix, below).
  *
  * The env fix-ups (src/lib/platform-env.ts) must run before config.ts is evaluated, so everything
  * that reads the config is imported dynamically, below.
@@ -49,6 +51,7 @@ export function getApp(): Promise<App> {
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  req.url = stripServicePrefix(req.url);
   const app = await getApp();
   app.server.emit('request', req, res);
 }

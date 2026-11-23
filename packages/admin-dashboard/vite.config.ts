@@ -8,10 +8,13 @@ import { BRAND_NAME } from '../shared/src/constants/brand';
 // or Testing Library renders with a second React and hooks break.
 const local = (p: string) => fileURLToPath(new URL(`./node_modules/${p}`, import.meta.url));
 
-// On Vercel the API is a separate project (docs/deploy-vercel.md). Without its URL the build would
-// call its own origin, which only serves the SPA, so fail the build instead.
-if (process.env.VERCEL && !process.env.VITE_API_URL) {
-  throw new Error('VITE_API_URL must be set to the backend URL (https://<backend>.vercel.app)');
+// On Vercel the API is the `backend` service of the same project, at `/backend` on the same
+// origin (root vercel.json; scripts/vercel-build-spa.sh sets VITE_API_URL=/backend). Without it the
+// build would call its own path, which only serves the SPA, so fail the build instead. An absolute
+// URL (a backend elsewhere) or a same-origin path both work.
+const apiUrl = process.env.VITE_API_URL;
+if (process.env.VERCEL && !(apiUrl && (/^https?:\/\/[^/]/.test(apiUrl) || /^\/[^/]/.test(apiUrl)))) {
+  throw new Error('VITE_API_URL must be the backend path (/backend) or an absolute http(s) URL');
 }
 
 export default defineConfig({

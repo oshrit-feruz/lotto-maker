@@ -8,7 +8,8 @@ import { JOBS, runJob, type JobDefinition } from './index.js';
 /**
  * GET /cron/:job runs one job from the JOBS table (src/cron/index.ts) once, under the same Redis
  * lock and logging as the in-process scheduler. For platforms without a long-running process:
- * Vercel Cron calls these paths on the schedules in vercel.json and sends
+ * Vercel Cron calls these paths on the schedules in the root vercel.json (as /backend/cron/<job>;
+ * src/lib/service-prefix.ts strips the prefix) and sends
  * `Authorization: Bearer <CRON_SECRET>`. Any other scheduler can call them the same way.
  *
  * Without CRON_SECRET the routes answer 404, so nothing is exposed on a deploy that does not use them.

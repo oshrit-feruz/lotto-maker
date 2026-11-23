@@ -14,3 +14,7 @@ packages/mobile/ios/
 # Build outputs
 packages/*/dist/
 packages/operator-dashboard/dist/
+
+# Vercel
+.vercel/
+packages/*/vercel-out/

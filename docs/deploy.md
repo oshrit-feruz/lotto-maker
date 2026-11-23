@@ -4,8 +4,8 @@ How the production system is put together, what each service needs, and how to m
 restore and roll back. Owner-only tasks that are not code (legal, providers, contracts) are in
 [launch-checklist.md](launch-checklist.md).
 
-The **staging** environment runs all four apps on Vercel instead (backend as a Vercel Function,
-Neon Postgres, Upstash Redis, Vercel Cron): see [deploy-vercel.md](deploy-vercel.md).
+The **staging** environment runs all four apps as one Vercel project with Vercel Services instead
+(backend as a Vercel Function, Neon Postgres, Upstash Redis, Vercel Cron): see [deploy-vercel.md](deploy-vercel.md).
 
 ## Services
 
