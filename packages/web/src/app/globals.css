@@ -488,6 +488,17 @@ a.card:hover {
   width: 100%;
 }
 
+/* Hosted card page (Hyp) inside the checkout receipt. White: the page brings its own design. */
+.payment-frame {
+  display: block;
+  width: 100%;
+  height: 600px;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+}
+
 .btn-sm {
   min-height: 40px;
   padding: 0 14px;

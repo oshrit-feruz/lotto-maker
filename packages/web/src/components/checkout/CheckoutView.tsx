@@ -6,6 +6,7 @@ import { TICKET_TYPE_LABELS, getSystematicRule } from '@lotto-maker/shared';
 import { api, errorMessage } from '@/lib/api-client';
 import { clearDraft, loadDraft, savePendingPayment } from '@/lib/draft';
 import { formatShekel } from '@/lib/format';
+import { isEmbeddablePaymentUrl } from '@/lib/hosted-payment';
 import { checkoutReturnUrls, isSafeRedirect, newIdempotencyKey, placeOrder } from '@/lib/orders';
 import { buildPriceDisplay, topUpAmount } from '@/lib/price';
 import { isTicketComplete, sanitize, toTicketInput, type TicketState } from '@/lib/ticket-state';
@@ -24,6 +25,8 @@ export function CheckoutView() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [placed, setPlaced] = useState<CreateOrderResponse | null>(null);
+  // The provider's hosted card page, shown in an iframe here (Hyp); the mock is a full redirect
+  const [frameUrl, setFrameUrl] = useState<string | null>(null);
 
   const load = useCallback(async (t: TicketState) => {
     setError(null);
@@ -92,8 +95,14 @@ export function CheckoutView() {
         // when this origin is not in the backend's CHECKOUT_RETURN_ORIGINS).
         ...checkoutReturnUrls(window.location.origin),
       });
-      if (!isSafeRedirect(res.checkoutUrl)) throw new Error('bad checkout url');
       savePendingPayment({ paymentId: res.paymentId, total: calc.total });
+      if (res.embed && isEmbeddablePaymentUrl(res.checkoutUrl)) {
+        // The card page sends the whole window to /payment/success or /payment/canceled when done
+        setFrameUrl(res.checkoutUrl);
+        setBusy(false);
+        return;
+      }
+      if (!isSafeRedirect(res.checkoutUrl)) throw new Error('bad checkout url');
       window.location.assign(res.checkoutUrl);
     } catch (err) {
       setError(errorMessage(err));
@@ -125,7 +134,26 @@ export function CheckoutView() {
   }
 
   let summary: ReactNode;
-  if (me && !me.verifiedAdult) {
+  if (frameUrl && missing !== null) {
+    summary = (
+      <>
+        <p className="small">
+          טעינה של <span dir="ltr">{formatShekel(missing)}</span> לארנק. פרטי הכרטיס נקלטים בעמוד המאובטח של חברת
+          הסליקה ולא נשמרים אצלנו.
+        </p>
+        <iframe
+          className="payment-frame"
+          src={frameUrl}
+          title="תשלום מאובטח בכרטיס אשראי"
+          allow="payment"
+          referrerPolicy="origin"
+        />
+        <button className="btn btn-ghost btn-block" onClick={() => setFrameUrl(null)}>
+          ביטול
+        </button>
+      </>
+    );
+  } else if (me && !me.verifiedAdult) {
     summary = (
       <>
         <div className="alert alert-info">לפני ההזמנה הראשונה יש להשלים את פרטי הפרופיל.</div>

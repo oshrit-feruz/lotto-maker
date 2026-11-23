@@ -60,6 +60,22 @@ export const ROUTE_LIMIT_RULES: readonly RouteLimitRule[] = [
     ],
   },
   {
+    name: 'saved-card-charge',
+    methods: ['POST'],
+    url: '/payments/saved-card',
+    buckets: [
+      { by: 'user', max: 10, windowMs: 10 * MIN },
+      { by: 'ip', max: 30, windowMs: 10 * MIN },
+    ],
+  },
+  // Hosted-page return: each one makes a call to the payment gateway
+  {
+    name: 'payment-return',
+    methods: ['GET', 'POST'],
+    url: '/payments/return*',
+    buckets: [{ by: 'ip', max: 60, windowMs: 10 * MIN }],
+  },
+  {
     name: 'withdrawals',
     methods: ['POST'],
     url: '/wallet/withdrawals*',
