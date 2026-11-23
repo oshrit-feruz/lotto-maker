@@ -1,8 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund -w packages/operator-dashboard -w packages/shared",
-  "buildCommand": "cd ../.. && npm run build -w packages/shared && npm run build -w packages/operator-dashboard",
-  "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}

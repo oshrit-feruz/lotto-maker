@@ -9,10 +9,14 @@
  *   needs behind PgBouncer in transaction mode. Migrations use DATABASE_URL_UNPOOLED instead
  *   (scripts/vercel-build.sh).
  * - RUN_JOBS=false: a function has no long-running process for node-cron. Vercel Cron calls
- *   GET /cron/:job instead (src/cron/http.ts, vercel.json `crons`).
+ *   GET /cron/:job instead (src/cron/http.ts, root vercel.json `crons`).
  * - TRUST_PROXY_HOPS=1: Vercel's edge sets X-Forwarded-For to the client IP; rate limits key on it.
+ * - NODE_ENV from BACKEND_NODE_ENV: on Vercel Services every service of the project shares the
+ *   project's environment variables, so a project-wide NODE_ENV=development (staging behaviour)
+ *   would also build and run the Next.js site in development mode. BACKEND_NODE_ENV sets it for
+ *   this function only.
  * - SSE_MAX_CONNECTION_MS: the operator queue stream ends itself before the function's
- *   maxDuration (300 s in vercel.json) instead of being cut off with a 504. The dashboard then
+ *   maxDuration (300 s in the root vercel.json) instead of being cut off with a 504. The dashboard then
  *   polls and reconnects (operator-dashboard/src/hooks/useQueue.ts).
  */
 export const VERCEL_DEFAULTS: Readonly<Record<string, string>> = {
@@ -37,6 +41,7 @@ export function withPgBouncerFlag(url: string): string {
 }
 
 export function applyVercelEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (isSet(env.BACKEND_NODE_ENV)) env.NODE_ENV = env.BACKEND_NODE_ENV;
   if (!isSet(env.REDIS_URL) && isSet(env.KV_URL)) env.REDIS_URL = env.KV_URL;
   if (isSet(env.DATABASE_URL)) env.DATABASE_URL = withPgBouncerFlag(env.DATABASE_URL);
   for (const [name, value] of Object.entries(VERCEL_DEFAULTS)) {

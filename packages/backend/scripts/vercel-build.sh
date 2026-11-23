@@ -1,5 +1,5 @@
 #!/bin/sh
-# Vercel build for the backend project (Root Directory: packages/backend). See docs/deploy-vercel.md.
+# Vercel build for the backend service (root vercel.json, service root packages/backend). See docs/deploy-vercel.md.
 #
 # 1. shared -> Prisma client -> backend (dist/), the same order as the Dockerfile.
 # 2. Production deployments of the project also apply pending migrations, against the direct

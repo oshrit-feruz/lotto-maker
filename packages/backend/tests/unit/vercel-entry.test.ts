@@ -5,6 +5,7 @@ import { applyVercelEnv, withPgBouncerFlag, VERCEL_DEFAULTS } from '../../src/li
 import cronRoutes, { hasCronSecret } from '../../src/cron/http.js';
 import { JOBS, type JobDefinition } from '../../src/cron/index.js';
 import type { JobOutcome } from '../../src/lib/job-lock.js';
+import { stripServicePrefix } from '../../src/lib/service-prefix.js';
 
 describe('applyVercelEnv', () => {
   it('takes REDIS_URL from the Upstash KV_URL when REDIS_URL is unset', () => {
@@ -16,6 +17,11 @@ describe('applyVercelEnv', () => {
   it('fills the Vercel defaults without overriding set values', () => {
     expect(applyVercelEnv({})).toMatchObject(VERCEL_DEFAULTS);
     expect(applyVercelEnv({ RUN_JOBS: 'true', TRUST_PROXY_HOPS: '2' })).toMatchObject({ RUN_JOBS: 'true', TRUST_PROXY_HOPS: '2' });
+  });
+
+  it('takes NODE_ENV from BACKEND_NODE_ENV (project variables are shared by every service)', () => {
+    expect(applyVercelEnv({ NODE_ENV: 'production', BACKEND_NODE_ENV: 'development' }).NODE_ENV).toBe('development');
+    expect(applyVercelEnv({ NODE_ENV: 'production' }).NODE_ENV).toBe('production');
   });
 
   it('marks a Neon pooled URL for PgBouncer and leaves other URLs alone', () => {
@@ -93,12 +99,38 @@ describe('GET /cron/:job', () => {
   });
 });
 
-describe('vercel.json crons', () => {
-  it('has exactly one entry per job in src/cron/index.ts', () => {
-    const vercel = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8')) as {
-      crons: { path: string; schedule: string }[];
-    };
+describe('stripServicePrefix', () => {
+  it('removes a leading /backend segment', () => {
+    expect(stripServicePrefix('/backend/health')).toBe('/health');
+    expect(stripServicePrefix('/backend/cron/settlement')).toBe('/cron/settlement');
+    expect(stripServicePrefix('/backend/payments/return?paymentId=1')).toBe('/payments/return?paymentId=1');
+    expect(stripServicePrefix('/backend')).toBe('/');
+    expect(stripServicePrefix('/backend/')).toBe('/');
+    expect(stripServicePrefix('/backend?x=1')).toBe('/?x=1');
+  });
+
+  it('leaves other paths alone (binding calls arrive without the prefix)', () => {
+    expect(stripServicePrefix('/health')).toBe('/health');
+    expect(stripServicePrefix('/backendfoo')).toBe('/backendfoo');
+    expect(stripServicePrefix('/auth/backend/x')).toBe('/auth/backend/x');
+    expect(stripServicePrefix('/')).toBe('/');
+    expect(stripServicePrefix(undefined)).toBeUndefined();
+  });
+});
+
+describe('root vercel.json', () => {
+  const vercel = JSON.parse(readFileSync(new URL('../../../../vercel.json', import.meta.url), 'utf8')) as {
+    crons: { path: string; schedule: string }[];
+    rewrites: { source: string; destination: { service: string } }[];
+  };
+
+  it('has exactly one cron entry per job in src/cron/index.ts, under the backend prefix', () => {
     const paths = vercel.crons.map((c) => c.path).sort();
-    expect(paths).toEqual(JOBS.map((j) => `/cron/${j.name}`).sort());
+    expect(paths).toEqual(JOBS.map((j) => `/backend/cron/${j.name}`).sort());
+  });
+
+  it('routes the backend prefix to the backend service before the catch-all', () => {
+    expect(vercel.rewrites[0]).toEqual({ source: '/backend/(.*)', destination: { service: 'backend' } });
+    expect(vercel.rewrites.at(-1)).toEqual({ source: '/(.*)', destination: { service: 'web' } });
   });
 });

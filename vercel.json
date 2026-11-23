@@ -1,0 +1,54 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
+  "services": {
+    "web": {
+      "root": "packages/web",
+      "framework": "nextjs",
+      "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund -w packages/web -w packages/shared",
+      "buildCommand": "cd ../.. && npm run build -w packages/web",
+      "bindings": [{ "type": "service", "service": "backend", "format": "url", "env": "API_URL" }]
+    },
+    "backend": {
+      "root": "packages/backend",
+      "entrypoint": "vercel-entry.js",
+      "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines",
+      "buildCommand": "sh scripts/vercel-build.sh",
+      "outputDirectory": "public",
+      "functions": { "vercel-entry.js": { "maxDuration": 300 } }
+    },
+    "admin": {
+      "root": "packages/admin-dashboard",
+      "framework": "vite",
+      "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund -w packages/admin-dashboard -w packages/shared",
+      "buildCommand": "sh ../../scripts/vercel-build-spa.sh admin-dashboard /admin/",
+      "outputDirectory": "vercel-out",
+      "rewrites": [{ "source": "/admin/(.*)", "destination": "/admin/index.html" }, { "source": "/admin", "destination": "/admin/index.html" }]
+    },
+    "operator": {
+      "root": "packages/operator-dashboard",
+      "framework": "vite",
+      "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund -w packages/operator-dashboard -w packages/shared",
+      "buildCommand": "sh ../../scripts/vercel-build-spa.sh operator-dashboard /ops/",
+      "outputDirectory": "vercel-out",
+      "rewrites": [{ "source": "/ops/(.*)", "destination": "/ops/index.html" }, { "source": "/ops", "destination": "/ops/index.html" }]
+    }
+  },
+  "rewrites": [
+    { "source": "/backend/(.*)", "destination": { "service": "backend" } },
+    { "source": "/admin", "destination": { "service": "admin" } },
+    { "source": "/admin/(.*)", "destination": { "service": "admin" } },
+    { "source": "/ops", "destination": { "service": "operator" } },
+    { "source": "/ops/(.*)", "destination": { "service": "operator" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ],
+  "crons": [
+    { "path": "/backend/cron/settlement", "schedule": "* * * * *" },
+    { "path": "/backend/cron/receipts", "schedule": "* * * * *" },
+    { "path": "/backend/cron/card-credits", "schedule": "*/5 * * * *" },
+    { "path": "/backend/cron/draws-sync", "schedule": "*/30 * * * *" },
+    { "path": "/backend/cron/draws-results", "schedule": "*/5 * * * *" },
+    { "path": "/backend/cron/prize-claims", "schedule": "0 7 * * *" },
+    { "path": "/backend/cron/subscriptions", "schedule": "45 12,13 * * 2,4,6" }
+  ]
+}
