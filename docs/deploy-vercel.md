@@ -215,7 +215,11 @@ three frontends.
   Actions workflow on a `*/5` schedule; GitHub's minimum interval is 5 minutes, so settlement and
   receipts would run every 5 minutes instead of every minute).
 - **Cron delivery is best effort** and can repeat a run. Every job is idempotent and runs under the
-  Redis lock, so a repeat does nothing and a missed tick is picked up by the next one.
+  Redis lock, so a repeat does nothing. A missed run is not always caught up: the frequent jobs
+  (settlement, receipts, card credits, draws) pick up outstanding work on the next tick, but the
+  subscription job places orders only for the draw of the day it runs, so a missed Tuesday run is
+  not made up on Thursday (the second daily run at 13:45 UTC is the only fallback). If Redis is
+  unreachable, a cron call retries twice (after 2 s and 5 s) before answering 503.
 - **Function duration**: 300 s per request (Hobby and Pro default; Pro can raise `maxDuration` up to
   800 s). This bounds each cron run and each SSE stream (see above).
 - **Request body: 4.5 MB.** Vercel rejects larger bodies with 413 before they reach Fastify, so a

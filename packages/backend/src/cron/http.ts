@@ -15,8 +15,29 @@ import { JOBS, runJob, type JobDefinition } from './index.js';
  */
 export interface CronRoutesOptions {
   jobs?: readonly JobDefinition[];
+  /** '' disables the routes; undefined uses config.CRON_SECRET. */
   secret?: string;
   run?: (job: JobDefinition) => Promise<JobOutcome>;
+  /** Waits before each retry when the lock store is unreachable. */
+  retryDelaysMs?: readonly number[];
+}
+
+// Vercel does not retry a failed cron call, so a brief Redis outage would otherwise cost the tick
+// (a whole day for the daily jobs). A few short retries, far below the function's maxDuration.
+export const LOCK_RETRY_DELAYS_MS: readonly number[] = [2_000, 5_000];
+
+/** Runs the job; retries only while the lock store is unreachable (ran / failed / locked are final). */
+export async function runWithLockRetries(
+  run: () => Promise<JobOutcome>,
+  delaysMs: readonly number[] = LOCK_RETRY_DELAYS_MS,
+): Promise<JobOutcome> {
+  let outcome = await run();
+  for (const delay of delaysMs) {
+    if (outcome.status !== 'skipped_lock_unavailable') break;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    outcome = await run();
+  }
+  return outcome;
 }
 
 /** Constant-time check of an `Authorization: Bearer <secret>` header. */
@@ -34,7 +55,12 @@ const STATUS: Record<JobOutcome['status'], number> = {
 };
 
 export default fp(async function cronRoutes(app: FastifyInstance, opts: CronRoutesOptions = {}) {
-  const { jobs = JOBS, secret = config.CRON_SECRET, run = (job: JobDefinition) => runJob(job) } = opts;
+  const {
+    jobs = JOBS,
+    secret = config.CRON_SECRET,
+    run = (job: JobDefinition) => runJob(job),
+    retryDelaysMs = LOCK_RETRY_DELAYS_MS,
+  } = opts;
   const byName = new Map(jobs.map((j) => [j.name, j]));
 
   app.get(
@@ -47,7 +73,7 @@ export default fp(async function cronRoutes(app: FastifyInstance, opts: CronRout
       }
       const job = byName.get(request.params.job);
       if (!job) return reply.status(404).send({ error: 'NOT_FOUND' });
-      const outcome = await run(job);
+      const outcome = await runWithLockRetries(() => run(job), retryDelaysMs);
       return reply.status(STATUS[outcome.status]).send({ job: job.name, outcome: outcome.status, durationMs: outcome.durationMs });
     },
   );

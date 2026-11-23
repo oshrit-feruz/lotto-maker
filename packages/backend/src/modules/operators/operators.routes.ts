@@ -16,6 +16,8 @@ import { z } from 'zod';
 import { AppError } from '../../plugins/error-handler.js';
 import { MAX_SCAN_BYTES, detectScanType } from '../../lib/scan-file.js';
 
+const SSE_TEARDOWN_TIMEOUT_MS = 2000;
+
 const tooLarge = () =>
   new AppError(413, 'SCAN_TOO_LARGE', `Scan must be at most ${MAX_SCAN_BYTES / (1024 * 1024)} MB`);
 
@@ -121,7 +123,15 @@ export default async function operatorsRoutes(app: FastifyInstance) {
     });
     clearInterval(heartbeat);
     clearTimeout(maxAge);
-    await sub.unsubscribe(channel).then(() => sub.quit()).catch(() => sub.disconnect());
+    // Graceful unsubscribe + quit, bounded: with maxRetriesPerRequest null they can hang while Redis
+    // is down. Either way the dedicated client is disconnected, so it never lingers reconnecting.
+    let teardownTimer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      sub.unsubscribe(channel).then(() => sub.quit()).catch(() => undefined),
+      new Promise<void>((resolve) => { teardownTimer = setTimeout(resolve, SSE_TEARDOWN_TIMEOUT_MS); }),
+    ]);
+    clearTimeout(teardownTimer);
+    sub.disconnect();
     return reply;
   });
 

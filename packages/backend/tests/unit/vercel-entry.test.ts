@@ -32,10 +32,13 @@ describe('GET /cron/:job', () => {
   const SECRET = 'cron-secret-0123456789';
   const job: JobDefinition = { name: 'demo', schedule: '* * * * *', run: async () => 'ok' };
 
-  async function appWith(secret: string | undefined, outcome: JobOutcome = { status: 'ran', durationMs: 5, result: 'ok' }) {
-    const run = vi.fn(async () => outcome);
+  async function appWith(secret: string, ...outcomes: JobOutcome[]) {
+    // Each call returns the next outcome; the last one repeats
+    const list: JobOutcome[] = outcomes.length > 0 ? outcomes : [{ status: 'ran', durationMs: 5, result: 'ok' }];
+    let calls = 0;
+    const run = vi.fn(async () => list[Math.min(calls++, list.length - 1)]!);
     const app = Fastify();
-    await app.register(cronRoutes, { jobs: [job], secret, run });
+    await app.register(cronRoutes, { jobs: [job], secret, run, retryDelaysMs: [1, 1] });
     return { app, run };
   }
   const auth = (s: string) => ({ authorization: `Bearer ${s}` });
@@ -56,15 +59,31 @@ describe('GET /cron/:job', () => {
   });
 
   it('is off (404) without CRON_SECRET, and 404s an unknown job', async () => {
-    const off = await appWith(undefined);
+    const off = await appWith('');
     expect((await off.app.inject({ method: 'GET', url: '/cron/demo', headers: auth(SECRET) })).statusCode).toBe(404);
     const on = await appWith(SECRET);
     expect((await on.app.inject({ method: 'GET', url: '/cron/nope', headers: auth(SECRET) })).statusCode).toBe(404);
   });
 
   it('reports a failed run as 500 so the platform logs it', async () => {
-    const { app } = await appWith(SECRET, { status: 'failed', durationMs: 1, error: new Error('x') });
+    const { app, run } = await appWith(SECRET, { status: 'failed', durationMs: 1, error: new Error('x') });
     expect((await app.inject({ method: 'GET', url: '/cron/demo', headers: auth(SECRET) })).statusCode).toBe(500);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries while the lock store is unreachable, then reports the final outcome', async () => {
+    const down: JobOutcome = { status: 'skipped_lock_unavailable', durationMs: 1, error: new Error('redis') };
+    const recovers = await appWith(SECRET, down, { status: 'ran', durationMs: 2, result: 'ok' });
+    expect((await recovers.app.inject({ method: 'GET', url: '/cron/demo', headers: auth(SECRET) })).statusCode).toBe(200);
+    expect(recovers.run).toHaveBeenCalledTimes(2);
+
+    const stays = await appWith(SECRET, down);
+    expect((await stays.app.inject({ method: 'GET', url: '/cron/demo', headers: auth(SECRET) })).statusCode).toBe(503);
+    expect(stays.run).toHaveBeenCalledTimes(3);
+
+    const locked = await appWith(SECRET, { status: 'skipped_locked', durationMs: 0 });
+    expect((await locked.app.inject({ method: 'GET', url: '/cron/demo', headers: auth(SECRET) })).statusCode).toBe(200);
+    expect(locked.run).toHaveBeenCalledTimes(1);
   });
 
   it('compares the header exactly', () => {
