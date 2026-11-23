@@ -8,6 +8,12 @@ import { BRAND_NAME } from '../shared/src/constants/brand';
 // or Testing Library renders with a second React and hooks break.
 const local = (p: string) => fileURLToPath(new URL(`./node_modules/${p}`, import.meta.url));
 
+// On Vercel the API is a separate project (docs/deploy-vercel.md). Without its URL the build would
+// call its own origin, which only serves the SPA, so fail the build instead.
+if (process.env.VERCEL && !process.env.VITE_API_URL) {
+  throw new Error('VITE_API_URL must be set to the backend URL (https://<backend>.vercel.app)');
+}
+
 export default defineConfig({
   base: process.env.BASE_PATH || '/',
   plugins: [

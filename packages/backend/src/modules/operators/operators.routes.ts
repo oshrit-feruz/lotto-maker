@@ -109,12 +109,19 @@ export default async function operatorsRoutes(app: FastifyInstance) {
       reply.raw.write(': ping\n\n');
     }, 25000);
 
-    request.raw.on('close', () => {
-      clearInterval(heartbeat);
-      void sub.unsubscribe(channel).then(() => sub.quit());
-    });
+    // On a platform with a request time limit (Vercel), end the stream before it is cut off.
+    // The dashboard polls meanwhile and reconnects (operator-dashboard/src/hooks/useQueue.ts).
+    const maxAge = config.SSE_MAX_CONNECTION_MS > 0
+      ? setTimeout(() => reply.raw.end(), config.SSE_MAX_CONNECTION_MS)
+      : undefined;
 
-    await new Promise<void>((resolve) => request.raw.on('close', resolve));
+    await new Promise<void>((resolve) => {
+      request.raw.on('close', resolve);
+      reply.raw.on('close', resolve);
+    });
+    clearInterval(heartbeat);
+    clearTimeout(maxAge);
+    await sub.unsubscribe(channel).then(() => sub.quit()).catch(() => sub.disconnect());
     return reply;
   });
 

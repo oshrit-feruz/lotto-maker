@@ -3,12 +3,10 @@ import { config } from './config.js';
 import { prisma } from './prisma.js';
 import { redis } from './redis.js';
 import { startAllSchedulers, stopAllSchedulers } from './cron/index.js';
-import { ensureDefaultSeedData } from './lib/startup-seed.js';
-import { backfillIdEncryption } from './lib/backfill-id-encryption.js';
+import { runStartupSeed } from './lib/startup-seed.js';
 import { logger, processRole, routeConsoleToLogger } from './lib/logger.js';
 import { initErrorReporting, reportError } from './lib/report-error.js';
 import { onShutdownSignal, runShutdown } from './lib/shutdown.js';
-import { redisLockStore, runWithJobLock } from './lib/job-lock.js';
 
 // The modules log with console.*; in production that becomes structured, redacted JSON
 if (config.NODE_ENV === 'production') routeConsoleToLogger();
@@ -31,18 +29,7 @@ logger.info({ nodeEnv: config.NODE_ENV }, 'starting');
 // The worker serves only /health and /ready, so the platform can health-check it
 const app = await buildApp({ api: config.RUN_API });
 
-if (config.RUN_API) {
-  // Under the job lock, so API replicas starting together do not both create the default rows
-  const seed = async () => {
-    await ensureDefaultSeedData();
-    // Encrypts any ID numbers still stored in plain text from before encryption existed
-    await backfillIdEncryption().catch((err) => reportError(err, { source: 'backfill-id-encryption' }));
-  };
-  const outcome = await runWithJobLock(redisLockStore(redis), 'startup-seed', seed, { ttlMs: 5 * 60_000, minHoldMs: 0 });
-  // Without Redis the seed still runs: it only creates rows that are missing
-  if (outcome.status === 'skipped_lock_unavailable') await seed();
-  else if (outcome.status === 'failed') reportError(outcome.error, { source: 'startup-seed' });
-}
+if (config.RUN_API) await runStartupSeed();
 
 await app.listen({ port: config.PORT, host: '0.0.0.0' });
 if (config.RUN_JOBS) startAllSchedulers();

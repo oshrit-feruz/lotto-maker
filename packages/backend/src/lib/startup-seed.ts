@@ -1,5 +1,26 @@
 import { prisma } from '../prisma.js';
 import { config } from '../config.js';
+import { redis } from '../redis.js';
+import { backfillIdEncryption } from './backfill-id-encryption.js';
+import { reportError } from './report-error.js';
+import { redisLockStore, runWithJobLock } from './job-lock.js';
+
+/**
+ * What an API process does once before serving: the default rows, then the ID-number backfill.
+ * Under the job lock, so API instances starting together (replicas, Vercel cold starts) do not
+ * both create the default rows. Used by src/main.ts and src/vercel.ts.
+ */
+export async function runStartupSeed(): Promise<void> {
+  const seed = async () => {
+    await ensureDefaultSeedData();
+    // Encrypts any ID numbers still stored in plain text from before encryption existed
+    await backfillIdEncryption().catch((err) => reportError(err, { source: 'backfill-id-encryption' }));
+  };
+  const outcome = await runWithJobLock(redisLockStore(redis), 'startup-seed', seed, { ttlMs: 5 * 60_000, minHoldMs: 0 });
+  // Without Redis the seed still runs: it only creates rows that are missing
+  if (outcome.status === 'skipped_lock_unavailable') await seed();
+  else if (outcome.status === 'failed') reportError(outcome.error, { source: 'startup-seed' });
+}
 
 export async function ensureDefaultSeedData(): Promise<void> {
   try {

@@ -54,6 +54,12 @@ export const envSchema = z.object({
   READY_CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
   // On SIGTERM the process stops taking work and exits after at most this long.
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(25000),
+  // Enables GET /cron/:job (Vercel Cron or any external scheduler), which must send
+  // `Authorization: Bearer <CRON_SECRET>`. Unset: those routes answer 404. See docs/deploy-vercel.md.
+  CRON_SECRET: z.string().min(16).optional(),
+  // The operator queue stream (SSE) ends itself after this long; the dashboard reconnects. 0: never.
+  // Vercel sets it below the function's maxDuration (src/lib/platform-env.ts).
+  SSE_MAX_CONNECTION_MS: z.coerce.number().int().min(0).default(0),
   // Optional error monitoring. Off unless set (and @sentry/node is installed); see src/lib/report-error.ts.
   SENTRY_DSN: z.string().url().optional(),
   SENTRY_ENVIRONMENT: z.string().optional(),
