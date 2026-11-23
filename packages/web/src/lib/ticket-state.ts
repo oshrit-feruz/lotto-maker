@@ -138,38 +138,56 @@ function toggle(list: number[], n: number, limit: number): number[] {
   return [...list, n].sort(byValue);
 }
 
+function setType(state: TicketState, ticketType: TicketType): TicketState {
+  const next = { ...state, type: ticketType };
+  return { ...next, tables: resize(state.tables, clampTableCount(next, state.tables.length)) };
+}
+
+function setSystematic(state: TicketState, id: string | null): TicketState {
+  if (id !== null) {
+    const rule = getSystematicRule(id);
+    if (!rule?.enabled || rule.kind === 'unknown') return state;
+  }
+  if (id === state.systematicType) return state;
+  // Number counts change with the type, so the tables start empty.
+  const count = id === null ? TICKET_TYPE_LIMITS[state.type].minTables : 1;
+  return { ...state, systematicType: id, tables: Array.from({ length: count }, emptyTable) };
+}
+
+const isInRange = (n: number, max: number) => Number.isInteger(n) && n >= 1 && n <= max;
+
+function toggleNumber(state: TicketState, table: number, n: number): TicketState {
+  if (!isInRange(n, LOTTO_NUMBER_MAX)) return state;
+  return updateTable(state, table, (t) => ({ ...t, numbers: toggle(t.numbers, n, numbersPerTable(state)) }));
+}
+
+function toggleStrong(state: TicketState, table: number, n: number): TicketState {
+  if (!isInRange(n, LOTTO_STRONG_MAX)) return state;
+  return updateTable(state, table, (t) => ({ ...t, strongNumbers: toggle(t.strongNumbers, n, strongPerTable(state)) }));
+}
+
+function lottomatRest(state: TicketState, rng: Rng): TicketState {
+  return { ...state, tables: state.tables.map((t, i) => (isTableComplete(state, i) ? t : lottomat(state, rng))) };
+}
+
+function setDrawCount(state: TicketState, count: number): TicketState {
+  const n = Math.round(count);
+  if (!Number.isFinite(n)) return state;
+  return { ...state, drawCount: Math.min(MAX_DRAW_COUNT, Math.max(1, n)) };
+}
+
 export function ticketReducer(state: TicketState, action: TicketAction): TicketState {
   switch (action.type) {
-    case 'setType': {
-      const next = { ...state, type: action.ticketType };
-      return { ...next, tables: resize(state.tables, clampTableCount(next, state.tables.length)) };
-    }
+    case 'setType':
+      return setType(state, action.ticketType);
     case 'setTableCount':
       return { ...state, tables: resize(state.tables, clampTableCount(state, action.count)) };
-    case 'setSystematic': {
-      const id = action.systematicType;
-      if (id !== null) {
-        const rule = getSystematicRule(id);
-        if (!rule?.enabled || rule.kind === 'unknown') return state;
-      }
-      if (id === state.systematicType) return state;
-      const next: TicketState = { ...state, systematicType: id, tables: [] };
-      // Number counts change with the type, so the tables start empty.
-      const count = id === null ? TICKET_TYPE_LIMITS[state.type].minTables : 1;
-      return { ...next, tables: Array.from({ length: count }, emptyTable) };
-    }
+    case 'setSystematic':
+      return setSystematic(state, action.systematicType);
     case 'toggleNumber':
-      if (!Number.isInteger(action.number) || action.number < 1 || action.number > LOTTO_NUMBER_MAX) return state;
-      return updateTable(state, action.table, (t) => ({
-        ...t,
-        numbers: toggle(t.numbers, action.number, numbersPerTable(state)),
-      }));
+      return toggleNumber(state, action.table, action.number);
     case 'toggleStrong':
-      if (!Number.isInteger(action.number) || action.number < 1 || action.number > LOTTO_STRONG_MAX) return state;
-      return updateTable(state, action.table, (t) => ({
-        ...t,
-        strongNumbers: toggle(t.strongNumbers, action.number, strongPerTable(state)),
-      }));
+      return toggleStrong(state, action.table, action.number);
     case 'clearTable':
       return updateTable(state, action.table, emptyTable);
     case 'lottomatTable':
@@ -177,19 +195,32 @@ export function ticketReducer(state: TicketState, action: TicketAction): TicketS
     case 'lottomatAll':
       return { ...state, tables: state.tables.map(() => lottomat(state, action.rng)) };
     case 'lottomatRest':
-      return { ...state, tables: state.tables.map((t, i) => (isTableComplete(state, i) ? t : lottomat(state, action.rng))) };
+      return lottomatRest(state, action.rng);
     case 'setExtra':
       return { ...state, extra: action.extra };
-    case 'setDrawCount': {
-      const n = Math.round(action.count);
-      if (!Number.isFinite(n)) return state;
-      return { ...state, drawCount: Math.min(MAX_DRAW_COUNT, Math.max(1, n)) };
-    }
+    case 'setDrawCount':
+      return setDrawCount(state, action.count);
     case 'load':
       return sanitize(action.state);
     default:
       return state;
   }
+}
+
+const numberList = (v: unknown): number[] =>
+  Array.isArray(v) ? v.filter((n): n is number => typeof n === 'number') : [];
+
+function sanitizeTable(t: Partial<TableState> | null | undefined): TableState {
+  return { numbers: numberList(t?.numbers), strongNumbers: numberList(t?.strongNumbers) };
+}
+
+/** A draft may be partly filled (number counts), but nothing else may break the rules. */
+function fitsRules(candidate: TicketState): boolean {
+  if (candidate.systematicType !== null && !activeRule(candidate)) return false;
+  if (!tableCountOptions(candidate).includes(candidate.tables.length)) return false;
+  return validateTicket(toTicketInput(candidate)).every(
+    (e) => e.code === 'INVALID_NUMBER_COUNT' || e.code === 'INVALID_STRONG_COUNT',
+  );
 }
 
 /** Accepts a stored draft only if it still fits the current rules; otherwise starts over. */
@@ -204,16 +235,16 @@ export function sanitize(input: unknown): TicketState {
     systematicType: typeof s.systematicType === 'string' ? s.systematicType : null,
     extra: Boolean(s.extra),
     drawCount: typeof s.drawCount === 'number' ? s.drawCount : 1,
-    tables: s.tables.map((t) => ({
-      numbers: Array.isArray(t?.numbers) ? t.numbers.filter((n) => typeof n === 'number') : [],
-      strongNumbers: Array.isArray(t?.strongNumbers) ? t.strongNumbers.filter((n) => typeof n === 'number') : [],
-    })),
+    tables: s.tables.map(sanitizeTable),
   };
-  if (candidate.systematicType !== null && !activeRule(candidate)) return fresh;
-  if (!tableCountOptions(candidate).includes(candidate.tables.length)) return fresh;
-  return validateTicket(toTicketInput(candidate)).every((e) => e.code === 'INVALID_NUMBER_COUNT' || e.code === 'INVALID_STRONG_COUNT')
-    ? candidate
-    : fresh;
+  return fitsRules(candidate) ? candidate : fresh;
+}
+
+/** The stored draft as a complete ticket, or null (nothing stored, broken, or not fully filled). */
+export function completeTicketFrom(draft: unknown): TicketState | null {
+  if (!draft) return null;
+  const ticket = sanitize(draft);
+  return isTicketComplete(ticket) ? ticket : null;
 }
 
 export function isTableComplete(state: TicketState, index: number): boolean {

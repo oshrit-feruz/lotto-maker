@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_DRAW_COUNT, SYSTEMATIC_RULES, TICKET_TYPE_LIMITS } from '@lotto-maker/shared';
 import {
   clampTableCount,
+  completeTicketFrom,
   cryptoRng,
   enabledSystematicRules,
   initialTicketState,
@@ -252,5 +253,130 @@ describe('request body and drafts', () => {
     expect(sanitize({ ...s, tables: s.tables.slice(0, 3) })).toEqual(initialTicketState());
     expect(sanitize({ ...s, type: 'mega' })).toEqual(initialTicketState());
     expect(sanitize(null)).toEqual(initialTicketState());
+  });
+});
+
+// Characterization tests pinned before the reducer was split into per-action helpers (#45).
+describe('reducer edge cases', () => {
+  it('returns the same state object for no-op actions', () => {
+    const start = initialTicketState();
+    expect(ticketReducer(start, { type: 'setSystematic', systematicType: null })).toBe(start);
+    expect(ticketReducer(start, { type: 'toggleNumber', table: 0, number: 0 })).toBe(start);
+    expect(ticketReducer(start, { type: 'toggleNumber', table: 0, number: 1.5 })).toBe(start);
+    expect(ticketReducer(start, { type: 'toggleStrong', table: 0, number: 8 })).toBe(start);
+    expect(ticketReducer(start, { type: 'toggleStrong', table: 5, number: 1 })).toBe(start);
+    expect(ticketReducer(start, { type: 'clearTable', table: -1 })).toBe(start);
+    expect(ticketReducer(start, { type: 'lottomatTable', table: 2, rng: seeded() })).toBe(start);
+    expect(ticketReducer(start, { type: 'setDrawCount', count: Number.NaN })).toBe(start);
+    expect(ticketReducer(start, { type: 'unknown' } as unknown as TicketAction)).toBe(start);
+  });
+
+  it('keeps the tables array when the count does not change', () => {
+    const start = initialTicketState();
+    expect(ticketReducer(start, { type: 'setTableCount', count: 2 }).tables).toBe(start.tables);
+    expect(ticketReducer(start, { type: 'setType', ticketType: 'double' }).tables).toBe(start.tables);
+  });
+
+  it('setType keeps the table count when it fits and pads up to the new minimum', () => {
+    const s = run([{ type: 'setTableCount', count: 8 }, { type: 'setType', ticketType: 'double' }]);
+    expect(s.type).toBe('double');
+    expect(s.tables).toHaveLength(8);
+  });
+
+  it('setSystematic empties the tables, also when switching between two rules', () => {
+    const rules = enabledSystematicRules().filter((r) => r.kind !== 'unknown');
+    expect(rules.length).toBeGreaterThan(1);
+    const s = run([
+      { type: 'setSystematic', systematicType: rules[0]!.id },
+      { type: 'lottomatAll', rng: seeded() },
+      { type: 'setSystematic', systematicType: rules[1]!.id },
+    ]);
+    expect(s.systematicType).toBe(rules[1]!.id);
+    expect(s.tables).toEqual([{ numbers: [], strongNumbers: [] }]);
+    const dbl = run([{ type: 'setType', ticketType: 'double' }, { type: 'setSystematic', systematicType: rules[0]!.id }]);
+    expect(run([{ type: 'setSystematic', systematicType: null }], dbl).tables).toHaveLength(
+      TICKET_TYPE_LIMITS.double.minTables,
+    );
+  });
+
+  it('toggling a picked number removes it; a full table ignores more', () => {
+    const s = run([{ type: 'lottomatTable', table: 0, rng: seeded(3) }]);
+    const picked = s.tables[0]!.numbers;
+    const notPicked = Array.from({ length: 37 }, (_, i) => i + 1).find((n) => !picked.includes(n))!;
+    expect(ticketReducer(s, { type: 'toggleNumber', table: 0, number: notPicked })).toEqual(s);
+    expect(ticketReducer(s, { type: 'toggleNumber', table: 0, number: picked[0]! }).tables[0]!.numbers).toEqual(
+      picked.slice(1),
+    );
+    const strong = s.tables[0]!.strongNumbers[0]!;
+    expect(ticketReducer(s, { type: 'toggleStrong', table: 0, number: strong }).tables[0]!.strongNumbers).toEqual([]);
+  });
+
+  it('rounds the draw count', () => {
+    expect(run([{ type: 'setDrawCount', count: 2.6 }]).drawCount).toBe(3);
+    expect(run([{ type: 'setDrawCount', count: -4 }]).drawCount).toBe(1);
+  });
+
+  it('load runs the draft through sanitize', () => {
+    const s = run([{ type: 'setTableCount', count: 4 }, { type: 'lottomatAll', rng: seeded() }]);
+    expect(run([{ type: 'load', state: JSON.parse(JSON.stringify(s)) }])).toEqual(s);
+    expect(run([{ type: 'load', state: { nope: true } as never }], s)).toEqual(initialTicketState());
+  });
+});
+
+describe('sanitize edge cases', () => {
+  const fresh = initialTicketState();
+
+  it('rejects non-objects and missing tables', () => {
+    expect(sanitize('x')).toEqual(fresh);
+    expect(sanitize(7)).toEqual(fresh);
+    expect(sanitize({ type: 'regular' })).toEqual(fresh);
+    expect(sanitize({ type: 'regular', tables: 'no' })).toEqual(fresh);
+  });
+
+  it('fills defaults and drops non-number entries', () => {
+    const out = sanitize({
+      type: 'regular',
+      tables: [{ numbers: [1, '2', 3], strongNumbers: 'x' }, null],
+    });
+    expect(out).toEqual({
+      type: 'regular',
+      systematicType: null,
+      extra: false,
+      drawCount: 1,
+      tables: [
+        { numbers: [1, 3], strongNumbers: [] },
+        { numbers: [], strongNumbers: [] },
+      ],
+    });
+    expect(sanitize({ type: 'regular', systematicType: 5, extra: 'yes', drawCount: '3', tables: [{}, {}] })).toMatchObject({
+      systematicType: null,
+      extra: true,
+      drawCount: 1,
+    });
+  });
+
+  it('drops a draft with a disabled systematic type, a bad table count or invalid numbers', () => {
+    expect(sanitize({ type: 'regular', systematicType: 'six_equals_five', tables: [{}] })).toEqual(fresh);
+    expect(sanitize({ type: 'regular', systematicType: 'nope', tables: [{}] })).toEqual(fresh);
+    expect(sanitize({ type: 'double', tables: Array.from({ length: 12 }, () => ({})) })).toEqual(fresh);
+    expect(sanitize({ type: 'regular', tables: [{ numbers: [1, 1] }, {}] })).toEqual(fresh);
+    expect(sanitize({ type: 'regular', tables: [{ numbers: [40] }, {}] })).toEqual(fresh);
+    expect(sanitize({ type: 'regular', drawCount: 99, tables: [{}, {}] })).toEqual(fresh);
+  });
+
+  it('keeps a partly filled systematic draft', () => {
+    const id = enabledSystematicRules().find((r) => r.kind === 'full')!.id;
+    const draft = { type: 'regular', systematicType: id, extra: false, drawCount: 2, tables: [{ numbers: [1, 2], strongNumbers: [] }] };
+    expect(sanitize(draft)).toEqual(draft);
+  });
+});
+
+describe('completeTicketFrom', () => {
+  it('returns the sanitized ticket only when every table is filled', () => {
+    const s = run([{ type: 'lottomatAll', rng: seeded() }]);
+    expect(completeTicketFrom(JSON.parse(JSON.stringify(s)))).toEqual(s);
+    expect(completeTicketFrom(run([{ type: 'lottomatTable', table: 0, rng: seeded() }]))).toBeNull();
+    expect(completeTicketFrom(null)).toBeNull();
+    expect(completeTicketFrom({ type: 'mega' })).toBeNull();
   });
 });

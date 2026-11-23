@@ -2,27 +2,21 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
 import { clearDraft, clearPendingPayment, loadDraft, loadPendingPayment } from '@/lib/draft';
 import { formatShekel } from '@/lib/format';
 import { hostedResultParams, returnedPaymentId } from '@/lib/hosted-payment';
 import { placeOrder } from '@/lib/orders';
-import { isTicketComplete, sanitize } from '@/lib/ticket-state';
+import { POLL_MS, nextReturnStep, type ReturnMode } from '@/lib/payment-return';
+import { completeTicketFrom } from '@/lib/ticket-state';
 import type { CreateOrderResponse, PaymentView } from '@/lib/types';
 import { OrderPlaced } from './OrderPlaced';
 
-const POLL_MS = 2000;
-const POLL_LIMIT = 45; // about 90 seconds
-
 type Phase = 'checking' | 'approved' | 'ordering' | 'done' | 'failed' | 'timeout' | 'missing' | 'error';
 
-/**
- * Landing page after the hosted payment page. Polls GET /payments/:id until the
- * provider's webhook has credited the wallet; on /payment/success it then
- * places the stored ticket as an order (POST /orders).
- */
-export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' }>) {
+/** Polls GET /payments/:id and, on the success page, places the stored ticket once approved. */
+function usePaymentReturn(mode: ReturnMode) {
   const params = useSearchParams();
   const [phase, setPhase] = useState<Phase>('checking');
   const [payment, setPayment] = useState<PaymentView | null>(null);
@@ -39,10 +33,9 @@ export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' 
   const finishOrder = useCallback(async () => {
     if (ordering.current) return;
     ordering.current = true;
-    const draft = loadDraft();
-    const ticket = draft ? sanitize(draft) : null;
+    const ticket = completeTicketFrom(loadDraft());
     clearPendingPayment();
-    if (!ticket || !isTicketComplete(ticket)) {
+    if (!ticket) {
       setPhase('approved');
       return;
     }
@@ -71,25 +64,14 @@ export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' 
     try {
       const p = await api.get<PaymentView>(`payments/${encodeURIComponent(paymentId)}`);
       setPayment(p);
-      if (p.status === 'approved') {
-        if (mode === 'success') await finishOrder();
-        else setPhase('approved');
-        return;
-      }
-      if (p.status === 'failed' || p.status === 'refunded') {
-        clearPendingPayment();
-        setPhase('failed');
-        return;
-      }
-      // Still pending: on the canceled page one check is enough.
-      if (mode === 'canceled') {
-        clearPendingPayment();
-        setPhase('failed');
-        return;
-      }
       attempts.current += 1;
-      if (attempts.current >= POLL_LIMIT) setPhase('timeout');
-      else setTimeout(() => void check(), POLL_MS);
+      const step = nextReturnStep(p.status, mode, attempts.current);
+      if (step === 'order') await finishOrder();
+      else if (step === 'poll') setTimeout(() => void check(), POLL_MS);
+      else {
+        if (step === 'failed') clearPendingPayment();
+        setPhase(step);
+      }
     } catch (err) {
       setError(errorMessage(err));
       setPhase('error');
@@ -117,89 +99,127 @@ export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' 
       .finally(() => void check());
   }, []);
 
+  const recheck = () => {
+    attempts.current = 0;
+    setPhase('checking');
+    void check();
+  };
+
+  return { phase, payment, order, error, recheck, retryOrder: () => void finishOrder() };
+}
+
+function Approved({ payment }: Readonly<{ payment: PaymentView | null }>) {
+  return (
+    <>
+      <div className="alert alert-ok">
+        התשלום אושר והארנק נטען{payment ? <> ב־<span dir="ltr">{formatShekel(payment.amount)}</span></> : null}.
+      </div>
+      <div className="row">
+        <Link className="btn" href="/checkout">
+          להשלמת ההזמנה
+        </Link>
+        <Link className="btn btn-ghost" href="/account/wallet">
+          לארנק
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function Failed({ mode }: Readonly<{ mode: ReturnMode }>) {
+  return (
+    <>
+      <div className="alert alert-warn">
+        {mode === 'canceled' ? 'התשלום בוטל. לא בוצע חיוב.' : 'התשלום לא אושר. לא בוצע חיוב.'}
+      </div>
+      <Link className="btn" href="/checkout">
+        חזרה לתשלום
+      </Link>
+    </>
+  );
+}
+
+function TimedOut({ onRecheck }: Readonly<{ onRecheck: () => void }>) {
+  return (
+    <>
+      <div className="alert alert-warn">
+        אישור התשלום מתעכב. אם חויבתם, הסכום ייטען לארנק ברגע שחברת הסליקה תאשר.
+      </div>
+      <button className="btn" onClick={onRecheck}>
+        בדיקה חוזרת
+      </button>
+    </>
+  );
+}
+
+function Missing() {
+  return (
+    <>
+      <p>לא נמצא תשלום לבדיקה.</p>
+      <Link className="btn" href="/account/wallet">
+        לארנק
+      </Link>
+    </>
+  );
+}
+
+function ReturnError({
+  error,
+  canRetryOrder,
+  onRetryOrder,
+}: Readonly<{ error: string | null; canRetryOrder: boolean; onRetryOrder: () => void }>) {
+  return (
+    <>
+      <div className="alert alert-error" role="alert">
+        {error}
+      </div>
+      <p className="small muted">אם התשלום אושר, הסכום נמצא בארנק ואפשר להשלים את ההזמנה משם.</p>
+      <div className="row">
+        {canRetryOrder ? (
+          <button className="btn" onClick={onRetryOrder}>
+            ניסיון חוזר להזמנה
+          </button>
+        ) : null}
+        <Link className={canRetryOrder ? 'btn btn-ghost' : 'btn'} href="/ticket">
+          לטופס
+        </Link>
+        <Link className="btn btn-ghost" href="/account/wallet">
+          לארנק
+        </Link>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Landing page after the hosted payment page. Polls GET /payments/:id until the
+ * provider's webhook has credited the wallet; on /payment/success it then
+ * places the stored ticket as an order (POST /orders).
+ */
+export function PaymentReturn({ mode }: Readonly<{ mode: ReturnMode }>) {
+  const { phase, payment, order, error, recheck, retryOrder } = usePaymentReturn(mode);
+
   if (phase === 'done' && order) return <OrderPlaced result={order} />;
+
+  const views: Partial<Record<Phase, ReactNode>> = {
+    checking: <p>בודקים את סטטוס התשלום…</p>,
+    ordering: <p>התשלום אושר. מבצעים את ההזמנה…</p>,
+    approved: <Approved payment={payment} />,
+    failed: <Failed mode={mode} />,
+    timeout: <TimedOut onRecheck={recheck} />,
+    missing: <Missing />,
+    error: (
+      <ReturnError
+        error={error}
+        canRetryOrder={mode === 'success' && payment?.status === 'approved'}
+        onRetryOrder={retryOrder}
+      />
+    ),
+  };
 
   return (
     <div className="card" aria-live="polite">
-      {phase === 'checking' || phase === 'ordering' ? (
-        <p>{phase === 'checking' ? 'בודקים את סטטוס התשלום…' : 'התשלום אושר. מבצעים את ההזמנה…'}</p>
-      ) : null}
-
-      {phase === 'approved' ? (
-        <>
-          <div className="alert alert-ok">
-            התשלום אושר והארנק נטען{payment ? <> ב־<span dir="ltr">{formatShekel(payment.amount)}</span></> : null}.
-          </div>
-          <div className="row">
-            <Link className="btn" href="/checkout">
-              להשלמת ההזמנה
-            </Link>
-            <Link className="btn btn-ghost" href="/account/wallet">
-              לארנק
-            </Link>
-          </div>
-        </>
-      ) : null}
-
-      {phase === 'failed' ? (
-        <>
-          <div className="alert alert-warn">
-            {mode === 'canceled' ? 'התשלום בוטל. לא בוצע חיוב.' : 'התשלום לא אושר. לא בוצע חיוב.'}
-          </div>
-          <Link className="btn" href="/checkout">
-            חזרה לתשלום
-          </Link>
-        </>
-      ) : null}
-
-      {phase === 'timeout' ? (
-        <>
-          <div className="alert alert-warn">
-            אישור התשלום מתעכב. אם חויבתם, הסכום ייטען לארנק ברגע שחברת הסליקה תאשר.
-          </div>
-          <button
-            className="btn"
-            onClick={() => {
-              attempts.current = 0;
-              setPhase('checking');
-              void check();
-            }}
-          >
-            בדיקה חוזרת
-          </button>
-        </>
-      ) : null}
-
-      {phase === 'missing' ? (
-        <>
-          <p>לא נמצא תשלום לבדיקה.</p>
-          <Link className="btn" href="/account/wallet">
-            לארנק
-          </Link>
-        </>
-      ) : null}
-
-      {phase === 'error' ? (
-        <>
-          <div className="alert alert-error" role="alert">
-            {error}
-          </div>
-          <p className="small muted">אם התשלום אושר, הסכום נמצא בארנק ואפשר להשלים את ההזמנה משם.</p>
-          <div className="row">
-            {mode === 'success' && payment?.status === 'approved' ? (
-              <button className="btn" onClick={() => void finishOrder()}>
-                ניסיון חוזר להזמנה
-              </button>
-            ) : null}
-            <Link className={mode === 'success' && payment?.status === 'approved' ? 'btn btn-ghost' : 'btn'} href="/ticket">
-              לטופס
-            </Link>
-            <Link className="btn btn-ghost" href="/account/wallet">
-              לארנק
-            </Link>
-          </div>
-        </>
-      ) : null}
+      {views[phase] ?? null}
     </div>
   );
 }
