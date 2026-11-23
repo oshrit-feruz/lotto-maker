@@ -84,8 +84,14 @@ p {
 }
 
 .layout nav {
+  /* Sidebar colours on pine-deep, WCAG AA (checked in designTokens.test.ts):
+     text 7.69:1, hover white 8.42:1, active sun 4.74:1, logout border 3.14:1 (non-text). */
+  --nav-text: #d5e0e5;
+  --nav-hover-bg: rgba(255, 255, 255, 0.07);
+  --nav-active-bg: rgba(255, 255, 255, 0.1);
+  --nav-control-border: #6f93a3;
   background: var(--pine-deep);
-  color: #d5e0e5;
+  color: var(--nav-text);
   padding: 20px 14px;
 }
 
@@ -148,18 +154,18 @@ p {
   min-height: 42px;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
-  color: #d5e0e5;
+  color: var(--nav-text);
   font-weight: 500;
   text-decoration: none;
 }
 
 .layout nav a:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--nav-hover-bg);
   color: #ffffff;
 }
 
 .layout nav a.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--nav-active-bg);
   color: var(--sun);
   font-weight: 700;
 }
@@ -186,7 +192,7 @@ p {
   margin-top: auto;
   background: transparent;
   color: #ffffff;
-  border-color: #4a6f80;
+  border-color: var(--nav-control-border);
 }
 
 .layout nav button.secondary:hover {
