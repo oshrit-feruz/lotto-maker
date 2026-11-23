@@ -54,14 +54,25 @@ export function TicketForm() {
   // the public price list; "continue" opens the login dialog in place.
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
-  const hydrated = useRef(false);
+  // The stored draft is read once per mount (a ref survives Strict Mode's effect re-run), and
+  // nothing is autosaved until it has been applied, so the empty initial state never overwrites it.
+  const restoreRead = useRef(false);
+  const [restored, setRestored] = useState(false);
+  // In-memory copy of the "pay after login" intent, for when sessionStorage refuses the write.
+  const submitRequested = useRef(false);
   const prices = useApi<PricesResponse>('prices');
 
-  // Restore the ticket (back from checkout, a reload, or a login), then resume a pending order.
+  // Restore the ticket (back from checkout, a reload, or a login).
   useEffect(() => {
+    if (restoreRead.current) return;
+    restoreRead.current = true;
     const draft = loadDraft();
     if (draft) dispatch({ type: 'load', state: draft as never });
-    hydrated.current = true;
+    setRestored(true);
+  }, []);
+
+  // Session status, then resume an order submitted before a login (or a reload during it).
+  useEffect(() => {
     let alive = true;
     auth
       .session()
@@ -80,8 +91,8 @@ export function TicketForm() {
 
   // Every change is kept for this tab, so a login or a reload never loses the filled ticket.
   useEffect(() => {
-    if (hydrated.current) saveDraft(state);
-  }, [state]);
+    if (restored) saveDraft(state);
+  }, [state, restored]);
 
   const systematicRules = useMemo(() => enabledSystematicRules(), []);
   const needNumbers = numbersPerTable(state);
@@ -153,23 +164,28 @@ export function TicketForm() {
 
   function goToCheckout() {
     if (!canContinue) return;
+    // Storage can refuse (quota, private mode): the order goes on from memory in this tab regardless.
     saveDraft(state);
     if (loggedIn) {
       router.push('/checkout');
       return;
     }
+    submitRequested.current = true;
     markSubmitAfterLogin();
     setLoginOpen(true);
   }
 
   function onLoggedIn() {
     setAuthenticated(true);
-    const next = resumeAfterLogin({ authenticated: true, submitPending: takeSubmitAfterLogin(), draft: loadDraft() });
+    const pending = takeSubmitAfterLogin() || submitRequested.current;
+    submitRequested.current = false;
+    const next = resumeAfterLogin({ authenticated: true, submitPending: pending, draft: loadDraft() ?? state });
     if (next) router.push(next);
     else setLoginOpen(false);
   }
 
   function closeLogin() {
+    submitRequested.current = false;
     clearSubmitAfterLogin();
     setLoginOpen(false);
   }
@@ -197,6 +213,19 @@ export function TicketForm() {
           : 'המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.'}
       </div>
     );
+  } else if (!calc && prices.error) {
+    notice = (
+      <div className="alert alert-error small" role="alert">
+        {`לא הצלחנו לטעון את המחירון. ${prices.error}`}{' '}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={prices.reload}>
+          נסו שוב
+        </button>
+      </div>
+    );
+  } else if (!calc && prices.notAvailable) {
+    notice = <div className="alert alert-warn small">המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.</div>;
+  } else if (!price && prices.loading) {
+    notice = <p className="muted small loading price-bar-note">טוען מחירון…</p>;
   } else if (!complete) {
     notice = (
       <p className="muted small price-bar-note">

@@ -65,3 +65,49 @@ describe('the filled form survives a login (sessionStorage)', () => {
     expect(resumeAfterLogin({ authenticated: true, submitPending: takeSubmitAfterLogin(), draft: loadDraft() })).toBeNull();
   });
 });
+
+describe('storage that refuses writes (quota exceeded, disabled)', () => {
+  beforeEach(() => {
+    const refusing = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('quota', 'QuotaExceededError');
+      },
+      removeItem: () => {
+        throw new DOMException('denied', 'SecurityError');
+      },
+    };
+    vi.stubGlobal('window', { sessionStorage: refusing });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('never throws and reports that nothing was stored', () => {
+    expect(saveDraft(filled())).toBe(false);
+    expect(markSubmitAfterLogin()).toBe(false);
+    expect(() => clearSubmitAfterLogin()).not.toThrow();
+    expect(takeSubmitAfterLogin()).toBe(false);
+    expect(loadDraft()).toBeNull();
+  });
+
+  it('the order still resumes from the in-memory intent and ticket', () => {
+    const ticket = filled();
+    const pending = takeSubmitAfterLogin() || true; // TicketForm keeps the intent in a ref
+    expect(resumeAfterLogin({ authenticated: true, submitPending: pending, draft: loadDraft() ?? ticket })).toBe('/checkout');
+  });
+});
+
+describe('storage that works', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', { sessionStorage: new MemoryStorage() });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reports a stored draft and marker', () => {
+    expect(saveDraft(filled())).toBe(true);
+    expect(markSubmitAfterLogin()).toBe(true);
+  });
+});
