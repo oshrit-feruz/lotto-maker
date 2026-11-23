@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { xmlEscape } from '../../../lib/http.js';
 import {
   DEFAULT_SMS_TIMEOUT_MS,
   fetchWithTimeout,
@@ -36,9 +37,6 @@ const INFORU_STATUS: Record<string, string> = {
   '-90': 'invalid sender identification',
   '-94': 'sender ID not in allow list',
 };
-
-const xmlEscape = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 /**
  * InforU (InforUMobile) XML API: POST https://api.inforu.co.il/SendMessageXml.ashx, UTF-8,

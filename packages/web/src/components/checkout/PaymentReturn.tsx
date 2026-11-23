@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
 import { clearDraft, clearPendingPayment, loadDraft, loadPendingPayment } from '@/lib/draft';
 import { formatShekel } from '@/lib/format';
+import { hostedResultParams, returnedPaymentId } from '@/lib/hosted-payment';
 import { placeOrder } from '@/lib/orders';
 import { isTicketComplete, sanitize } from '@/lib/ticket-state';
 import type { CreateOrderResponse, PaymentView } from '@/lib/types';
@@ -13,7 +14,6 @@ import { OrderPlaced } from './OrderPlaced';
 
 const POLL_MS = 2000;
 const POLL_LIMIT = 45; // about 90 seconds
-const PAYMENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 type Phase = 'checking' | 'approved' | 'ordering' | 'done' | 'failed' | 'timeout' | 'missing' | 'error';
 
@@ -30,12 +30,11 @@ export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' 
   const [error, setError] = useState<string | null>(null);
   const attempts = useRef(0);
   const ordering = useRef(false);
+  const verified = useRef(false);
 
-  // The backend adds ?paymentId=<id> to the return URLs; sessionStorage is the fallback (e.g. a
-  // provider that drops the query string).
-  const fromQuery = params.get('paymentId');
-  const paymentId =
-    (fromQuery && PAYMENT_ID.test(fromQuery) ? fromQuery : null) ?? loadPendingPayment()?.paymentId ?? null;
+  // The backend adds ?paymentId=<id> to the return URLs (Hyp also sends it back as uniqueID);
+  // sessionStorage is the fallback (e.g. a provider that drops the query string).
+  const paymentId = returnedPaymentId(params) ?? loadPendingPayment()?.paymentId ?? null;
 
   const finishOrder = useCallback(async () => {
     if (ordering.current) return;
@@ -98,7 +97,24 @@ export function PaymentReturn({ mode }: Readonly<{ mode: 'success' | 'canceled' 
   }, [paymentId, mode, finishOrder]);
 
   useEffect(() => {
-    void check();
+    // The hosted page ran in an iframe on the checkout page. If it sent only the frame here,
+    // move the whole window (same origin) so the result is not shown inside the old page.
+    if (window.top && window.top !== window.self) {
+      window.top.location.href = window.location.href;
+      return;
+    }
+    const result = hostedResultParams(params);
+    if (!result || verified.current) {
+      void check();
+      return;
+    }
+    verified.current = true;
+    // Hand the hosted page's result to the backend, which verifies it with the gateway and
+    // credits the wallet; then poll as usual. A failure here is not final: a webhook may still land.
+    api
+      .post('payments/return', result)
+      .catch(() => undefined)
+      .finally(() => void check());
   }, []);
 
   if (phase === 'done' && order) return <OrderPlaced result={order} />;
