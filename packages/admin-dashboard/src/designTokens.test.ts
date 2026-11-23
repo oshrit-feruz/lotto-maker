@@ -35,3 +35,39 @@ describe('shared design tokens', () => {
     }
   });
 });
+
+// WCAG 2.x contrast of the sidebar colours (styles.css, `.layout nav`) on the pine-deep sidebar.
+describe('admin sidebar contrast (WCAG AA)', () => {
+  const styles = readFileSync(join(here, 'styles.css'), 'utf8');
+  const navProp = (name: string) => styles.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1]?.trim() ?? '';
+  type Rgb = [number, number, number];
+  const hex = (h: string): Rgb => [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16)) as Rgb;
+  // A translucent white overlay (`rgba(255, 255, 255, a)`) composited over `under`.
+  const overlay = (rgba: string, under: Rgb): Rgb => {
+    const alpha = Number(/rgba\(255, 255, 255, ([\d.]+)\)/.exec(rgba)?.[1]);
+    return under.map((c) => 255 * alpha + c * (1 - alpha)) as Rgb;
+  };
+  const luminance = (rgb: Rgb) => {
+    const [r, g, b] = rgb.map((c) => {
+      const s = c / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    }) as Rgb;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a: Rgb, b: Rgb) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const sidebar = hex(colors.pineDeep);
+  const white = hex('#ffffff');
+
+  it('nav text, hover and active state reach 4.5:1', () => {
+    expect(contrast(hex(navProp('nav-text')), sidebar)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(white, overlay(navProp('nav-hover-bg'), sidebar))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(hex(colors.sun), overlay(navProp('nav-active-bg'), sidebar))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the logout button border reaches 3:1 (non-text)', () => {
+    expect(contrast(hex(navProp('nav-control-border')), sidebar)).toBeGreaterThanOrEqual(3);
+  });
+});

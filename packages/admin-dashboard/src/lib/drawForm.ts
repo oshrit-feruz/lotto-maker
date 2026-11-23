@@ -1,4 +1,4 @@
-import type { DrawDetail, EditResultsBody } from '../api/types';
+import type { DrawDetail, EditResultsBody, PrizeGame } from '../api/types';
 import { GAMES, GAME_LABEL, TIER_KEYS } from './payout';
 
 export interface DrawForm {
@@ -34,35 +34,59 @@ export function toForm(d: DrawDetail): DrawForm {
   return { numbers: pad(d.numbers, 6), strong: d.strong === null ? '' : String(d.strong), extraDigits: pad(d.extraDigits, 6), tiers };
 }
 
-/** Validates the form and builds the request body, or returns a Hebrew error message. */
-export function toBody(f: DrawForm): EditResultsBody | string {
-  const nums = f.numbers.map(Number);
-  const extra = f.extraDigits.map(Number);
-  if (f.numbers.includes('') || nums.some((n) => !Number.isInteger(n) || n < 1 || n > 37))
-    return 'המספרים חייבים להיות 1–37';
-  if (new Set(nums).size !== nums.length) return 'המספרים חייבים להיות שונים';
-  const strong = Number(f.strong);
-  if (f.strong === '' || !Number.isInteger(strong) || strong < 1 || strong > 7) return 'המספר החזק חייב להיות 1–7';
-  if (f.extraDigits.includes('') || extra.some((n) => !Number.isInteger(n) || n < 1 || n > 7))
-    return 'ספרות אקסטרה חייבות להיות 1–7';
-  const prizeTiers: EditResultsBody['prizeTiers'] = [];
+type PrizeTierBody = EditResultsBody['prizeTiers'][number];
+
+/** Every value is filled in and is an integer from `min` to `max`. */
+const allInRange = (values: string[], min: number, max: number) =>
+  !values.includes('') &&
+  values.every((v) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= min && n <= max;
+  });
+
+/** The first problem with the winning numbers, strong number and extra digits, or null. */
+function numbersError(f: DrawForm): string | null {
+  if (!allInRange(f.numbers, 1, 37)) return 'המספרים חייבים להיות 1–37';
+  if (new Set(f.numbers.map(Number)).size !== f.numbers.length) return 'המספרים חייבים להיות שונים';
+  if (!allInRange([f.strong], 1, 7)) return 'המספר החזק חייב להיות 1–7';
+  if (!allInRange(f.extraDigits, 1, 7)) return 'ספרות אקסטרה חייבות להיות 1–7';
+  return null;
+}
+
+/**
+ * One prize-table row: the tier to send, null when the row is empty ("not set"), or an error.
+ * Winners without a prize amount is an input mistake; empty winners with an amount means 0.
+ */
+function parseTier(game: PrizeGame, tier: string, row: DrawForm['tiers'][string] | undefined): PrizeTierBody | null | string {
+  const winners = row?.winners.trim() ?? '';
+  const amount = row?.amount.trim() ?? '';
+  if (amount === '') return winners === '' ? null : `בטבלת ${GAME_LABEL[game]} (${tier}) הוזן מספר זוכים ללא סכום פרס`;
+  const winnersCount = Number(winners || 0);
+  const prizeAmount = Number(amount);
+  if (!Number.isInteger(winnersCount) || winnersCount < 0 || !Number.isFinite(prizeAmount) || prizeAmount < 0)
+    return `ערך לא תקין בטבלת ${GAME_LABEL[game]} (${tier})`;
+  return { game, tier, winnersCount, prizeAmount };
+}
+
+/** The filled prize-table rows in table order, or the first row's error. */
+function prizeTiersOf(f: DrawForm): PrizeTierBody[] | string {
+  const tiers: PrizeTierBody[] = [];
   for (const g of GAMES) {
     for (const t of TIER_KEYS[g]) {
-      const row = f.tiers[tierId(g, t)];
-      const winners = row?.winners.trim() ?? '';
-      const amount = row?.amount.trim() ?? '';
-      if (amount === '') {
-        // An empty row means "not set"; winners without a prize amount is an input mistake.
-        if (winners !== '') return `בטבלת ${GAME_LABEL[g]} (${t}) הוזן מספר זוכים ללא סכום פרס`;
-        continue;
-      }
-      const winnersCount = Number(winners || 0);
-      const prizeAmount = Number(amount);
-      if (!Number.isInteger(winnersCount) || winnersCount < 0 || !Number.isFinite(prizeAmount) || prizeAmount < 0)
-        return `ערך לא תקין בטבלת ${GAME_LABEL[g]} (${t})`;
-      prizeTiers.push({ game: g, tier: t, winnersCount, prizeAmount });
+      const parsed = parseTier(g, t, f.tiers[tierId(g, t)]);
+      if (typeof parsed === 'string') return parsed;
+      if (parsed) tiers.push(parsed);
     }
   }
+  return tiers;
+}
+
+/** Validates the form and builds the request body, or returns a Hebrew error message. */
+export function toBody(f: DrawForm): EditResultsBody | string {
+  const error = numbersError(f);
+  if (error) return error;
+  const prizeTiers = prizeTiersOf(f);
+  if (typeof prizeTiers === 'string') return prizeTiers;
   if (prizeTiers.length === 0) return 'יש להזין לפחות דרגת פרס אחת';
-  return { numbers: nums, strong, extraDigits: extra, prizeTiers };
+  return { numbers: f.numbers.map(Number), strong: Number(f.strong), extraDigits: f.extraDigits.map(Number), prizeTiers };
 }
