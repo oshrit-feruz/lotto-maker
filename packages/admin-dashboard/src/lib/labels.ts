@@ -155,6 +155,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   'card_credit:pending->paid_manual': 'זיכוי כרטיס סומן כשולם ידנית',
   'prize_claim:collect_id_mismatch': 'מסירת זכייה: ת״ז לא תואמת',
   'payment:checkout_created': 'נוצר דף תשלום',
+  'payment:saved_card_charge_created': 'חיוב כרטיס שמור',
   'payment:rejected_responsible_gaming': 'תשלום נדחה: מגבלת הימור אחראי',
   'payment:rejected_wallet_cap': 'תשלום נדחה: תקרת ארנק',
   'payment:chargeback_shortfall': 'ביטול עסקה: חוסר ביתרה',
