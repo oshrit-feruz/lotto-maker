@@ -44,7 +44,15 @@ export function SavedCards() {
             {c.brand ?? 'כרטיס'} <span dir="ltr">•••• {c.last4}</span>{' '}
             {c.isDefault ? <span className="badge">ברירת מחדל</span> : null}
           </span>
-          <button className="btn btn-danger btn-sm" onClick={() => setConfirming(c)} disabled={busyId === c.id}>
+          {/* aria-disabled (not disabled) keeps the button focusable, so the dialog can return focus to it if removal fails. */}
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            aria-disabled={busyId === c.id}
+            onClick={() => {
+              if (busyId !== c.id) setConfirming(c);
+            }}
+          >
             הסרה
           </button>
         </div>

@@ -439,7 +439,8 @@ a.card:hover {
   transform: translateY(1px);
 }
 
-.btn:disabled {
+.btn:disabled,
+.btn[aria-disabled="true"] {
   background: #b9c6cd;
   color: #33444c;
   cursor: not-allowed;
