@@ -1,4 +1,4 @@
-import { addDays, setHours, setMinutes, setSeconds, differenceInMinutes, isBefore } from 'date-fns';
+import { addDays, setHours, setMinutes, setSeconds, setMilliseconds, differenceInMinutes, isBefore } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { DRAW_SCHEDULE, DRAW_DAY_TO_JS, TIMEZONE } from '@lotto-maker/shared';
 import type { GameType } from '@lotto-maker/shared';
@@ -20,7 +20,9 @@ export function getNextDrawInfo(gameType: GameType, from: Date = new Date()): Dr
     const isDrawDay = schedule.days.some((d) => DRAW_DAY_TO_JS[d] === candidateDay);
     if (!isDrawDay) continue;
 
-    let drawInTz = setSeconds(setMinutes(setHours(candidate, schedule.drawHour), schedule.drawMinute), 0);
+    // Whole minute (seconds and ms cleared): the same draw must give the same instant whenever this
+    // runs, because subscription events are unique on (subscriptionId, drawDate).
+    const drawInTz = setMilliseconds(setSeconds(setMinutes(setHours(candidate, schedule.drawHour), schedule.drawMinute), 0), 0);
     const drawUtc = fromZonedTime(drawInTz, TIMEZONE);
 
     const visibleCutoff = new Date(drawUtc.getTime() - schedule.visibleCutoffMinutesBefore * 60 * 1000);

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund -w packages/backend -w packages/shared && npm rebuild prisma @prisma/engines",
+  "buildCommand": "sh scripts/vercel-build.sh",
+  "outputDirectory": "public",
+  "fluid": true,
+  "regions": ["fra1"],
+  "functions": {
+    "api/index.js": { "maxDuration": 300 }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "crons": [
+    { "path": "/cron/settlement", "schedule": "* * * * *" },
+    { "path": "/cron/receipts", "schedule": "* * * * *" },
+    { "path": "/cron/card-credits", "schedule": "*/5 * * * *" },
+    { "path": "/cron/draws-sync", "schedule": "*/30 * * * *" },
+    { "path": "/cron/draws-results", "schedule": "*/5 * * * *" },
+    { "path": "/cron/prize-claims", "schedule": "0 7 * * *" },
+    { "path": "/cron/subscriptions", "schedule": "45 12,13 * * 2,4,6" }
+  ]
+}
