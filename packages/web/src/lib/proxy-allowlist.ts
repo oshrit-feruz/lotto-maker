@@ -5,7 +5,7 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 const ID = '[A-Za-z0-9_-]{1,64}';
-const RESERVED = new Set(['webhook', 'mock-checkout', 'checkout']);
+const RESERVED = new Set(['webhook', 'mock-checkout', 'checkout', 'return', 'saved-card']);
 
 const RULES: Array<{ methods: HttpMethod[]; pattern: RegExp }> = [
   { methods: ['GET', 'PUT'], pattern: /^me$/ },
@@ -22,6 +22,8 @@ const RULES: Array<{ methods: HttpMethod[]; pattern: RegExp }> = [
   { methods: ['GET'], pattern: /^wallet\/withdrawals\/quote$/ },
   { methods: ['POST'], pattern: new RegExp(`^wallet/withdrawals/${ID}/cancel$`) },
   { methods: ['POST'], pattern: /^payments\/checkout$/ },
+  // The return page forwards the hosted page's result for server-side verification
+  { methods: ['POST'], pattern: /^payments\/return$/ },
   { methods: ['GET'], pattern: new RegExp(`^payments/${ID}$`) },
   // Public (no session needed): the next draw, confirmed results and the price list.
   { methods: ['GET'], pattern: /^draws\/(upcoming|next)$/ },

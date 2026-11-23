@@ -146,6 +146,41 @@ describe('loadConfig: SMS provider', () => {
   });
 });
 
+describe('loadConfig: payment provider', () => {
+  const hyp = {
+    PAYMENT_PROVIDER: 'hyp',
+    HYP_GATEWAY_URL: 'https://cguat2.creditguard.co.il/xpo/Relay',
+    HYP_TERMINAL_NUMBER: '0962832',
+    HYP_USER: 'api-user',
+    HYP_PASSWORD: 'secret',
+    HYP_MID: '12345',
+  };
+
+  it('accepts hyp without the mock webhook secret', () => {
+    expect(errorsOf(prodEnv({ ...hyp, PAYMENT_WEBHOOK_SECRET: undefined }))).toEqual([]);
+  });
+
+  it('requires every HYP_* setting in production, by name only', () => {
+    const errors = errorsOf(prodEnv({ PAYMENT_PROVIDER: 'hyp', HYP_PASSWORD: 'secret' }));
+    expect(errors.map((e) => e.split(' ')[0])).toEqual(['HYP_GATEWAY_URL', 'HYP_TERMINAL_NUMBER', 'HYP_USER', 'HYP_MID']);
+    expect(errors.join('\n')).not.toContain('secret');
+  });
+
+  it('refuses a plain-http gateway in production and a malformed terminal number', () => {
+    expect(errorsOf(prodEnv({ ...hyp, HYP_GATEWAY_URL: 'http://cguat2.creditguard.co.il/xpo/Relay' }))).toEqual([
+      'HYP_GATEWAY_URL must be https in production',
+    ]);
+    expect(errorsOf(prodEnv({ ...hyp, HYP_TERMINAL_NUMBER: 'abc' }))[0]).toMatch(/^HYP_TERMINAL_NUMBER/);
+  });
+
+  it('defaults to mock with Hebrew pages and a 20 s timeout', () => {
+    const r = loadConfig({ DATABASE_URL: 'postgresql://x/y', JWT_SECRET: 'x'.repeat(16), JWT_REFRESH_SECRET: 'y'.repeat(16) });
+    expect(r.ok && r.config.PAYMENT_PROVIDER).toBe('mock');
+    expect(r.ok && r.config.HYP_LANGUAGE).toBe('HEB');
+    expect(r.ok && r.config.HYP_TIMEOUT_MS).toBe(20000);
+  });
+});
+
 describe('loadConfig: development and test', () => {
   it('needs none of the production secrets and falls back to local origins', () => {
     const r = loadConfig({

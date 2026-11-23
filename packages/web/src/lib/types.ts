@@ -110,6 +110,8 @@ export interface CheckoutResponse {
   paymentId: string;
   checkoutUrl: string;
   status: 'pending' | 'approved' | 'failed' | 'refunded';
+  /** Show checkoutUrl in an iframe on our page (Hyp) instead of redirecting to it (mock). */
+  embed?: boolean;
 }
 
 export interface PaymentView {

@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { AppError } from '../../plugins/error-handler.js';
 import type {
+  CardChargeResult,
   CardCreditResult,
   CheckoutReturnUrls,
   CheckoutSession,
@@ -25,6 +26,7 @@ const eventSchema = z.object({
 /** Dev/test provider. Webhooks are signed with HMAC-SHA256 over the raw body. */
 export class MockPaymentProvider implements PaymentProvider {
   readonly name = 'mock';
+  readonly embeddable = false;
   readonly refunds: Array<{ providerTxId: string; amount: number }> = [];
 
   constructor(
@@ -66,6 +68,25 @@ export class MockPaymentProvider implements PaymentProvider {
 
   async refund(providerTxId: string, amount: number): Promise<void> {
     this.refunds.push({ providerTxId, amount });
+  }
+
+  /** Every chargeCard call, including repeats. Tests assert on it. */
+  readonly charges: Array<{ cardToken: string; amount: number; idempotencyKey: string }> = [];
+  private readonly chargeResults = new Map<string, CardChargeResult>();
+  /** Test switch: `decline` returns status failed, `throw` simulates a network error. */
+  chargeFailure: 'none' | 'decline' | 'throw' = 'none';
+
+  async chargeCard(cardToken: string, amount: number, idempotencyKey: string): Promise<CardChargeResult> {
+    this.charges.push({ cardToken, amount, idempotencyKey });
+    const previous = this.chargeResults.get(idempotencyKey);
+    if (previous) return previous;
+    if (this.chargeFailure === 'throw') throw new Error('mock provider unavailable');
+    const result: CardChargeResult = {
+      providerTxId: `mock_charge_${nanoid(16)}`,
+      status: this.chargeFailure === 'decline' ? 'failed' : 'approved',
+    };
+    this.chargeResults.set(idempotencyKey, result);
+    return result;
   }
 
   /** Every creditCard call, including repeats. Tests assert on it. */
