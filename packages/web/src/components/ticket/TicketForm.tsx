@@ -7,7 +7,7 @@ import { ApiError, api, auth, errorMessage } from '@/lib/api-client';
 import { clearSubmitAfterLogin, loadDraft, markSubmitAfterLogin, saveDraft, takeSubmitAfterLogin } from '@/lib/draft';
 import { formatDateTime } from '@/lib/format';
 import { buildPriceDisplay, listPriceFor } from '@/lib/price';
-import { resumeAfterLogin } from '@/lib/resume-order';
+import { DRAFT_STORAGE_ERROR, resumeAfterLogin, resumeWithTicket } from '@/lib/resume-order';
 import {
   cryptoRng,
   enabledSystematicRules,
@@ -60,6 +60,7 @@ export function TicketForm() {
   const [restored, setRestored] = useState(false);
   // In-memory copy of the "pay after login" intent, for when sessionStorage refuses the write.
   const submitRequested = useRef(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const prices = useApi<PricesResponse>('prices');
 
   // Restore the ticket (back from checkout, a reload, or a login).
@@ -162,10 +163,15 @@ export function TicketForm() {
     ? Boolean(requestKey && calc?.enoughDraws && !loadingPrice)
     : authenticated === false && ready && listPrice !== null;
 
+  // /checkout reads the ticket from sessionStorage, so if the browser refuses to store it
+  // (private mode, blocked storage, quota) we stay on the form and say so instead of navigating.
   function goToCheckout() {
     if (!canContinue) return;
-    // Storage can refuse (quota, private mode): the order goes on from memory in this tab regardless.
-    saveDraft(state);
+    if (!saveDraft(state)) {
+      setStorageError(DRAFT_STORAGE_ERROR);
+      return;
+    }
+    setStorageError(null);
     if (loggedIn) {
       router.push('/checkout');
       return;
@@ -179,9 +185,14 @@ export function TicketForm() {
     setAuthenticated(true);
     const pending = takeSubmitAfterLogin() || submitRequested.current;
     submitRequested.current = false;
-    const next = resumeAfterLogin({ authenticated: true, submitPending: pending, draft: loadDraft() ?? state });
-    if (next) router.push(next);
-    else setLoginOpen(false);
+    // The ticket just submitted is in memory; the stored draft is only for the reload path (see the session effect).
+    const next = resumeWithTicket(state, pending, saveDraft);
+    if (next === '/checkout') {
+      router.push(next);
+      return;
+    }
+    if (next === 'storage-error') setStorageError(DRAFT_STORAGE_ERROR);
+    setLoginOpen(false);
   }
 
   function closeLogin() {
@@ -203,7 +214,13 @@ export function TicketForm() {
 
   const firstDraw = calc?.draws[0];
   let notice: ReactNode = null;
-  if (priceError) {
+  if (storageError) {
+    notice = (
+      <div className="alert alert-error small" role="alert">
+        {storageError}
+      </div>
+    );
+  } else if (priceError) {
     notice = <div className="alert alert-error small">{priceError}</div>;
   } else if (listPriced?.ok === false && !calc) {
     notice = (

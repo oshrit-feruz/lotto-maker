@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearSubmitAfterLogin, loadDraft, markSubmitAfterLogin, saveDraft, takeSubmitAfterLogin } from './draft';
-import { resumeAfterLogin } from './resume-order';
+import { resumeAfterLogin, resumeWithTicket } from './resume-order';
 import { cryptoRng, initialTicketState, ticketReducer } from './ticket-state';
 
 const filled = () => ticketReducer(initialTicketState(), { type: 'lottomatAll', rng: cryptoRng });
@@ -91,10 +91,8 @@ describe('storage that refuses writes (quota exceeded, disabled)', () => {
     expect(loadDraft()).toBeNull();
   });
 
-  it('the order still resumes from the in-memory intent and ticket', () => {
-    const ticket = filled();
-    const pending = takeSubmitAfterLogin() || true; // TicketForm keeps the intent in a ref
-    expect(resumeAfterLogin({ authenticated: true, submitPending: pending, draft: loadDraft() ?? ticket })).toBe('/checkout');
+  it('after login the order does not go to checkout when the ticket cannot be stored', () => {
+    expect(resumeWithTicket(filled(), true, saveDraft)).toBe('storage-error');
   });
 });
 
@@ -109,5 +107,33 @@ describe('storage that works', () => {
   it('reports a stored draft and marker', () => {
     expect(saveDraft(filled())).toBe(true);
     expect(markSubmitAfterLogin()).toBe(true);
+  });
+});
+
+describe('resumeWithTicket (right after the in-place login)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', { sessionStorage: new MemoryStorage() });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('resumes with the submitted in-memory ticket and re-saves it over a stale draft', () => {
+    const stale = filled();
+    saveDraft(stale);
+    const submitted = ticketReducer(filled(), { type: 'setExtra', extra: true });
+    expect(resumeWithTicket(submitted, true, saveDraft)).toBe('/checkout');
+    expect(loadDraft()).toEqual(submitted);
+  });
+
+  it('stays on the form when nothing was submitted or the ticket is incomplete, without saving', () => {
+    const save = vi.fn(() => true);
+    expect(resumeWithTicket(filled(), false, save)).toBeNull();
+    expect(resumeWithTicket(initialTicketState(), true, save)).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('reports a storage error instead of navigating when the save fails', () => {
+    expect(resumeWithTicket(filled(), true, () => false)).toBe('storage-error');
   });
 });
