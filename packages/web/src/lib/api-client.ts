@@ -99,6 +99,8 @@ export const auth = {
   verifyOtp: (phone: string, code: string) =>
     request<{ isNewUser: boolean }>('/api/auth/verify-otp', 'POST', { phone, code }),
   logout: () => request<{ ok: true }>('/api/auth/logout', 'POST', {}),
+  /** Whether a session cookie exists (the token itself never reaches the browser). */
+  session: () => request<{ authenticated: boolean }>('/api/auth/session', 'GET'),
 };
 
 /** Only same-site relative paths are accepted as a post-login destination. */

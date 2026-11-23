@@ -3,10 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { MAX_DRAW_COUNT, TICKET_TYPE_LABELS, binomial, type TicketType } from '@lotto-maker/shared';
-import { ApiError, api, errorMessage } from '@/lib/api-client';
-import { loadDraft, saveDraft } from '@/lib/draft';
+import { ApiError, api, auth, errorMessage } from '@/lib/api-client';
+import { clearSubmitAfterLogin, loadDraft, markSubmitAfterLogin, saveDraft, takeSubmitAfterLogin } from '@/lib/draft';
 import { formatDateTime } from '@/lib/format';
-import { buildPriceDisplay } from '@/lib/price';
+import { buildPriceDisplay, listPriceFor } from '@/lib/price';
+import { DRAFT_STORAGE_ERROR, resumeAfterLogin, resumeWithTicket } from '@/lib/resume-order';
 import {
   cryptoRng,
   enabledSystematicRules,
@@ -20,8 +21,10 @@ import {
   ticketReducer,
   toTicketInput,
 } from '@/lib/ticket-state';
-import type { CalculateResponse, DuplicateResponse } from '@/lib/types';
+import type { CalculateResponse, DuplicateResponse, PricesResponse } from '@/lib/types';
+import { useApi } from '@/lib/use-api';
 import { Balls } from '../Balls';
+import { LoginDialog } from './LoginDialog';
 import { PriceSummary } from './PriceSummary';
 import { TablePicker } from './TablePicker';
 
@@ -47,19 +50,58 @@ export function TicketForm() {
   // Visual only: which table(s) the Lottomat just filled, so the balls drop in.
   const [rolling, setRolling] = useState<{ target: number | 'all'; n: number } | null>(null);
   const rollSeq = useRef(0);
+  // null until /api/auth/session answers. Logged out, the form works the same and is priced from
+  // the public price list; "continue" opens the login dialog in place.
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  // The stored draft is read once per mount (a ref survives Strict Mode's effect re-run), and
+  // nothing is autosaved until it has been applied, so the empty initial state never overwrites it.
+  const restoreRead = useRef(false);
+  const [restored, setRestored] = useState(false);
+  // In-memory copy of the "pay after login" intent, for when sessionStorage refuses the write.
+  const submitRequested = useRef(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const prices = useApi<PricesResponse>('prices');
 
-  // Coming back from checkout: restore the ticket.
+  // Restore the ticket (back from checkout, a reload, or a login).
   useEffect(() => {
+    if (restoreRead.current) return;
+    restoreRead.current = true;
     const draft = loadDraft();
     if (draft) dispatch({ type: 'load', state: draft as never });
+    setRestored(true);
   }, []);
+
+  // Session status, then resume an order submitted before a login (or a reload during it).
+  useEffect(() => {
+    let alive = true;
+    auth
+      .session()
+      .then(({ authenticated: loggedIn }) => {
+        if (!alive) return;
+        setAuthenticated(loggedIn);
+        if (!loggedIn) return;
+        const next = resumeAfterLogin({ authenticated: true, submitPending: takeSubmitAfterLogin(), draft: loadDraft() });
+        if (next) router.push(next);
+      })
+      .catch(() => alive && setAuthenticated(false));
+    return () => {
+      alive = false;
+    };
+  }, [router]);
+
+  // Every change is kept for this tab, so a login or a reload never loses the filled ticket.
+  useEffect(() => {
+    if (restored) saveDraft(state);
+  }, [state, restored]);
 
   const systematicRules = useMemo(() => enabledSystematicRules(), []);
   const needNumbers = numbersPerTable(state);
   const needStrong = strongPerTable(state);
   const complete = isTicketComplete(state);
   const errors = complete ? ticketErrors(state) : [];
-  const requestKey = complete && errors.length === 0 ? JSON.stringify(toTicketInput(state)) : null;
+  const loggedIn = authenticated === true;
+  const requestKey = loggedIn && complete && errors.length === 0 ? JSON.stringify(toTicketInput(state)) : null;
   const filledCount = state.tables.filter((_, i) => isTableComplete(state, i)).length;
 
   // Live price and duplicate warning, debounced; stale answers are dropped.
@@ -112,26 +154,109 @@ export function TicketForm() {
     if (active >= state.tables.length) setActive(Math.max(0, state.tables.length - 1));
   }, [active, state.tables.length]);
 
-  const price = calc ? buildPriceDisplay(calc) : null;
-  const canContinue = Boolean(requestKey && calc?.enoughDraws && !loadingPrice);
+  // Until the backend prices the complete ticket (logged in), the public price list gives the total.
+  const listPriced = prices.data ? listPriceFor(prices.data, state) : null;
+  const listPrice = listPriced?.ok ? buildPriceDisplay(listPriced.calc) : null;
+  const price = calc ? buildPriceDisplay(calc) : listPrice;
+  const ready = complete && errors.length === 0;
+  const canContinue = loggedIn
+    ? Boolean(requestKey && calc?.enoughDraws && !loadingPrice)
+    : authenticated === false && ready && listPrice !== null;
 
+  // /checkout reads the ticket from sessionStorage, so if the browser refuses to store it
+  // (private mode, blocked storage, quota) we stay on the form and say so instead of navigating.
   function goToCheckout() {
     if (!canContinue) return;
-    saveDraft(state);
-    router.push('/checkout');
+    if (!saveDraft(state)) {
+      setStorageError(DRAFT_STORAGE_ERROR);
+      return;
+    }
+    setStorageError(null);
+    if (loggedIn) {
+      router.push('/checkout');
+      return;
+    }
+    submitRequested.current = true;
+    markSubmitAfterLogin();
+    setLoginOpen(true);
   }
 
+  function onLoggedIn() {
+    setAuthenticated(true);
+    const pending = takeSubmitAfterLogin() || submitRequested.current;
+    submitRequested.current = false;
+    // The ticket just submitted is in memory; the stored draft is only for the reload path (see the session effect).
+    const next = resumeWithTicket(state, pending, saveDraft);
+    if (next === '/checkout') {
+      router.push(next);
+      return;
+    }
+    if (next === 'storage-error') setStorageError(DRAFT_STORAGE_ERROR);
+    setLoginOpen(false);
+  }
+
+  function closeLogin() {
+    submitRequested.current = false;
+    clearSubmitAfterLogin();
+    setLoginOpen(false);
+  }
+
+  function fillRest() {
+    dispatch({ type: 'lottomatRest', rng: cryptoRng });
+    roll('all');
+  }
+
+  const summary = [
+    state.tables.length === 1 ? 'טבלה אחת' : `${state.tables.length} טבלאות`,
+    state.drawCount === 1 ? 'הגרלה אחת' : `${state.drawCount} הגרלות`,
+    state.extra ? 'עם אקסטרה' : 'בלי אקסטרה',
+  ].join(' · ');
+
   const firstDraw = calc?.draws[0];
-  let priceStatus: ReactNode = null;
-  if (!complete) {
-    priceStatus = <p className="muted small price-bar-note">מלאו את כל הטבלאות כדי לראות מחיר.</p>;
-  } else if (loadingPrice) {
-    priceStatus = <p className="muted small loading price-bar-note">מחשב מחיר…</p>;
+  let notice: ReactNode = null;
+  if (storageError) {
+    notice = (
+      <div className="alert alert-error small" role="alert">
+        {storageError}
+      </div>
+    );
   } else if (priceError) {
-    priceStatus = <div className="alert alert-error small">{priceError}</div>;
-  } else if (price) {
+    notice = <div className="alert alert-error small">{priceError}</div>;
+  } else if (listPriced?.ok === false && !calc) {
+    notice = (
+      <div className="alert alert-warn small">
+        {listPriced.reason === 'EXTRA_NOT_AVAILABLE'
+          ? errorMessage(new ApiError(422, 'EXTRA_NOT_AVAILABLE', ''))
+          : 'המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.'}
+      </div>
+    );
+  } else if (!calc && prices.error) {
+    notice = (
+      <div className="alert alert-error small" role="alert">
+        {`לא הצלחנו לטעון את המחירון. ${prices.error}`}{' '}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={prices.reload}>
+          נסו שוב
+        </button>
+      </div>
+    );
+  } else if (!calc && prices.notAvailable) {
+    notice = <div className="alert alert-warn small">המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.</div>;
+  } else if (!price && prices.loading) {
+    notice = <p className="muted small loading price-bar-note">טוען מחירון…</p>;
+  } else if (!complete) {
+    notice = (
+      <p className="muted small price-bar-note">
+        {filledCount}/{state.tables.length} טבלאות מלאות. השלימו או השתמשו בלוטומט.
+      </p>
+    );
+  } else if (loadingPrice && !price) {
+    notice = <p className="muted small loading price-bar-note">מחשב מחיר…</p>;
+  }
+  let priceStatus: ReactNode = notice;
+  if (price) {
     priceStatus = (
       <>
+        {notice}
         <div className="price-bar-details" id="price-bar-details">
           <PriceSummary price={price} hideWarning />
           {firstDraw ? (
@@ -331,8 +456,9 @@ export function TicketForm() {
         {priceStatus}
         <div className="price-bar-main">
           <div className="price-bar-sum">
+            <span className="small muted price-bar-summary">{summary}</span>
             <div className="price-total">{price ? <span dir="ltr">{price.total}</span> : null}</div>
-            {price && !priceError && !loadingPrice ? (
+            {price && !priceError ? (
               <button
                 type="button"
                 className="price-bar-toggle"
@@ -344,11 +470,20 @@ export function TicketForm() {
               </button>
             ) : null}
           </div>
-          <button type="button" className="btn" disabled={!canContinue} onClick={goToCheckout}>
-            המשך לתשלום
-          </button>
+          {complete ? (
+            <button type="button" className="btn" disabled={!canContinue} onClick={goToCheckout}>
+              המשך לתשלום
+            </button>
+          ) : (
+            <button type="button" className="btn btn-accent" onClick={fillRest}>
+              <span className="lottomat-icon" aria-hidden="true" />
+              {filledCount === 0 ? 'לוטומט לכל הטבלאות' : 'השלמה בלוטומט'}
+            </button>
+          )}
         </div>
       </div>
+
+      <LoginDialog open={loginOpen} onClose={closeLogin} onVerified={onLoggedIn} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { countTicketCombinations, type TicketInput } from '@lotto-maker/shared';
 import { formatShekel, toAmount } from './format';
+import { ticketReducer, toTicketInput, type Rng, type TicketState } from './ticket-state';
 import type { CalculateResponse, PricesResponse } from './types';
 
 export interface PriceLine {
@@ -84,4 +85,15 @@ export function priceFromList(prices: PricesResponse, input: TicketInput): Price
       enoughDraws: true,
     },
   };
+}
+
+// The price does not depend on which numbers are picked, so a fixed sequence fills the sample.
+const sampleRng: Rng = () => 0;
+
+/**
+ * List price of a ticket's shape (type, tables, systematic, Extra, draws) before every number is
+ * picked: the empty tables are filled with a sample, then priced with {@link priceFromList}.
+ */
+export function listPriceFor(prices: PricesResponse, state: TicketState): PriceListResult {
+  return priceFromList(prices, toTicketInput(ticketReducer(state, { type: 'lottomatAll', rng: sampleRng })));
 }

@@ -42,6 +42,8 @@ export type TicketAction =
   | { type: 'clearTable'; table: number }
   | { type: 'lottomatTable'; table: number; rng: Rng }
   | { type: 'lottomatAll'; rng: Rng }
+  /** Lottomat only for the tables that are not complete yet; complete tables are kept. */
+  | { type: 'lottomatRest'; rng: Rng }
   | { type: 'setExtra'; extra: boolean }
   | { type: 'setDrawCount'; count: number }
   | { type: 'load'; state: TicketState };
@@ -174,6 +176,8 @@ export function ticketReducer(state: TicketState, action: TicketAction): TicketS
       return updateTable(state, action.table, () => lottomat(state, action.rng));
     case 'lottomatAll':
       return { ...state, tables: state.tables.map(() => lottomat(state, action.rng)) };
+    case 'lottomatRest':
+      return { ...state, tables: state.tables.map((t, i) => (isTableComplete(state, i) ? t : lottomat(state, action.rng))) };
     case 'setExtra':
       return { ...state, extra: action.extra };
     case 'setDrawCount': {

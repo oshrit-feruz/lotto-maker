@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TicketInput } from '@lotto-maker/shared';
-import { buildPriceDisplay, priceFromList, topUpAmount } from './price';
+import { buildPriceDisplay, listPriceFor, priceFromList, topUpAmount } from './price';
+import { initialTicketState, ticketReducer } from './ticket-state';
 import { formatShekel } from './format';
 import type { CalculateResponse, PricesResponse } from './types';
 
@@ -103,6 +104,15 @@ describe('priceFromList (GET /prices, logged-out calculator)', () => {
 
   it('reports a missing price row', () => {
     expect(priceFromList({ ...prices, regular: null }, input())).toEqual({ ok: false, reason: 'NO_PRICE' });
+  });
+
+  it('listPriceFor prices an unfilled ticket by its shape (the live total before every number is picked)', () => {
+    const empty = ticketReducer(initialTicketState(), { type: 'setTableCount', count: 14 });
+    const r = listPriceFor(prices, empty);
+    if (!r.ok) throw new Error('expected a price');
+    expect(r.calc.tables).toBe(14);
+    expect(r.calc.total).toBe('43.60');
+    expect(r).toEqual(priceFromList(prices, input({ tables: tables(14) })));
   });
 });
 
