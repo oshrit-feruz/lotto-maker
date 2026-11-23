@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_DRAW_COUNT, SYSTEMATIC_RULES, TICKET_TYPE_LIMITS } from '@lotto-maker/shared';
 import {
   clampTableCount,
+  cryptoRng,
   enabledSystematicRules,
   initialTicketState,
   isTableComplete,
@@ -146,6 +147,45 @@ describe('Lottomat', () => {
       expect(t.strongNumbers[0]).toBeGreaterThanOrEqual(1);
       expect(t.strongNumbers[0]).toBeLessThanOrEqual(7);
     }
+  });
+
+  it('one-click fill with the crypto RNG is valid for every type, table count and systematic rule', () => {
+    const shapes: TicketAction[][] = [];
+    for (const ticketType of ['regular', 'double'] as const) {
+      for (let count = TICKET_TYPE_LIMITS[ticketType].minTables; count <= TICKET_TYPE_LIMITS[ticketType].maxTables; count += 2) {
+        shapes.push([{ type: 'setType', ticketType }, { type: 'setTableCount', count }]);
+      }
+    }
+    for (const rule of enabledSystematicRules()) shapes.push([{ type: 'setSystematic', systematicType: rule.id }]);
+    for (const shape of shapes) {
+      for (let round = 0; round < 20; round++) {
+        const s = run([...shape, { type: 'lottomatAll', rng: cryptoRng }]);
+        expect(isTicketComplete(s)).toBe(true);
+        expect(ticketErrors(s)).toEqual([]);
+      }
+    }
+  });
+
+  it('cryptoRng stays in range', () => {
+    for (const max of [1, 7, 37, 1000]) {
+      for (let i = 0; i < 200; i++) {
+        const v = cryptoRng(max);
+        expect(Number.isInteger(v) && v >= 0 && v < max).toBe(true);
+      }
+    }
+  });
+
+  it('lottomatRest fills only the incomplete tables', () => {
+    const s0 = run([
+      { type: 'setTableCount', count: 4 },
+      { type: 'lottomatTable', table: 0, rng: seeded(1) },
+      { type: 'toggleNumber', table: 2, number: 5 },
+    ]);
+    const kept = s0.tables[0];
+    const s = ticketReducer(s0, { type: 'lottomatRest', rng: seeded(9) });
+    expect(s.tables[0]).toBe(kept);
+    expect(isTicketComplete(s)).toBe(true);
+    expect(ticketErrors(s)).toEqual([]);
   });
 
   it('respects the systematic number count', () => {

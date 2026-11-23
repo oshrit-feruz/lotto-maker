@@ -23,7 +23,7 @@ function split(remaining: number): number[] {
  * the browser would disagree on "now"), so the first paint shows dashes.
  * Purely visual: the exact cutoff is printed next to it as text.
  */
-export function Countdown({ until }: Readonly<{ until: string }>) {
+export function Countdown({ until, className = '' }: Readonly<{ until: string; className?: string }>) {
   const target = new Date(until).getTime();
   const [now, setNow] = useState<number | null>(null);
 
@@ -40,7 +40,7 @@ export function Countdown({ until }: Readonly<{ until: string }>) {
 
   const parts = now === null ? null : split(target - now);
   return (
-    <dl className="countdown" role="timer" aria-live="off" dir="rtl">
+    <dl className={`countdown ${className}`.trim()} role="timer" aria-live="off" dir="rtl">
       {UNITS.map((u, i) => (
         <div key={u.label}>
           <dt>{u.label}</dt>

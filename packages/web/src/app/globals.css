@@ -1587,6 +1587,97 @@ table.table {
   }
 }
 
+/* Ticket page: next draw strip (jackpot + countdown) and the in-place login dialog. */
+.draw-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  background: var(--pine);
+  color: var(--brand-soft);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+}
+
+.draw-strip-prize {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  color: var(--sun);
+}
+
+.countdown-inline {
+  gap: 4px;
+}
+
+.countdown-inline div {
+  background: var(--pine-deep);
+  padding: 4px 6px 3px;
+  min-width: 44px;
+}
+
+.countdown-inline dd {
+  font-size: 1.15rem;
+}
+
+.countdown-inline dt {
+  font-size: 0.68rem;
+  margin-top: 2px;
+}
+
+@media (max-width: 719px) {
+  .draw-strip {
+    flex-wrap: nowrap;
+    padding: 8px 12px;
+  }
+
+  .draw-strip-prize {
+    font-size: 1.25rem;
+  }
+
+  .countdown-inline div {
+    min-width: 36px;
+    padding: 3px 4px 2px;
+  }
+
+  .countdown-inline dd {
+    font-size: 1rem;
+  }
+}
+
+.price-bar-sum {
+  flex: 1 1 auto;
+}
+
+.price-bar-summary {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.price-bar-main > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.login-dialog {
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.login-dialog::backdrop {
+  background: rgba(18, 35, 43, 0.55);
+}
+
 /* Tables that become a stacked card list on mobile. */
 @media (max-width: 719px) {
   .table-cards thead {

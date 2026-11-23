@@ -3,10 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { MAX_DRAW_COUNT, TICKET_TYPE_LABELS, binomial, type TicketType } from '@lotto-maker/shared';
-import { ApiError, api, errorMessage } from '@/lib/api-client';
-import { loadDraft, saveDraft } from '@/lib/draft';
+import { ApiError, api, auth, errorMessage } from '@/lib/api-client';
+import { clearSubmitAfterLogin, loadDraft, markSubmitAfterLogin, saveDraft, takeSubmitAfterLogin } from '@/lib/draft';
 import { formatDateTime } from '@/lib/format';
-import { buildPriceDisplay } from '@/lib/price';
+import { buildPriceDisplay, listPriceFor } from '@/lib/price';
+import { resumeAfterLogin } from '@/lib/resume-order';
 import {
   cryptoRng,
   enabledSystematicRules,
@@ -20,8 +21,10 @@ import {
   ticketReducer,
   toTicketInput,
 } from '@/lib/ticket-state';
-import type { CalculateResponse, DuplicateResponse } from '@/lib/types';
+import type { CalculateResponse, DuplicateResponse, PricesResponse } from '@/lib/types';
+import { useApi } from '@/lib/use-api';
 import { Balls } from '../Balls';
+import { LoginDialog } from './LoginDialog';
 import { PriceSummary } from './PriceSummary';
 import { TablePicker } from './TablePicker';
 
@@ -47,19 +50,46 @@ export function TicketForm() {
   // Visual only: which table(s) the Lottomat just filled, so the balls drop in.
   const [rolling, setRolling] = useState<{ target: number | 'all'; n: number } | null>(null);
   const rollSeq = useRef(0);
+  // null until /api/auth/session answers. Logged out, the form works the same and is priced from
+  // the public price list; "continue" opens the login dialog in place.
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const hydrated = useRef(false);
+  const prices = useApi<PricesResponse>('prices');
 
-  // Coming back from checkout: restore the ticket.
+  // Restore the ticket (back from checkout, a reload, or a login), then resume a pending order.
   useEffect(() => {
     const draft = loadDraft();
     if (draft) dispatch({ type: 'load', state: draft as never });
-  }, []);
+    hydrated.current = true;
+    let alive = true;
+    auth
+      .session()
+      .then(({ authenticated: loggedIn }) => {
+        if (!alive) return;
+        setAuthenticated(loggedIn);
+        if (!loggedIn) return;
+        const next = resumeAfterLogin({ authenticated: true, submitPending: takeSubmitAfterLogin(), draft: loadDraft() });
+        if (next) router.push(next);
+      })
+      .catch(() => alive && setAuthenticated(false));
+    return () => {
+      alive = false;
+    };
+  }, [router]);
+
+  // Every change is kept for this tab, so a login or a reload never loses the filled ticket.
+  useEffect(() => {
+    if (hydrated.current) saveDraft(state);
+  }, [state]);
 
   const systematicRules = useMemo(() => enabledSystematicRules(), []);
   const needNumbers = numbersPerTable(state);
   const needStrong = strongPerTable(state);
   const complete = isTicketComplete(state);
   const errors = complete ? ticketErrors(state) : [];
-  const requestKey = complete && errors.length === 0 ? JSON.stringify(toTicketInput(state)) : null;
+  const loggedIn = authenticated === true;
+  const requestKey = loggedIn && complete && errors.length === 0 ? JSON.stringify(toTicketInput(state)) : null;
   const filledCount = state.tables.filter((_, i) => isTableComplete(state, i)).length;
 
   // Live price and duplicate warning, debounced; stale answers are dropped.
@@ -112,26 +142,75 @@ export function TicketForm() {
     if (active >= state.tables.length) setActive(Math.max(0, state.tables.length - 1));
   }, [active, state.tables.length]);
 
-  const price = calc ? buildPriceDisplay(calc) : null;
-  const canContinue = Boolean(requestKey && calc?.enoughDraws && !loadingPrice);
+  // Until the backend prices the complete ticket (logged in), the public price list gives the total.
+  const listPriced = prices.data ? listPriceFor(prices.data, state) : null;
+  const listPrice = listPriced?.ok ? buildPriceDisplay(listPriced.calc) : null;
+  const price = calc ? buildPriceDisplay(calc) : listPrice;
+  const ready = complete && errors.length === 0;
+  const canContinue = loggedIn
+    ? Boolean(requestKey && calc?.enoughDraws && !loadingPrice)
+    : authenticated === false && ready && listPrice !== null;
 
   function goToCheckout() {
     if (!canContinue) return;
     saveDraft(state);
-    router.push('/checkout');
+    if (loggedIn) {
+      router.push('/checkout');
+      return;
+    }
+    markSubmitAfterLogin();
+    setLoginOpen(true);
   }
 
+  function onLoggedIn() {
+    setAuthenticated(true);
+    const next = resumeAfterLogin({ authenticated: true, submitPending: takeSubmitAfterLogin(), draft: loadDraft() });
+    if (next) router.push(next);
+    else setLoginOpen(false);
+  }
+
+  function closeLogin() {
+    clearSubmitAfterLogin();
+    setLoginOpen(false);
+  }
+
+  function fillRest() {
+    dispatch({ type: 'lottomatRest', rng: cryptoRng });
+    roll('all');
+  }
+
+  const summary = [
+    state.tables.length === 1 ? 'טבלה אחת' : `${state.tables.length} טבלאות`,
+    state.drawCount === 1 ? 'הגרלה אחת' : `${state.drawCount} הגרלות`,
+    state.extra ? 'עם אקסטרה' : 'בלי אקסטרה',
+  ].join(' · ');
+
   const firstDraw = calc?.draws[0];
-  let priceStatus: ReactNode = null;
-  if (!complete) {
-    priceStatus = <p className="muted small price-bar-note">מלאו את כל הטבלאות כדי לראות מחיר.</p>;
-  } else if (loadingPrice) {
-    priceStatus = <p className="muted small loading price-bar-note">מחשב מחיר…</p>;
-  } else if (priceError) {
-    priceStatus = <div className="alert alert-error small">{priceError}</div>;
-  } else if (price) {
+  let notice: ReactNode = null;
+  if (priceError) {
+    notice = <div className="alert alert-error small">{priceError}</div>;
+  } else if (listPriced?.ok === false && !calc) {
+    notice = (
+      <div className="alert alert-warn small">
+        {listPriced.reason === 'EXTRA_NOT_AVAILABLE'
+          ? errorMessage(new ApiError(422, 'EXTRA_NOT_AVAILABLE', ''))
+          : 'המחירון אינו זמין כרגע. נסו שוב מאוחר יותר.'}
+      </div>
+    );
+  } else if (!complete) {
+    notice = (
+      <p className="muted small price-bar-note">
+        {filledCount}/{state.tables.length} טבלאות מלאות. השלימו או השתמשו בלוטומט.
+      </p>
+    );
+  } else if (loadingPrice && !price) {
+    notice = <p className="muted small loading price-bar-note">מחשב מחיר…</p>;
+  }
+  let priceStatus: ReactNode = notice;
+  if (price) {
     priceStatus = (
       <>
+        {notice}
         <div className="price-bar-details" id="price-bar-details">
           <PriceSummary price={price} hideWarning />
           {firstDraw ? (
@@ -331,8 +410,9 @@ export function TicketForm() {
         {priceStatus}
         <div className="price-bar-main">
           <div className="price-bar-sum">
+            <span className="small muted price-bar-summary">{summary}</span>
             <div className="price-total">{price ? <span dir="ltr">{price.total}</span> : null}</div>
-            {price && !priceError && !loadingPrice ? (
+            {price && !priceError ? (
               <button
                 type="button"
                 className="price-bar-toggle"
@@ -344,11 +424,20 @@ export function TicketForm() {
               </button>
             ) : null}
           </div>
-          <button type="button" className="btn" disabled={!canContinue} onClick={goToCheckout}>
-            המשך לתשלום
-          </button>
+          {complete ? (
+            <button type="button" className="btn" disabled={!canContinue} onClick={goToCheckout}>
+              המשך לתשלום
+            </button>
+          ) : (
+            <button type="button" className="btn btn-accent" onClick={fillRest}>
+              <span className="lottomat-icon" aria-hidden="true" />
+              {filledCount === 0 ? 'לוטומט לכל הטבלאות' : 'השלמה בלוטומט'}
+            </button>
+          )}
         </div>
       </div>
+
+      <LoginDialog open={loginOpen} onClose={closeLogin} onVerified={onLoggedIn} />
     </div>
   );
 }

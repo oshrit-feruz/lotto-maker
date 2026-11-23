@@ -4,6 +4,7 @@ import type { TicketState } from './ticket-state';
 
 const DRAFT_KEY = 'lm_ticket_draft';
 const PAYMENT_KEY = 'lm_pending_payment';
+const SUBMIT_KEY = 'lm_submit_after_login';
 
 function storage(): Storage | null {
   try {
@@ -29,6 +30,23 @@ export function loadDraft(): unknown {
 
 export function clearDraft(): void {
   storage()?.removeItem(DRAFT_KEY);
+}
+
+/** The visitor pressed "continue to payment" while logged out: once logged in, the order goes on to checkout. */
+export function markSubmitAfterLogin(): void {
+  storage()?.setItem(SUBMIT_KEY, '1');
+}
+
+/** Reads and clears the flag set by {@link markSubmitAfterLogin}. */
+export function takeSubmitAfterLogin(): boolean {
+  const s = storage();
+  const pending = s?.getItem(SUBMIT_KEY) === '1';
+  s?.removeItem(SUBMIT_KEY);
+  return pending;
+}
+
+export function clearSubmitAfterLogin(): void {
+  storage()?.removeItem(SUBMIT_KEY);
 }
 
 export interface PendingPayment {

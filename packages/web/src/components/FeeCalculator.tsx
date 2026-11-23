@@ -3,20 +3,11 @@
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { MAX_DRAW_COUNT, TICKET_TYPE_LABELS, type TicketType } from '@lotto-maker/shared';
-import { buildPriceDisplay, priceFromList, type PriceDisplay } from '@/lib/price';
-import {
-  enabledSystematicRules,
-  initialTicketState,
-  ticketReducer,
-  toTicketInput,
-  type Rng,
-} from '@/lib/ticket-state';
+import { buildPriceDisplay, listPriceFor, type PriceDisplay } from '@/lib/price';
+import { enabledSystematicRules, initialTicketState, ticketReducer } from '@/lib/ticket-state';
 import type { PricesResponse } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 import { PriceSummary } from './ticket/PriceSummary';
-
-// The price does not depend on the numbers, so a fixed sequence fills the sample ticket.
-const sequentialRng: Rng = () => 0;
 
 function tableOptionsFor(type: TicketType, systematic: string): number[] {
   if (systematic) return [1];
@@ -40,10 +31,9 @@ export function FeeCalculator() {
   state = ticketReducer(state, { type: 'setTableCount', count: tables });
   state = ticketReducer(state, { type: 'setExtra', extra });
   state = ticketReducer(state, { type: 'setDrawCount', count: draws });
-  state = ticketReducer(state, { type: 'lottomatAll', rng: sequentialRng });
   const tableOptions = tableOptionsFor(type, systematic);
 
-  const priced = prices.data ? priceFromList(prices.data, toTicketInput(state)) : null;
+  const priced = prices.data ? listPriceFor(prices.data, state) : null;
   const price: PriceDisplay | null = priced?.ok ? buildPriceDisplay(priced.calc) : null;
   let unavailable: string | null = null;
   if (priced?.ok === false && priced.reason === 'EXTRA_NOT_AVAILABLE') {
