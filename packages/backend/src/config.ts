@@ -4,6 +4,7 @@ import {
   SMS_PROVIDERS,
   smsSenderProblem,
 } from './modules/notifications/sms/select.js';
+import { missingHypSettings } from './modules/payments/hyp/hyp-config.js';
 
 // A 32-byte key, base64-encoded (e.g. `openssl rand -base64 32`)
 const base64Key32 = z
@@ -130,9 +131,28 @@ export const envSchema = z.object({
   // An in-progress slot claimed by one operator can be taken over by another
   // only after it has sat untouched this long.
   SLOT_CLAIM_TIMEOUT_MINUTES: z.coerce.number().positive().default(10),
-  // Only the mock provider exists so far; it is refused when NODE_ENV=production.
-  PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
+  // Card payments. `mock` (dev/test default) approves without charging and is refused when
+  // NODE_ENV=production; `hyp` is Hyp Enterprise (formerly CreditGuard), see docs/payments.md.
+  PAYMENT_PROVIDER: z.enum(['mock', 'hyp']).default('mock'),
+  // Signs the mock provider's webhooks. Not used by hyp (its results are confirmed by an inquiry).
   PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Hyp Enterprise (all from Hyp at onboarding). HYP_GATEWAY_URL is the full XML relay endpoint,
+  // e.g. https://<server>.creditguard.co.il/xpo/Relay (test and production servers differ).
+  HYP_GATEWAY_URL: z.string().url().optional(),
+  HYP_TERMINAL_NUMBER: z.string().regex(/^\d{7,10}$/, 'must be the numeric terminal number').optional(),
+  HYP_USER: z.string().optional(),
+  HYP_PASSWORD: z.string().optional(),
+  HYP_MID: z.string().regex(/^\d+$/, 'must be the numeric merchant id').optional(),
+  // Where the hosted page sends the browser when the client gave no return URLs (e.g. the
+  // mobile app). Unset: PUBLIC_API_URL/payments/return (success and error) and
+  // PUBLIC_API_URL/payments/return/cancel, which verify the payment and show a short page.
+  HYP_SUCCESS_URL: z.string().url().optional(),
+  HYP_ERROR_URL: z.string().url().optional(),
+  HYP_CANCEL_URL: z.string().url().optional(),
+  // Language of the hosted page and of gateway messages.
+  HYP_LANGUAGE: z.enum(['HEB', 'ENG']).default('HEB'),
+  // A gateway call that has not completed after this long counts as failed (outcome unknown).
+  HYP_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   // Phase 6. Only the mock KYC provider exists so far; production returns 503 until a real one is added.
   KYC_PROVIDER: z.enum(['mock']).default('mock'),
   // Test switch: the mock provider sends every otherwise-valid check to manual review.
@@ -173,7 +193,14 @@ export function productionProblems(env: Env, raw: NodeJS.ProcessEnv): string[] {
   if (!env.ID_ENCRYPTION_KEY) missing('ID_ENCRYPTION_KEY', 'encrypts ID numbers at rest');
   if (!env.ID_HASH_KEY) missing('ID_HASH_KEY', 'duplicate-ID check');
   if (!raw.REDIS_URL) missing('REDIS_URL', 'OTP, rate limits and job locks');
-  if (!env.PAYMENT_WEBHOOK_SECRET) missing('PAYMENT_WEBHOOK_SECRET', 'verifies payment webhooks');
+  if (env.PAYMENT_PROVIDER === 'hyp') {
+    for (const name of missingHypSettings(env)) missing(name, 'required by PAYMENT_PROVIDER=hyp');
+    if (env.HYP_GATEWAY_URL && !env.HYP_GATEWAY_URL.startsWith('https://')) {
+      problems.push('HYP_GATEWAY_URL must be https in production');
+    }
+  } else if (!env.PAYMENT_WEBHOOK_SECRET) {
+    missing('PAYMENT_WEBHOOK_SECRET', 'verifies payment webhooks');
+  }
   if (!env.BUSINESS_NAME.trim()) missing('BUSINESS_NAME', 'printed on fee receipts');
   if (!env.BUSINESS_ID.trim()) missing('BUSINESS_ID', 'printed on fee receipts');
   if (!env.BUSINESS_ADDRESS.trim()) missing('BUSINESS_ADDRESS', 'printed on fee receipts');

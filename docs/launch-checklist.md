@@ -25,8 +25,9 @@ Mark each item with the date and who confirmed it.
 
 - [ ] **Payment provider that accepts the lottery sector** (owner action). Many Israeli acquirers
       refuse gambling-adjacent merchants: get written acceptance for this business category,
-      then a real provider replaces the mock (`PAYMENT_PROVIDER`), with its webhook secret in
-      `PAYMENT_WEBHOOK_SECRET`. Until then deposits are closed in production.
+      then set `PAYMENT_PROVIDER=hyp` and the `HYP_*` settings (Hyp Enterprise, formerly
+      CreditGuard; see [payments.md](payments.md) for what to ask Hyp for and the sandbox checks).
+      Until then deposits are closed in production.
 - [ ] **KYC provider** (owner action). Contract for ID + age verification; until it is integrated,
       KYC returns 503 in production (`KYC_PROVIDER` only has `mock`).
 - [ ] **SMS provider** (owner action). Open an account with InforU, 019 SMS or Twilio and get

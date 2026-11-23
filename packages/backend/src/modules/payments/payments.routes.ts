@@ -3,7 +3,14 @@ import { z } from 'zod';
 import { config } from '../../config.js';
 import { prisma } from '../../prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
-import { createCheckout, getPayment, getPaymentProvider, processWebhook } from './payments.service.js';
+import {
+  chargeSavedCard,
+  createCheckout,
+  getPayment,
+  getPaymentProvider,
+  processReturn,
+  processWebhook,
+} from './payments.service.js';
 import { deactivateCard, listCards } from './cards.service.js';
 import { MockPaymentProvider, MOCK_SIGNATURE_HEADER } from './mock-payment-provider.js';
 import { isAllowedReturnUrl } from './return-urls.js';
@@ -26,6 +33,22 @@ const checkoutSchema = z.object({
   cancelUrl: z.string().max(2048).optional(),
 });
 
+const savedCardChargeSchema = z.object({
+  cardId: z.string().min(1).max(64),
+  amount: checkoutSchema.shape.amount,
+  idempotencyKey: z.string().min(8).max(128),
+});
+
+// The hosted page's result parameters (Hyp: txId, uniqueID, cardToken, responseMac, ...)
+const returnParamsSchema = z
+  .record(z.string().max(1024))
+  .refine((p) => Object.keys(p).length <= 40, 'too many parameters');
+
+const htmlPage = (title: string, body: string) =>
+  `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">` +
+  `<meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head>` +
+  `<body style="font-family:system-ui;max-width:420px;margin:48px auto;padding:0 16px;text-align:center">${body}</body></html>`;
+
 export default async function paymentsRoutes(app: FastifyInstance) {
   // Webhook signatures are computed over the exact bytes the provider sent, so
   // keep the raw body next to the parsed one. Scoped to this plugin only.
@@ -38,6 +61,12 @@ export default async function paymentsRoutes(app: FastifyInstance) {
     } catch {
       done(new AppError(400, 'INVALID_JSON'));
     }
+  });
+  // Some gateways post webhooks form-encoded; the provider parses the raw bytes itself.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'buffer' }, (request, body, done) => {
+    const raw = body as Buffer;
+    request.rawBody = raw;
+    done(null, Object.fromEntries(new URLSearchParams(raw.toString('utf8'))));
   });
 
   app.post('/payments/checkout', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -67,6 +96,41 @@ export default async function paymentsRoutes(app: FastifyInstance) {
     return reply.send(await deactivateCard(request.user.sub, id));
   });
 
+  // Deposit from a saved card (no hosted page). 201 with the payment's final status.
+  app.post('/payments/saved-card', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const body = savedCardChargeSchema.parse(request.body);
+    const result = await chargeSavedCard(request.user.sub, body.cardId, body.amount, body.idempotencyKey);
+    return reply.status(201).send(result);
+  });
+
+  // The site's return page forwards the hosted page's result parameters here. No session needed:
+  // the provider checks their signature and confirms the result with the gateway itself.
+  app.post('/payments/return', async (request, reply) => {
+    const params = returnParamsSchema.parse(request.body ?? {});
+    return reply.send(await processReturn(params));
+  });
+
+  // Return landing for clients without a page of their own (HYP_SUCCESS_URL / HYP_ERROR_URL unset)
+  app.get('/payments/return', async (request, reply) => {
+    const params = returnParamsSchema.parse(request.query ?? {});
+    let approved = false;
+    try {
+      approved = (await processReturn(params)).status === 'approved';
+    } catch (err) {
+      request.log.warn({ code: err instanceof AppError ? err.code : 'error' }, 'payment return not verified');
+    }
+    const html = approved
+      ? htmlPage('התשלום אושר', '<h1>התשלום אושר</h1><p>הסכום נטען לארנק. אפשר לחזור לאפליקציה.</p>')
+      : htmlPage('התשלום לא בוצע', '<h1>התשלום לא בוצע</h1><p>לא בוצע חיוב. אפשר לחזור לאפליקציה.</p>');
+    return reply.type('text/html; charset=utf-8').send(html);
+  });
+
+  app.get('/payments/return/cancel', async (_request, reply) => {
+    return reply
+      .type('text/html; charset=utf-8')
+      .send(htmlPage('התשלום בוטל', '<h1>התשלום בוטל</h1><p>לא בוצע חיוב. אפשר לחזור לאפליקציה.</p>'));
+  });
+
   // Called by the payment provider, not by our clients: authenticated by the
   // provider's signature instead of a JWT.
   app.post('/payments/webhook', async (request, reply) => {
@@ -85,10 +149,7 @@ export default async function paymentsRoutes(app: FastifyInstance) {
  */
 function registerMockCheckoutPages(app: FastifyInstance) {
   const paramsSchema = z.object({ providerTxId: z.string().regex(/^mock_[A-Za-z0-9_-]+$/) });
-  const page = (body: string) =>
-    `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width, initial-scale=1"><title>Mock checkout</title></head>` +
-    `<body style="font-family:system-ui;max-width:420px;margin:48px auto;padding:0 16px;text-align:center">${body}</body></html>`;
+  const page = (body: string) => htmlPage('Mock checkout', body);
 
   // Return URLs ride along on the page link. Re-checked here: the query string is user-controlled.
   const returnQuerySchema = z.object({

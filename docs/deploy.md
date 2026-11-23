@@ -64,7 +64,9 @@ while any required one is missing and prints the whole list at once (`src/config
 | `REDIS_URL` | yes | |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | yes | 32+ chars each, different. `openssl rand -base64 48` |
 | `ID_ENCRYPTION_KEY`, `ID_HASH_KEY` | yes | `openssl rand -base64 32`. **Back both up outside the platform**: losing the first makes stored ID numbers unreadable; changing the second breaks the duplicate-ID check |
-| `PAYMENT_PROVIDER`, `PAYMENT_WEBHOOK_SECRET` | yes (secret) | Only `mock` exists and it is refused in production: deposits stay closed until a real provider is added |
+| `PAYMENT_PROVIDER` | yes | `hyp` (Hyp Enterprise). `mock` is refused in production: deposits stay closed. See [payments.md](payments.md) |
+| `HYP_GATEWAY_URL`, `HYP_TERMINAL_NUMBER`, `HYP_USER`, `HYP_PASSWORD`, `HYP_MID` | with `PAYMENT_PROVIDER=hyp` (password is a secret) | From Hyp at onboarding; the gateway URL must be https. Optional: `HYP_SUCCESS_URL` / `HYP_ERROR_URL` / `HYP_CANCEL_URL`, `HYP_LANGUAGE`, `HYP_TIMEOUT_MS` |
+| `PAYMENT_WEBHOOK_SECRET` | unless `PAYMENT_PROVIDER=hyp` (secret) | Signs the mock provider's webhooks |
 | `PUBLIC_API_URL` | yes | `https://api.<domain>`, builds checkout links |
 | `ALLOWED_ORIGINS` | yes | Exact https origins of web, admin and operator apps, comma-separated |
 | `CHECKOUT_RETURN_ORIGINS` | yes | Origins checkout may return to (normally the web origin) |
