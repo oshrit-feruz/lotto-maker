@@ -9,6 +9,7 @@ describe('isProxyAllowed', () => {
     expect(isProxyAllowed('POST', 'orders')).toBe(true);
     expect(isProxyAllowed('GET', 'orders/ck123/scan')).toBe(true);
     expect(isProxyAllowed('GET', 'payments/ck123')).toBe(true);
+    expect(isProxyAllowed('POST', 'payments/return')).toBe(true);
     expect(isProxyAllowed('POST', 'wallet/withdrawals/w1/cancel')).toBe(true);
     expect(isProxyAllowed('DELETE', 'me/cards/c1')).toBe(true);
     expect(isProxyAllowed('GET', 'wallet/withdrawals/quote')).toBe(true);
@@ -42,6 +43,8 @@ describe('isProxyAllowed', () => {
     expect(isProxyAllowed('POST', 'payments/webhook')).toBe(false);
     expect(isProxyAllowed('GET', 'payments/webhook')).toBe(false);
     expect(isProxyAllowed('GET', 'payments/mock-checkout')).toBe(false);
+    expect(isProxyAllowed('GET', 'payments/return')).toBe(false);
+    expect(isProxyAllowed('GET', 'payments/saved-card')).toBe(false);
     expect(isProxyAllowed('POST', 'auth/refresh')).toBe(false);
     expect(isProxyAllowed('POST', 'me/device-token')).toBe(false);
   });
