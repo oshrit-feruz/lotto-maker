@@ -162,7 +162,8 @@ Request a code on any login screen, then **Logs** (Runtime Logs) of the project:
 - GitHub → Actions → **Staging cron** shows each run and the HTTP status per job; **Run workflow**
   runs one job now. The backend logs `job <name> done` in Vercel Logs.
 - Run one now: `curl -H "Authorization: Bearer $CRON_SECRET" https://<domain>/backend/cron/draws-sync`.
-- Rotating `CRON_SECRET`: change it, redeploy.
+- Rotating `CRON_SECRET`: change it in both places (GitHub Actions secret and Vercel env var),
+  then redeploy Vercel. Changing only one makes every scheduled call return 401.
 
 ## Limitations
 
