@@ -66,9 +66,9 @@ service; `vercel.json` lists the four services explicitly, so it is not deployed
   404. Responses: 200 ran / skipped (lock held elsewhere), 401 wrong secret, 500 failed, 503 Redis
   unreachable.
 
-  | Job | In-process schedule (Israel time unless noted) | Vercel Cron (always UTC) |
+  | Job | In-process schedule (Israel time unless noted) | GitHub Actions (always UTC) |
   |---|---|---|
-  | settlement, receipts | every minute | `* * * * *` |
+  | settlement, receipts | every minute | `*/5 * * * *` (GitHub's minimum is 5 min) |
   | card-credits, draws-results | every 5 min | `*/5 * * * *` |
   | draws-sync | every 30 min (also once on start) | `*/30 * * * *` |
   | prize-claims | 09:00 daily | `0 7 * * *` (09:00 winter / 10:00 summer) |
