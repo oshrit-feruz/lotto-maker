@@ -18,7 +18,7 @@ on:
     - cron: '*/5 * * * *' # settlement receipts card-credits draws-results
     - cron: '*/30 * * * *' # draws-sync
     - cron: '0 7 * * *' # prize-claims (09:00 Israel winter time)
-    - cron: '45 12,13 * * 2,4,6' # subscriptions (15:45 Israel, both DST offsets; second run is a no-op)
+    - cron: '45 12,13 * * 2,4,6' # subscriptions: 12:45 + 13:45 UTC; the step below only calls it from 15:00 Israel time (15:45 in both DST offsets)
   workflow_dispatch:
     inputs:
       job:
@@ -36,7 +36,7 @@ concurrency:
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - name: Call cron endpoints
         env:
@@ -56,11 +56,21 @@ jobs:
             '45 12,13 * * 2,4,6') JOBS="subscriptions" ;;
             *) JOBS="$MANUAL_JOB" ;;
           esac
-          failed=0
+          # subscriptions must not run before 15:00 Israel time: in winter (UTC+2) the 12:45 UTC
+          # trigger is 14:45 there, so it is skipped and the 13:45 UTC one (15:45) runs it.
+          if [ "$SCHEDULE" = '45 12,13 * * 2,4,6' ] && [ "$(TZ=Asia/Jerusalem date +%H)" -lt 15 ]; then
+            echo "::notice::subscriptions: $(TZ=Asia/Jerusalem date +%H:%M) Israel time, before 15:00; skipping."
+            exit 0
+          fi
+          # Endpoints run in parallel so one slow job cannot delay the others.
           for job in $JOBS; do
-            code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 310 \
-              -H "Authorization: Bearer $CRON_SECRET" "$STAGING_URL/backend/cron/$job") || code=000
-            echo "$job → HTTP $code: $(head -c 300 body.txt 2>/dev/null)"
-            case "$code" in 2*) ;; *) failed=1 ;; esac
+            (
+              code=$(curl -sS -o "body-$job.txt" -w '%{http_code}' --max-time 310 \
+                -H "Authorization: Bearer $CRON_SECRET" "$STAGING_URL/backend/cron/$job") || code=000
+              echo "$job → HTTP $code: $(head -c 300 "body-$job.txt" 2>/dev/null)"
+              case "$code" in 2*) ;; *) exit 1 ;; esac
+            ) &
           done
+          failed=0
+          for pid in $(jobs -p); do wait "$pid" || failed=1; done
           exit $failed

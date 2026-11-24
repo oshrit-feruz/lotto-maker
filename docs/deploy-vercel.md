@@ -76,7 +76,7 @@ service; `vercel.json` lists the four services explicitly, so it is not deployed
   | card-credits, draws-results | every 5 min | `*/5 * * * *` |
   | draws-sync | every 30 min (also once on start) | `*/30 * * * *` |
   | prize-claims | 09:00 daily | `0 7 * * *` (09:00 winter / 10:00 summer) |
-  | subscriptions | 15:45 Tue/Thu/Sat | `45 12,13 * * 2,4,6`: two runs; the job is idempotent (SubscriptionEvent claims), so the second does nothing once the first has run |
+  | subscriptions | 15:45 Tue/Thu/Sat | `45 12,13 * * 2,4,6`; the workflow skips a run before 15:00 Israel time (the winter 12:45 UTC one), and the job is idempotent (SubscriptionEvent claims), so the summer 13:45 UTC run does nothing |
 
 - **Operator queue (SSE).** A function's duration limit includes streamed responses, so the stream
   ends itself after 270 s. The dashboard (`src/hooks/useQueue.ts`) shows "disconnected", polls
