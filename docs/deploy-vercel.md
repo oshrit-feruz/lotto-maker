@@ -58,8 +58,9 @@ service; `vercel.json` lists the four services explicitly, so it is not deployed
 - **Startup seed.** The first request on each new function instance runs the Docker API's startup
   seed (default location, `DEFAULT_ADMIN_PHONE` / `DEFAULT_OPERATOR_PHONE`, ID backfill) under the
   Redis job lock. It only creates missing rows.
-- **Scheduled jobs.** node-cron is off. Top-level `crons` call `GET /backend/cron/<job>` for every
-  job in `src/cron/index.ts` (a unit test keeps the lists equal). Vercel sends
+- **Scheduled jobs.** node-cron is off. The GitHub Actions workflow
+  `.github/workflows/staging-cron.yml` calls `GET /backend/cron/<job>` for every job in
+  `src/cron/index.ts` (a unit test keeps the lists equal), sending
   `Authorization: Bearer $CRON_SECRET`; `src/cron/http.ts` checks it in constant time and runs the
   job through `runJob` (Redis lock, one log line per run). Without `CRON_SECRET` the routes answer
   404. Responses: 200 ran / skipped (lock held elsewhere), 401 wrong secret, 500 failed, 503 Redis
@@ -156,8 +157,10 @@ Request a code on any login screen, then **Logs** (Runtime Logs) of the project:
 
 ## 6. Cron
 
-- The project's **Cron Jobs** tab (Settings / Schedules) lists the seven `/backend/cron/*` jobs; **View Logs** shows each run
-  (`job <name> done`).
+- In GitHub: repo Settings → Secrets and variables → Actions → add variable `STAGING_URL`
+  (`https://<domain>`) and secret `CRON_SECRET` (same value as in Vercel).
+- GitHub → Actions → **Staging cron** shows each run and the HTTP status per job; **Run workflow**
+  runs one job now. The backend logs `job <name> done` in Vercel Logs.
 - Run one now: `curl -H "Authorization: Bearer $CRON_SECRET" https://<domain>/backend/cron/draws-sync`.
 - Rotating `CRON_SECRET`: change it, redeploy.
 
@@ -166,9 +169,12 @@ Request a code on any login screen, then **Logs** (Runtime Logs) of the project:
 - **Services is in Beta.** Behaviour and configuration may still change.
 - **One deployment ships everything.** Every deployment builds all four services; a failed build of
   one (including a failed migration) fails the whole deployment, and a rollback rolls back all four.
-- **Plan.** Crons run every minute; **Hobby allows one run per day per cron and fails the
-  deployment otherwise**, so the project needs **Pro**. On Hobby, remove `crons` and call the same
-  URLs with the same header from an external scheduler (e.g. GitHub Actions every 5 minutes).
+- **Plan: Hobby.** Hobby allows each Vercel cron at most once a day, so `vercel.json` has no
+  `crons`. The jobs are triggered by `.github/workflows/staging-cron.yml` (every 5 / 30 minutes,
+  daily, and the subscription runs), which calls `GET /backend/cron/<job>` with the same Bearer
+  header. Set repo variable `STAGING_URL` and secret `CRON_SECRET` (same value as in Vercel); until
+  then it does nothing. GitHub starts schedules up to a few minutes late. On **Pro** you can move
+  the schedules back into `vercel.json` `crons` and delete the workflow.
 - **Cron delivery is best effort** and can repeat; every job is idempotent and locked. A missed
   subscription run is not made up (the 13:45 UTC run is the only fallback).
 - **Function limits**: 300 s per request (bounds cron runs and SSE streams), **4.5 MB request

@@ -1,0 +1,66 @@
+# Scheduled jobs for the Vercel staging project on the Hobby plan.
+# Hobby allows each Vercel cron at most once a day, so the backend jobs are triggered from here
+# instead. Each run calls GET <STAGING_URL>/backend/cron/<job> with Authorization: Bearer <CRON_SECRET>,
+# the same request Vercel Cron would send (see packages/backend/src/cron/http.ts).
+#
+# Setup (repo Settings → Secrets and variables → Actions):
+#   variable STAGING_URL  e.g. https://lotto-maker.vercel.app   (no trailing slash)
+#   secret   CRON_SECRET  same value as the Vercel project's CRON_SECRET
+# Until both are set the workflow does nothing and succeeds.
+#
+# GitHub runs schedules in UTC, at most every 5 minutes, and may start them a few minutes late.
+# Every job is idempotent and locked in Redis, so late or repeated runs are safe.
+# Keep the job names below in sync with packages/backend/src/cron/index.ts (a unit test checks it).
+name: Staging cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # settlement receipts card-credits draws-results
+    - cron: '*/30 * * * *' # draws-sync
+    - cron: '0 7 * * *' # prize-claims (09:00 Israel winter time)
+    - cron: '45 12,13 * * 2,4,6' # subscriptions (15:45 Israel, both DST offsets; second run is a no-op)
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Job to run now'
+        required: true
+        type: choice
+        options: [settlement, receipts, card-credits, draws-results, draws-sync, prize-claims, subscriptions]
+
+permissions: {}
+
+concurrency:
+  group: staging-cron-${{ github.event.schedule || inputs.job }}
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Call cron endpoints
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_JOB: ${{ inputs.job }}
+        run: |
+          if [ -z "$STAGING_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::STAGING_URL or CRON_SECRET not set; skipping."
+            exit 0
+          fi
+          case "$SCHEDULE" in
+            '*/5 * * * *') JOBS="settlement receipts card-credits draws-results" ;;
+            '*/30 * * * *') JOBS="draws-sync" ;;
+            '0 7 * * *') JOBS="prize-claims" ;;
+            '45 12,13 * * 2,4,6') JOBS="subscriptions" ;;
+            *) JOBS="$MANUAL_JOB" ;;
+          esac
+          failed=0
+          for job in $JOBS; do
+            code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 310 \
+              -H "Authorization: Bearer $CRON_SECRET" "$STAGING_URL/backend/cron/$job") || code=000
+            echo "$job → HTTP $code: $(head -c 300 body.txt 2>/dev/null)"
+            case "$code" in 2*) ;; *) failed=1 ;; esac
+          done
+          exit $failed

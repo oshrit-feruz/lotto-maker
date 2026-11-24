@@ -120,13 +120,18 @@ describe('stripServicePrefix', () => {
 
 describe('root vercel.json', () => {
   const vercel = JSON.parse(readFileSync(new URL('../../../../vercel.json', import.meta.url), 'utf8')) as {
-    crons: { path: string; schedule: string }[];
+    crons?: { path: string; schedule: string }[];
     rewrites: { source: string; destination: { service: string } }[];
   };
 
-  it('has exactly one cron entry per job in src/cron/index.ts, under the backend prefix', () => {
-    const paths = vercel.crons.map((c) => c.path).sort();
-    expect(paths).toEqual(JOBS.map((j) => `/backend/cron/${j.name}`).sort());
+  it('defines no Vercel crons (Hobby plan); the staging-cron workflow triggers every job', () => {
+    expect(vercel.crons).toBeUndefined();
+    const workflow = readFileSync(
+      new URL('../../../../.github/workflows/staging-cron.yml', import.meta.url),
+      'utf8',
+    );
+    const scheduled = [...workflow.matchAll(/JOBS="([^"$]+)"/g)].flatMap((m) => m[1].split(' ')).sort();
+    expect(scheduled).toEqual(JOBS.map((j) => j.name).sort());
   });
 
   it('routes the backend prefix to the backend service before the catch-all', () => {
