@@ -122,7 +122,13 @@ describe('root vercel.json', () => {
   const vercel = JSON.parse(readFileSync(new URL('../../../../vercel.json', import.meta.url), 'utf8')) as {
     crons?: { path: string; schedule: string }[];
     rewrites: { source: string; destination: { service: string } }[];
+    services: Record<string, { installCommand?: string }>;
   };
+
+  it('installs once for all services (a per-service npm ci wipes what earlier services built)', () => {
+    const commands = Object.values(vercel.services).map((s) => s.installCommand);
+    expect(new Set(commands)).toEqual(new Set(['sh ../../scripts/vercel-install.sh']));
+  });
 
   it('defines no Vercel crons (Hobby plan); the staging-cron workflow triggers every job', () => {
     expect(vercel.crons).toBeUndefined();

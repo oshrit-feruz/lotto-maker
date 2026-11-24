@@ -38,6 +38,10 @@ service; `vercel.json` lists the four services explicitly, so it is not deployed
   fetch are dynamic). A service cannot have Routing Middleware (Next.js middleware is an Edge
   function, which a service may not emit), so the login check of `/checkout`, `/payment/*` and
   `/account/*` runs in the pages (`src/lib/require-session.ts`).
+- **One install.** Vercel builds the services one after another in the same checkout, and `npm ci`
+  deletes `node_modules` first, so every service runs `scripts/vercel-install.sh`: the first one
+  installs all deployed workspaces, the rest skip. A per-service `npm ci` deletes files an earlier
+  service already traced (deploy fails with `ENOENT ... styled-jsx`).
 - **Dashboards.** `scripts/vercel-build-spa.sh` builds each with `BASE_PATH=/admin/` or `/ops/`
   (Vite `base`) and `VITE_API_URL=/backend` (same origin), then copies `dist` to
   `vercel-out/admin/` or `vercel-out/ops/`, because the service is asked for
