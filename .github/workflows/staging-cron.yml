@@ -62,7 +62,9 @@ jobs:
             echo "::notice::subscriptions: $(TZ=Asia/Jerusalem date +%H:%M) Israel time, before 15:00; skipping."
             exit 0
           fi
-          # Endpoints run in parallel so one slow job cannot delay the others.
+          # Endpoints run in parallel so one slow job cannot delay the others. Each PID is saved at
+          # launch: `jobs -p` can miss a job that already finished.
+          pids=""
           for job in $JOBS; do
             (
               code=$(curl -sS -o "body-$job.txt" -w '%{http_code}' --max-time 310 \
@@ -70,7 +72,8 @@ jobs:
               echo "$job → HTTP $code: $(head -c 300 "body-$job.txt" 2>/dev/null)"
               case "$code" in 2*) ;; *) exit 1 ;; esac
             ) &
+            pids="$pids $!"
           done
           failed=0
-          for pid in $(jobs -p); do wait "$pid" || failed=1; done
+          for pid in $pids; do wait "$pid" || failed=1; done
           exit $failed

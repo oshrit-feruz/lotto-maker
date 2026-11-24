@@ -10,9 +10,13 @@
 set -e
 
 cd ../..
+# Vercel restores a cached node_modules before the install, so the marker alone could be from an
+# earlier deployment. It records a fingerprint of this deployment and of the install inputs, and a
+# later service skips only when both match.
 marker=node_modules/.vercel-install-done
-if [ -f "$marker" ]; then
-  echo "[vercel-install] node_modules already installed by an earlier service; skipping"
+fingerprint="${VERCEL_DEPLOYMENT_ID:-local} $(cat package.json package-lock.json packages/*/package.json | sha256sum | cut -d' ' -f1)"
+if [ -f "$marker" ] && [ "$(cat "$marker")" = "$fingerprint" ]; then
+  echo "[vercel-install] node_modules already installed by an earlier service of this deployment; skipping"
   exit 0
 fi
 
@@ -20,4 +24,4 @@ npm ci --ignore-scripts --no-audit --no-fund \
   -w packages/shared -w packages/web -w packages/backend \
   -w packages/admin-dashboard -w packages/operator-dashboard
 npm rebuild prisma @prisma/engines
-touch "$marker"
+printf '%s' "$fingerprint" > "$marker"
