@@ -102,6 +102,17 @@ export async function getLatestResult() {
   return result;
 }
 
+/** Confirmed or settled lotto draws, newest first: number and date only, for the results page list. */
+export async function listResultDraws(limit: number) {
+  const draws = await prisma.draw.findMany({
+    where: { status: { in: [...PUBLIC_RESULT_STATUSES] } },
+    orderBy: { drawAt: 'desc' },
+    take: limit,
+    select: { drawNumber: true, drawAt: true },
+  });
+  return draws.map((d) => ({ drawNumber: d.drawNumber, drawAt: d.drawAt.toISOString() }));
+}
+
 /** One draw's confirmed results; 404 RESULTS_NOT_AVAILABLE while unconfirmed or unknown. */
 export async function getResultByDrawNumber(drawNumber: number) {
   const draw = await prisma.draw.findUnique({ where: { drawNumber }, include: withTiers });

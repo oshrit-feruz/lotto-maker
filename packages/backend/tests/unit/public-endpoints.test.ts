@@ -171,6 +171,26 @@ describe('GET /results/latest and /results/:drawNumber', () => {
     expect(res.json().error).toBe('RESULTS_NOT_AVAILABLE');
   });
 
+  it('lists public draws newest first, number and date only', async () => {
+    db.drawFindMany.mockResolvedValue([
+      { drawNumber: 3988, drawAt: new Date('2026-11-24T21:00:00Z') },
+      { drawNumber: 3987, drawAt: new Date('2026-11-21T21:00:00Z') },
+    ]);
+    const res = await app.inject({ method: 'GET', url: '/results/history?limit=2' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      { drawNumber: 3988, drawAt: '2026-11-24T21:00:00.000Z' },
+      { drawNumber: 3987, drawAt: '2026-11-21T21:00:00.000Z' },
+    ]);
+    const q = db.drawFindMany.mock.calls[0][0];
+    expect(q.where).toEqual({ status: { in: ['results_confirmed', 'settled'] } });
+    expect(q).toMatchObject({ orderBy: { drawAt: 'desc' }, take: 2 });
+  });
+
+  it('caps the history limit', async () => {
+    expect((await app.inject({ method: 'GET', url: '/results/history?limit=500' })).statusCode).toBe(400);
+  });
+
   it('rejects a non-numeric draw number', async () => {
     expect((await app.inject({ method: 'GET', url: '/results/abc' })).statusCode).toBe(400);
   });

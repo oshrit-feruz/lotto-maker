@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { prizeTables, tierLabel } from './results';
+import { drawNeighbors, parseDrawParam, prizeTables, tierLabel } from './results';
 import type { PrizeTierView } from './types';
 
 const tier = (game: PrizeTierView['game'], t: string, winnersCount = 1, prizeAmount = '10.00'): PrizeTierView => ({
@@ -57,5 +57,38 @@ describe('tierLabel', () => {
     expect(tierLabel('lotto', '5+s')).toEqual({ label: '5 + חזק', ltr: true });
     expect(tierLabel('double', '4')).toEqual({ label: '4', ltr: true });
     expect(tierLabel('extra', '3')).toEqual({ label: '3 ספרות', ltr: false });
+  });
+});
+
+describe('drawNeighbors', () => {
+  const history = [
+    { drawNumber: 3988, drawAt: '2026-11-24T21:00:00Z' },
+    { drawNumber: 3987, drawAt: '2026-11-21T21:00:00Z' },
+    { drawNumber: 3986, drawAt: '2026-11-17T21:00:00Z' },
+  ];
+  it('returns the newer and older draw around a middle draw', () => {
+    expect(drawNeighbors(history, 3987)).toEqual({ newer: history[0], older: history[2] });
+  });
+  it('has no newer draw for the latest and no older one for the oldest', () => {
+    expect(drawNeighbors(history, 3988).newer).toBeNull();
+    expect(drawNeighbors(history, 3986).older).toBeNull();
+  });
+  it('returns nothing for a draw not in the list', () => {
+    expect(drawNeighbors(history, 1)).toEqual({ newer: null, older: null });
+  });
+});
+
+describe('parseDrawParam', () => {
+  it.each([
+    ['3987', 3987],
+    [['3986', 'x'], 3986],
+    [undefined, null],
+    ['', null],
+    ['0', null],
+    ['-3', null],
+    ['39a', null],
+    ['12345678', null],
+  ])('%j -> %j', (value, expected) => {
+    expect(parseDrawParam(value as string | string[] | undefined)).toBe(expected);
   });
 });
