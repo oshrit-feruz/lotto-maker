@@ -171,6 +171,10 @@ Request a code on any login screen, then **Logs** (Runtime Logs) of the project:
 
 ## Limitations
 
+- **Draw data needs an Israeli IP.** `pais.co.il` gives no response to Vercel (Frankfurt), so
+  `draws-sync` / `draws-results` time out. `PAIS_BASE_URL` points at the Tel Aviv relay in
+  `infra/pais-relay/` (Cloud Run, `me-west1`); see its README.
+
 - **Services is in Beta.** Behaviour and configuration may still change.
 - **One deployment ships everything.** Every deployment builds all four services; a failed build of
   one (including a failed migration) fails the whole deployment, and a rollback rolls back all four.
