@@ -51,3 +51,29 @@ export function prizeTables(result: Pick<LottoResult, 'prizeTiers'>): PrizeTable
     return { game, title: PRIZE_TIER_GAME_LABELS[game] ?? game, rows };
   }).filter((t) => t.rows.length > 0);
 }
+
+export interface ResultDrawRef {
+  drawNumber: number;
+  drawAt: string;
+}
+
+/**
+ * The draws on either side of `drawNumber` in a newest-first list: `newer` is the next draw,
+ * `older` the previous one. Missing when the draw is at an end of the list or not in it.
+ */
+export function drawNeighbors(
+  history: readonly ResultDrawRef[],
+  drawNumber: number,
+): { newer: ResultDrawRef | null; older: ResultDrawRef | null } {
+  const i = history.findIndex((d) => d.drawNumber === drawNumber);
+  if (i < 0) return { newer: null, older: null };
+  return { newer: history[i - 1] ?? null, older: history[i + 1] ?? null };
+}
+
+/** `?draw=` from the URL: a positive whole number, otherwise null (show the latest draw). */
+export function parseDrawParam(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !/^\d{1,7}$/.test(raw)) return null;
+  const n = Number(raw);
+  return n > 0 && n <= 1_000_000 ? n : null;
+}

@@ -12,6 +12,7 @@ import {
   getLatestResult,
   getNextDraw,
   getResultByDrawNumber,
+  listResultDraws,
 } from './public.service.js';
 
 const VALID_GAMES = ['lotto', 'chance', 'seven77', 'one23'] as const;
@@ -53,6 +54,13 @@ export default async function resultsRoutes(app: FastifyInstance) {
   app.get('/results/latest', async (request, reply) => {
     z.object({ game: z.literal('lotto').default('lotto') }).parse(request.query);
     return reply.send(await getLatestResult());
+  });
+
+  // Draws with public results, newest first (number and date), for the results page list.
+  // A static route, so Fastify matches it before /results/:drawNumber.
+  app.get('/results/history', async (request, reply) => {
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(request.query);
+    return reply.header('Cache-Control', 'public, max-age=300').send(await listResultDraws(limit));
   });
 
   app.get('/results/:drawNumber', async (request, reply) => {
