@@ -1859,3 +1859,67 @@ table.table {
     width: 100%;
   }
 }
+
+/* Results page: draw picker, header with prev/next, collapsible prize tables. */
+.draw-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+.draw-picker label {
+  font-weight: 600;
+}
+.draw-picker select {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+.draw-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.draw-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.draw-head p {
+  margin: 4px 0 0;
+}
+.draw-nav {
+  display: flex;
+  gap: 8px;
+}
+.prize-table {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.prize-table > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-weight: 700;
+  list-style-position: inside;
+}
+.prize-table[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.prize-table .table-wrap {
+  margin: 0;
+}
+.results-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.results-cta p {
+  margin: 0;
+}
