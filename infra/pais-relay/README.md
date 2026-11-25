@@ -9,13 +9,14 @@ results page, and the results archive fragment). Not part of the npm workspaces;
 
 ```sh
 git clone https://github.com/oshrit-feruz/lotto-maker.git && cd lotto-maker/infra/pais-relay
-TOKEN=$(openssl rand -hex 24)
-gcloud run deploy pais-relay --source . --region me-west1 --allow-unauthenticated \
-  --set-env-vars RELAY_TOKEN=$TOKEN --min-instances 0 --max-instances 1 --memory 256Mi
-echo "PAIS_BASE_URL=$(gcloud run services describe pais-relay --region me-west1 --format='value(status.url)')/$TOKEN"
+sh deploy.sh <gcp-project-id>
 ```
 
-Set the printed `PAIS_BASE_URL` in the Vercel project (Production and Preview, type Secret: it
+`deploy.sh` enables the APIs, grants the build role a new project needs, deploys to `me-west1`,
+makes one test request to Pais through the relay, and writes the value for `PAIS_BASE_URL` to
+`~/pais_base_url.txt`.
+
+Set that `PAIS_BASE_URL` in the Vercel project (Production and Preview, type Secret: it
 contains the token), redeploy, and run the **Staging cron** workflow with job `draws-sync`.
 
 The token is part of the URL path, so the backend needs no code change. Unknown paths and a wrong
