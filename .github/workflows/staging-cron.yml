@@ -17,7 +17,7 @@ on:
   schedule:
     - cron: '*/5 * * * *' # settlement receipts card-credits draws-results
     - cron: '*/30 * * * *' # draws-sync
-    - cron: '0 7 * * *' # prize-claims (09:00 Israel winter time)
+    - cron: '0 7 * * *' # prize-claims, draws-backfill (09:00 Israel winter time)
     - cron: '45 12,13 * * 2,4,6' # subscriptions: 12:45 + 13:45 UTC; the step below only calls it from 15:00 Israel time (15:45 in both DST offsets)
   workflow_dispatch:
     inputs:
@@ -25,7 +25,7 @@ on:
         description: 'Job to run now'
         required: true
         type: choice
-        options: [settlement, receipts, card-credits, draws-results, draws-sync, prize-claims, subscriptions]
+        options: [settlement, receipts, card-credits, draws-results, draws-sync, draws-backfill, prize-claims, subscriptions]
 
 permissions: {}
 
@@ -52,7 +52,7 @@ jobs:
           case "$SCHEDULE" in
             '*/5 * * * *') JOBS="settlement receipts card-credits draws-results" ;;
             '*/30 * * * *') JOBS="draws-sync" ;;
-            '0 7 * * *') JOBS="prize-claims" ;;
+            '0 7 * * *') JOBS="prize-claims draws-backfill" ;;
             '45 12,13 * * 2,4,6') JOBS="subscriptions" ;;
             *) JOBS="$MANUAL_JOB" ;;
           esac

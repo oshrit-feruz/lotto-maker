@@ -75,6 +75,7 @@ service; `vercel.json` lists the four services explicitly, so it is not deployed
   | settlement, receipts | every minute | `*/5 * * * *` (GitHub's minimum is 5 min) |
   | card-credits, draws-results | every 5 min | `*/5 * * * *` |
   | draws-sync | every 30 min (also once on start) | `*/30 * * * *` |
+  | draws-backfill | 09:15 daily | `0 7 * * *` (with prize-claims): imports past draws ~2 months back for the results page, skipping stored ones |
   | prize-claims | 09:00 daily | `0 7 * * *` (09:00 winter / 10:00 summer) |
   | subscriptions | 15:45 Tue/Thu/Sat | `45 12,13 * * 2,4,6`; the workflow skips a run before 15:00 Israel time (the winter 12:45 UTC one), and the job is idempotent (SubscriptionEvent claims), so the summer 13:45 UTC run does nothing |
 
