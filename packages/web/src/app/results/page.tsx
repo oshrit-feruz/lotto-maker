@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Balls } from '@/components/Balls';
+import { DrawPicker } from '@/components/results/DrawPicker';
 import { formatCount, formatDate, formatShekel } from '@/lib/format';
 import {
   drawNeighbors,
@@ -16,76 +17,59 @@ export const metadata: Metadata = { title: 'תוצאות לוטו' };
 // Rendered per request (never baked at build time); the backend data itself is cached by fetch.
 export const dynamic = 'force-dynamic';
 
-function PrizeTable({ table }: Readonly<{ table: PrizeTableData }>) {
+function PrizeTable({ table, open }: Readonly<{ table: PrizeTableData; open: boolean }>) {
   return (
-    <div className="table-wrap">
-      <h3>{table.title}</h3>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>ניחוש</th>
-            <th>זוכים</th>
-            <th>פרס לזוכה</th>
-          </tr>
-        </thead>
-        <tbody>
-          {table.rows.map((t) => (
-            <tr key={t.tier}>
-              <td dir={t.ltr ? 'ltr' : undefined} style={t.ltr ? { textAlign: 'end' } : undefined}>
-                {t.label}
-              </td>
-              <td>{formatCount(t.winnersCount)}</td>
-              <td dir="ltr" style={{ textAlign: 'end' }}>
-                {formatShekel(t.prizeAmount)}
-              </td>
+    <details className="prize-table" open={open}>
+      <summary>{table.title}</summary>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>ניחוש</th>
+              <th>זוכים</th>
+              <th>פרס לזוכה</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {table.rows.map((t) => (
+              <tr key={t.tier}>
+                <td dir={t.ltr ? 'ltr' : undefined} style={t.ltr ? { textAlign: 'end' } : undefined}>
+                  {t.label}
+                </td>
+                <td>{formatCount(t.winnersCount)}</td>
+                <td dir="ltr" style={{ textAlign: 'end' }}>
+                  {formatShekel(t.prizeAmount)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
 
+/** Previous / next draw arrows, shown at the top of the results card. */
 function DrawNav({ history, drawNumber }: Readonly<{ history: ResultDrawRef[]; drawNumber: number }>) {
   const { newer, older } = drawNeighbors(history, drawNumber);
   if (!newer && !older) return null;
   return (
-    <nav className="spread" aria-label="מעבר בין הגרלות" style={{ marginTop: 16 }}>
+    <nav className="draw-nav" aria-label="מעבר בין הגרלות">
       {older ? (
-        <Link className="btn btn-ghost btn-sm" href={`/results?draw=${older.drawNumber}`}>
-          → הגרלה קודמת ({older.drawNumber})
+        <Link className="btn btn-ghost btn-sm" href={`/results?draw=${older.drawNumber}`} rel="prev">
+          → הקודמת
         </Link>
       ) : (
         <span />
       )}
       {newer ? (
-        <Link className="btn btn-ghost btn-sm" href={`/results?draw=${newer.drawNumber}`}>
-          הגרלה הבאה ({newer.drawNumber}) ←
+        <Link className="btn btn-ghost btn-sm" href={`/results?draw=${newer.drawNumber}`} rel="next">
+          הבאה ←
         </Link>
-      ) : null}
+      ) : (
+        <span />
+      )}
     </nav>
-  );
-}
-
-function DrawList({ history, drawNumber }: Readonly<{ history: ResultDrawRef[]; drawNumber: number | null }>) {
-  if (history.length < 2) return null;
-  return (
-    <section className="card">
-      <h2>הגרלות קודמות</h2>
-      <ul className="row" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {history.map((d) => (
-          <li key={d.drawNumber}>
-            <Link
-              className="btn btn-ghost btn-sm"
-              href={`/results?draw=${d.drawNumber}`}
-              aria-current={d.drawNumber === drawNumber ? 'page' : undefined}
-            >
-              {d.drawNumber} · {formatDate(d.drawAt)}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
@@ -102,6 +86,7 @@ export default async function ResultsPage({
   // 404 RESULTS_NOT_AVAILABLE: no draw has confirmed results yet (or the requested one has none).
   const notYet = !res.ok && res.status === 404;
   const tables = result ? prizeTables(result) : [];
+  const isLatest = Boolean(result && history[0]?.drawNumber === result.drawNumber);
   const noResult = notYet ? (
     <div className="card empty">
       <p>
@@ -119,15 +104,23 @@ export default async function ResultsPage({
   return (
     <>
       <h1>תוצאות לוטו</h1>
-      <div className="alert alert-warn">
+      <div className="alert alert-warn small">
         התוצאות כאן מוצגות לנוחותכם בלבד. <strong>התוצאות הרשמיות הן אך ורק אלו שמפרסם מפעל הפיס.</strong> במקרה של
         סתירה, הפרסום של מפעל הפיס הוא הקובע.
       </div>
+      <DrawPicker history={history} drawNumber={result?.drawNumber ?? requested} />
       {result ? (
         <section className="card">
-          <h2>
-            הגרלה {result.drawNumber} · {formatDate(result.drawAt)}
-          </h2>
+          <div className="draw-head">
+            <div>
+              <h2>
+                הגרלה {result.drawNumber}
+                {isLatest ? <span className="badge">האחרונה</span> : null}
+              </h2>
+              <p className="small muted">{formatDate(result.drawAt)}</p>
+            </div>
+            <DrawNav history={history} drawNumber={result.drawNumber} />
+          </div>
           <Balls numbers={result.numbers} strong={result.strong} />
           {result.extraDigits?.length ? (
             <p style={{ marginTop: 12 }}>
@@ -136,8 +129,8 @@ export default async function ResultsPage({
           ) : null}
           {tables.length > 0 ? (
             <div className="stack" style={{ marginTop: 16 }}>
-              {tables.map((t) => (
-                <PrizeTable key={t.game} table={t} />
+              {tables.map((t, i) => (
+                <PrizeTable key={t.game} table={t} open={i === 0} />
               ))}
             </div>
           ) : (
@@ -145,15 +138,23 @@ export default async function ResultsPage({
               טבלת הפרסים להגרלה זו תפורסם כאן בקרוב.
             </p>
           )}
-          <DrawNav history={history} drawNumber={result.drawNumber} />
         </section>
       ) : (
         noResult
       )}
-      <DrawList history={history} drawNumber={result?.drawNumber ?? null} />
-      <p className="small">
-        יש לכם טופס בהגרלה? <Link href="/account/orders">בדקו בהזמנות שלכם</Link>.
-      </p>
+      <section className="card results-cta">
+        <p>
+          <strong>ההגרלה הבאה כבר בדרך.</strong> ממלאים טופס באתר ואנחנו שולחים אותו בשבילכם.
+        </p>
+        <div className="row">
+          <Link className="btn btn-accent" href="/ticket">
+            למילוי טופס
+          </Link>
+          <Link className="btn btn-ghost" href="/account/orders">
+            הטפסים שלי
+          </Link>
+        </div>
+      </section>
     </>
   );
 }
