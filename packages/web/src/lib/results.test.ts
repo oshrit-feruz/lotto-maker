@@ -87,6 +87,8 @@ describe('parseDrawParam', () => {
     ['0', null],
     ['-3', null],
     ['39a', null],
+    ['1000000', 1000000],
+    ['1000001', null],
     ['12345678', null],
   ])('%j -> %j', (value, expected) => {
     expect(parseDrawParam(value as string | string[] | undefined)).toBe(expected);

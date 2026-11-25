@@ -75,5 +75,5 @@ export function parseDrawParam(value: string | string[] | undefined): number | n
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw || !/^\d{1,7}$/.test(raw)) return null;
   const n = Number(raw);
-  return n > 0 ? n : null;
+  return n > 0 && n <= 1_000_000 ? n : null;
 }
