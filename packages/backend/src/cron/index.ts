@@ -7,6 +7,7 @@ import { redisLockStore, runWithJobLock, type JobOutcome, type LockStore } from 
 
 import { settleConfirmedDraws } from '../modules/results/settlement.service.js';
 import { syncUpcomingDraws, fetchDueResults } from '../modules/draws/draws.sync.js';
+import { backfillPastDraws } from '../modules/draws/draws.backfill.js';
 import { runSubscriptionCron } from '../services/subscription-scheduler.js';
 import { runCardCreditJob } from '../modules/wallet/card-credits.service.js';
 import { runPrizeClaimJob } from '../modules/prize-claims/prize-claims.service.js';
@@ -52,6 +53,8 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'draws-sync', schedule: '*/30 * * * *', timezone: TIMEZONE, run: syncUpcomingDraws, runOnStart: true },
   // Results: DB-only unless a draw is due, so a frequent tick costs no requests
   { name: 'draws-results', schedule: '*/5 * * * *', timezone: TIMEZONE, run: () => fetchDueResults() },
+  // Past draws for the public results page (about two months back); skips draws already stored
+  { name: 'draws-backfill', schedule: '15 9 * * *', timezone: TIMEZONE, run: () => backfillPastDraws(), lockTtlMs: 5 * 60_000 },
   // Expire unclaimed prizes and send the 7-day reminders
   { name: 'prize-claims', schedule: '0 9 * * *', timezone: TIMEZONE, run: () => runPrizeClaimJob() },
   // Subscriptions: 15:45 Israel time on draw days, 3 h before the earliest cutoff

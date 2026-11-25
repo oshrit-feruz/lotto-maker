@@ -133,6 +133,7 @@ const STATUS_BY_PREFIX: Record<string, Record<string, string>> = {
 /** Every fixed action string the backend writes (grep `action:` in packages/backend/src). */
 export const AUDIT_ACTION_LABEL: Record<string, string> = {
   'draw:results_suggested': 'תוצאות הגרלה הוצעו',
+  'draw:history_imported': 'יובאו הגרלות עבר',
   'draw:results_edited': 'עריכת תוצאות הגרלה',
   'draw:results_confirmed': 'אישור תוצאות הגרלה',
   'draw:settled': 'סילוק הגרלה',
