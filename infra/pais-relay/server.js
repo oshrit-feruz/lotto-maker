@@ -2,13 +2,25 @@
 // pais.co.il gives no response to requests from outside Israel, and Vercel has no Israeli region.
 //
 // The backend points PAIS_BASE_URL at https://<service-url>/<RELAY_TOKEN>; this server checks the
-// token, forwards only the two read-only paths the backend uses, and returns Pais's response as is.
+// token, forwards only the read-only paths the backend uses, and returns Pais's response as is.
 // No dependencies: Node 20+ (global fetch).
 import { createServer } from 'node:http';
 
 const TOKEN = process.env.RELAY_TOKEN ?? '';
 const UPSTREAM = 'https://www.pais.co.il';
-const ALLOWED = [/^\/include\/getNextLotteryDate\.ashx\?type=1$/, /^\/Lotto\/CurrentLotto\.aspx\?lotteryId=\d{1,7}$/];
+// Each route maps a request to an upstream URL built only from constants and validated digits,
+// so nothing from the request is passed through as-is.
+const ROUTES = [
+  { re: /^\/include\/getNextLotteryDate\.ashx\?type=1$/, build: () => '/include/getNextLotteryDate.ashx?type=1' },
+  { re: /^\/Lotto\/CurrentLotto\.aspx\?lotteryId=(\d{1,7})$/, build: (m) => `/Lotto/CurrentLotto.aspx?lotteryId=${Number(m[1])}` },
+  // ResultsScraper archive fallback: /<lotto|chance|777|123>/showMoreResults.aspx?fromIndex=N&amount=N
+  {
+    re: /^\/(lotto|chance|777|123)\/showMoreResults\.aspx\?fromIndex=(\d{1,4})&amount=(\d{1,3})$/,
+    build: (m) => `/${GAMES[m[1]]}/showMoreResults.aspx?fromIndex=${Number(m[2])}&amount=${Number(m[3])}`,
+  },
+];
+const GAMES = { lotto: 'lotto', chance: 'chance', 777: '777', 123: '123' };
+const USER_AGENT = 'LottoMakerResultsSync/1.0 (via pais-relay)';
 const TIMEOUT_MS = 15_000;
 
 if (TOKEN.length < 32) {
@@ -22,12 +34,20 @@ const server = createServer(async (req, res) => {
 
   const prefix = `/${TOKEN}`;
   if (!req.url?.startsWith(`${prefix}/`)) return send(res, 404, 'not found');
-  const path = req.url.slice(prefix.length);
-  if (!ALLOWED.some((re) => re.test(path))) return send(res, 404, 'not found');
+  const requested = req.url.slice(prefix.length);
+  let path;
+  for (const route of ROUTES) {
+    const m = route.re.exec(requested);
+    if (m) {
+      path = route.build(m);
+      break;
+    }
+  }
+  if (!path) return send(res, 404, 'not found');
 
   try {
     const upstream = await fetch(UPSTREAM + path, {
-      headers: { 'User-Agent': req.headers['user-agent'] ?? 'LottoMakerResultsSync/1.0', Accept: '*/*' },
+      headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
       signal: AbortSignal.timeout(TIMEOUT_MS),
       redirect: 'follow',
     });

@@ -2,8 +2,8 @@
 
 `pais.co.il` does not answer requests from outside Israel, and Vercel has no Israeli region, so the
 backend's draw sync (`draws-sync`, `draws-results`) times out there. This tiny service runs on
-Google Cloud Run in `me-west1` (Tel Aviv) and forwards only the two read-only Pais paths the
-backend uses. Not part of the npm workspaces; no dependencies.
+Google Cloud Run in `me-west1` (Tel Aviv) and forwards only the read-only Pais paths the backend uses (next draw, a draw's
+results page, and the results archive fragment). Not part of the npm workspaces; no dependencies.
 
 ## Deploy (Cloud Shell, once)
 
