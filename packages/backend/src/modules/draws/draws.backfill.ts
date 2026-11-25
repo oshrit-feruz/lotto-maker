@@ -42,39 +42,50 @@ export async function backfillPastDraws(
   const result: BackfillResult = { imported: [], skipped: 0, failed: [] };
   let fetched = 0;
 
-  for (let n = next.drawNumber - 1, walked = 0; n > 0 && walked < MAX_DRAWS_PER_RUN; n--, walked++) {
-    const existing = await prisma.draw.findUnique({ where: { drawNumber: n }, select: { drawAt: true } });
-    if (existing) {
-      if (existing.drawAt < since) break;
-      result.skipped++;
-      continue;
+  try {
+    for (let n = next.drawNumber - 1, walked = 0; n > 0 && walked < MAX_DRAWS_PER_RUN; n--, walked++) {
+      const existing = await prisma.draw.findUnique({ where: { drawNumber: n }, select: { drawAt: true } });
+      if (existing) {
+        if (existing.drawAt < since) break;
+        result.skipped++;
+        continue;
+      }
+
+      if (fetched > 0) await sleep(REQUEST_GAP_MS);
+      fetched++;
+      let parsed: ParsedLottoDraw;
+      try {
+        parsed = await fetchLottoDraw(n);
+      } catch (err) {
+        // One missing page should not stop the run; it is retried on the next one.
+        result.failed.push(n);
+        console.warn(`[draws] backfill: draw ${n} not imported:`, (err as Error).message);
+        continue;
+      }
+
+      // The first draw outside the window is stored too: it marks where history ends, so the
+      // next run stops on it without another request. Failed in-window draws stay missing and
+      // are retried.
+      const drawAt = drawAtFromDate(parsed.drawDate);
+      if (await storePastDraw(parsed, drawAt, now)) result.imported.push(n);
+      if (drawAt < since) break;
     }
-
-    if (fetched > 0) await sleep(REQUEST_GAP_MS);
-    fetched++;
-    let parsed: ParsedLottoDraw;
-    try {
-      parsed = await fetchLottoDraw(n);
-    } catch (err) {
-      // One missing page should not stop the run; it is retried on the next one.
-      result.failed.push(n);
-      console.warn(`[draws] backfill: draw ${n} not imported:`, (err as Error).message);
-      continue;
+  } finally {
+    // Imports already committed get their audit entry even when a later iteration throws
+    if (result.imported.length > 0) {
+      try {
+        await writeAuditLog({
+          entityType: 'draw',
+          entityId: 'backfill',
+          action: 'draw:history_imported',
+          actorType: 'system',
+          metadata: { drawNumbers: result.imported },
+        });
+      } catch (err) {
+        // Never hide the loop's own error behind an audit failure
+        console.error('[draws] backfill audit failed:', (err as Error).message);
+      }
     }
-
-    const drawAt = drawAtFromDate(parsed.drawDate);
-    if (drawAt < since) break;
-    if (await storePastDraw(parsed, drawAt, now)) result.imported.push(n);
-  }
-
-  if (result.imported.length > 0) {
-    await writeAuditLog({
-      entityType: 'draw',
-      entityId: 'backfill',
-      action: 'draw:history_imported',
-      actorType: 'system',
-      metadata: { drawNumbers: result.imported },
-    });
   }
   return result;
 }

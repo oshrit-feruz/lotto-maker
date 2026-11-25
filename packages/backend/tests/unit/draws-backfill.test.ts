@@ -44,8 +44,9 @@ describe('backfillPastDraws', () => {
 
     // Window starts 25/09 10:00 UTC. 3971 is 26/09 (inside); 3970 is 22/09, the first outside
     expect(res.imported[0]).toBe(3988);
-    expect(res.imported.at(-1)).toBe(3971);
-    expect(res.imported).toHaveLength(18);
+    // 3970 (out of the window) is stored as the history boundary, then the run stops
+    expect(res.imported.at(-1)).toBe(3970);
+    expect(res.imported).toHaveLength(19);
     expect(pais.draw).toHaveBeenLastCalledWith(3970);
 
     const data = db.create.mock.calls[0][0].data;
@@ -84,6 +85,27 @@ describe('backfillPastDraws', () => {
     db.create.mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
     const res = await backfillPastDraws(NOW, noSleep);
     expect(res.imported).toEqual([]);
+  });
+
+  it('stops on the stored boundary draw without fetching it again', async () => {
+    db.findUnique.mockImplementation(async ({ where }: any) =>
+      where.drawNumber >= 3971
+        ? { drawAt: drawAtFromDate(dateOf(where.drawNumber)) }
+        : { drawAt: drawAtFromDate(dateOf(3970)) },
+    );
+    const res = await backfillPastDraws(NOW, noSleep);
+    expect(res).toEqual({ imported: [], skipped: 18, failed: [] });
+    expect(pais.draw).not.toHaveBeenCalled();
+  });
+
+  it('audits the imports already stored when a later iteration throws, and rethrows', async () => {
+    db.findUnique
+      .mockResolvedValueOnce(null) // 3988: imported
+      .mockRejectedValueOnce(new Error('db down')); // 3987: lookup fails
+    await expect(backfillPastDraws(NOW, noSleep)).rejects.toThrow('db down');
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'draw:history_imported', metadata: { drawNumbers: [3988] } }),
+    );
   });
 
   it('places the draw at 23:00 Israel time', () => {
